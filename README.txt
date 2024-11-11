@@ -1,5 +1,6 @@
 Multiverse by HTML5 UP
 html5up.net | @ajlkn
+
 Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
 
 ###############################################################################################
@@ -7,7 +8,7 @@ Free for personal and commercial use under the CCA 3.0 license (html5up.net/lice
 The basecode has been changed by John Reijmer. Code changes have been made on main.css,
 noscript.css and index.html in order to have a more simplistic way of changing and adding
 new pictures, but also to disable copying or saving images off site. And introduced a fix
-for Android phones (and possible iphone as well, haven't checked myself)
+for Android phones (and possible iphone as well, haven't checked myself).
 
 ###############################################################################################
 
