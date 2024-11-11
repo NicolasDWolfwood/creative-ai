@@ -10,6 +10,8 @@ noscript.css and index.html in order to have a more simplistic way of changing a
 new pictures, but also to disable copying or saving images off site. And introduced a fix
 for Android phones (and possible iphone as well, haven't checked myself).
 
+Added logging and a build task for vscode.
+
 ###############################################################################################
 
 Say hello to Multiverse, a slick, one-page gallery design with a fully functional lightbox
