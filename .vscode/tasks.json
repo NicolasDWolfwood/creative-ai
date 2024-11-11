@@ -6,7 +6,7 @@
         {
             "label": "Deploy to Server",
             "type": "shell",
-            "command": "git push; ssh root@192.168.1.176 -p 5522 'cd /mnt/user/appdata/binhex-nginx && sudo ./update.sh'",
+            "command": "& {$msg = Read-Host -Prompt 'Enter commit message'; git add .; git commit -m $msg; git push; ssh root@192.168.1.176 -p 5522 'cd /mnt/user/appdata/binhex-nginx && sudo ./update.sh'}",
             "options": {
                 "shell": {
                     "executable": "powershell.exe"
@@ -15,7 +15,8 @@
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
+            },
+            "problemMatcher": []
         }
     ]
 }
