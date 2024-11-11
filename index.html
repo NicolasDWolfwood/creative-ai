@@ -1,165 +1,188 @@
-<!DOCTYPE HTML>
+<!DOCTYPE html>
 <!--
 	Multiverse by HTML5UP
 	html5up.net | @ajlkn
 	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
 -->
 <html>
-	<head>
-		<title>Creative-Ai by John Reijmer</title>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-		<link rel="stylesheet" href="assets/css/main.css?v=1.2" />
-		<noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
-		<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-		<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-		<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-		<link rel="shortcut icon" href="favicon.ico">
-		<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-		<meta http-equiv="Pragma" content="no-cache">
-		<meta http-equiv="Expires" content="0">
-	</head>
-	<script>
-		document.addEventListener('DOMContentLoaded', function() {
-			// Function to disable right click
-			function disableRightClick(e) {
-				e.preventDefault();
-				return false;
-			}
-		
-			// Function to handle poptrox popup creation
-			function handlePoptroxPopup() {
-				// Target both the popup container and its images
-				const popups = document.querySelectorAll('.poptrox-popup, .poptrox-popup img, .poptrox-popup .pic');
-				popups.forEach(popup => {
-					popup.addEventListener('contextmenu', disableRightClick);
-					popup.addEventListener('mousedown', disableRightClick);
-				});
-			}
-		
-			// Disable right click on main gallery images
-			const mainImages = document.querySelectorAll('#main img, #main .thumb, #main .image');
-			mainImages.forEach(img => {
-				img.addEventListener('contextmenu', disableRightClick);
-				img.addEventListener('mousedown', disableRightClick);
-			});
-		
-			// Watch for poptrox popup creation
-			const observer = new MutationObserver(function(mutations) {
-				mutations.forEach(function(mutation) {
-					if (mutation.addedNodes.length) {
-						handlePoptroxPopup();
-					}
-				});
-			});
-		
-			// Start observing the body for popup creation
-			observer.observe(document.body, { childList: true, subtree: true });
-		
-			// Disable keyboard shortcuts
-			document.addEventListener('keydown', function(e) {
-				// Prevent saving with Ctrl+S
-				if (e.ctrlKey && e.key === 's') {
-					e.preventDefault();
-					return false;
-				}
-				// Prevent saving with Ctrl+Shift+I or F12 (Developer Tools)
-				if (e.ctrlKey && e.shiftKey && e.key === 'i' || e.key === 'F12') {
-					e.preventDefault();
-					return false;
-				}
-			});
-		
-			// Additional protection against dragging
-			document.addEventListener('dragstart', function(e) {
-				if (e.target.tagName === 'IMG') {
-					e.preventDefault();
-					return false;
-				}
-			});
-		});
-		</script>
-	<body class="is-preload">
-		<!-- Wrapper -->
-			<div id="wrapper">
+  <head>
+    <title>Creative-Ai by John Reijmer</title>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, user-scalable=no"
+    />
+    <link rel="stylesheet" href="assets/css/main.css?v=1.2" />
+    <noscript>
+      <link rel="stylesheet" href="assets/css/noscript.css" />
+    </noscript>
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+    <link rel="shortcut icon" href="favicon.ico" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+  </head>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Function to disable right click
+      function disableRightClick(e) {
+        e.preventDefault();
+        return false;
+      }
 
-				<!-- Header -->
-					<header id="header">
-						<h1><a href="index.html"><strong>Creative-Ai</strong> by John Reijmer</a></h1>
-						<nav>
-							<ul>
-								<li><a href="#footer" class="icon solid fa-info-circle">About</a></li>
-							</ul>
-						</nav>
-					</header>
+      // Function to handle poptrox popup creation
+      function handlePoptroxPopup() {
+        // Target both the popup container and its images
+        const popups = document.querySelectorAll(
+          ".poptrox-popup, .poptrox-popup img, .poptrox-popup .pic"
+        );
+        popups.forEach((popup) => {
+          popup.addEventListener("contextmenu", disableRightClick);
+          popup.addEventListener("mousedown", disableRightClick);
+        });
+      }
 
-					<!-- Header -->
-    <header id="header">
-        <h1><a href="index.html"><strong>Creative-Ai</strong> by John Reijmer</a></h1>
+      // Disable right click on main gallery images
+      const mainImages = document.querySelectorAll(
+        "#main img, #main .thumb, #main .image"
+      );
+      mainImages.forEach((img) => {
+        img.addEventListener("contextmenu", disableRightClick);
+        img.addEventListener("mousedown", disableRightClick);
+      });
+
+      // Watch for poptrox popup creation
+      const observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          if (mutation.addedNodes.length) {
+            handlePoptroxPopup();
+          }
+        });
+      });
+
+      // Start observing the body for popup creation
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      // Disable keyboard shortcuts
+      document.addEventListener("keydown", function (e) {
+        // Prevent saving with Ctrl+S
+        if (e.ctrlKey && e.key === "s") {
+          e.preventDefault();
+          return false;
+        }
+        // Prevent saving with Ctrl+Shift+I or F12 (Developer Tools)
+        if ((e.ctrlKey && e.shiftKey && e.key === "i") || e.key === "F12") {
+          e.preventDefault();
+          return false;
+        }
+      });
+
+      // Additional protection against dragging
+      document.addEventListener("dragstart", function (e) {
+        if (e.target.tagName === "IMG") {
+          e.preventDefault();
+          return false;
+        }
+      });
+    });
+  </script>
+
+  <body class="is-preload">
+    <!-- Wrapper -->
+    <div id="wrapper">
+      <!-- Header -->
+      <header id="header">
+        <h1>
+          <a href="index.html"><strong>Creative-Ai</strong> by John Reijmer</a>
+        </h1>
         <nav>
-            <ul>
-                <li><a href="#footer" class="icon solid fa-info-circle">About</a></li>
-            </ul>
+          <ul>
+            <li>
+              <a href="#footer" class="icon solid fa-info-circle">About</a>
+            </li>
+          </ul>
         </nav>
-    </header>
+      </header>
 
-				<!-- Gallery Header -->
-		<div class="gallery-header fade-in">
-    		<h2>Creative Thoughts</h2>
-    		<p>A site made out of love for creating art with ComfyUI and Automatic1111</p>
-		</div>
+      <!-- Header -->
+      <header id="header">
+        <h1>
+          <a href="index.html"><strong>Creative-Ai</strong> by John Reijmer</a>
+        </h1>
+        <nav>
+          <ul>
+            <li>
+              <a href="#footer" class="icon solid fa-info-circle">About</a>
+            </li>
+          </ul>
+        </nav>
+      </header>
 
-				<!-- Main -->
-	<div id="main">
-		<script>
-			document.addEventListener('DOMContentLoaded', function() {
-    			fetch('images-metadata.json')
-        			.then(response => response.json())
-        			.then(data => {
-            	const main = document.getElementById('main');
-            	main.innerHTML = '';
-            
-            	// Sort images by filename number, highest first
-            	data.images.sort((a, b) => {
-	                const numA = parseInt(a.filename.match(/\d+/)[0]);
-                	const numB = parseInt(b.filename.match(/\d+/)[0]);
-                	return numB - numA; // Reverse order (highest first)
-            	});
-				
-            	// Add images
-            	data.images.forEach(image => {
-	                const article = document.createElement('article');
-                	article.className = 'thumb';
-                	article.innerHTML = `
+      <!-- Gallery Header -->
+      <div class="gallery-header fade-in">
+        <h2>Creative Thoughts</h2>
+        <p>
+          A site made out of love for creating art with ComfyUI and
+          Automatic1111
+        </p>
+      </div>
+
+      <!-- Main -->
+      <div id="main">
+        <script>
+          document.addEventListener("DOMContentLoaded", function () {
+            fetch("images-metadata.json")
+              .then((response) => response.json())
+              .then((data) => {
+                const main = document.getElementById("main");
+                main.innerHTML = "";
+
+                // Sort images by filename number, highest first
+                data.images.sort((a, b) => {
+                  const numA = parseInt(a.filename.match(/\d+/)[0]);
+                  const numB = parseInt(b.filename.match(/\d+/)[0]);
+                  return numB - numA; // Reverse order (highest first)
+                });
+
+                // Add images
+                data.images.forEach((image) => {
+                  const article = document.createElement("article");
+                  article.className = "thumb";
+                  article.innerHTML = `
 	                    <a href="images/fulls/${image.filename}" class="image">
                         <img src="images/thumbs/${image.filename}" alt="" />
                     	</a>
                     	<h2>${image.title}</h2>
                     	<p>${image.description}</p>
                 		`;
-                	main.appendChild(article);
-            	});
+                  main.appendChild(article);
+                });
 
-            // Initialize poptrox with existing settings
-            if (window.$) {
-                $('#main').poptrox({
+                // Initialize poptrox with existing settings
+                if (window.$) {
+                  $("#main").poptrox({
                     baseZIndex: 20000,
-                    caption: function($a) {
-                        return $a.next('h2').text();
+                    caption: function ($a) {
+                      return $a.next("h2").text();
                     },
                     fadeSpeed: 300,
-                    onPopupClose: function() { 
-                        document.body.classList.remove('is-covered');
+                    onPopupClose: function () {
+                      document.body.classList.remove("is-covered");
                     },
-                    onPopupOpen: function() { 
-                        document.body.classList.add('is-covered');
+                    onPopupOpen: function () {
+                      document.body.classList.add("is-covered");
                     },
-                    overlayColor: '#000000',
+                    overlayColor: "#000000",
                     overlayOpacity: 0.75,
-                    popupCloserText: '',
-                    popupLoaderText: '',
+                    popupCloserText: "",
+                    popupLoaderText: "",
                     popupSpeed: 300,
-                    selector: '.thumb > a.image',
+                    selector: ".thumb > a.image",
                     useBodyOverflow: false,
                     usePopupCaption: true,
                     usePopupCloser: true,
@@ -167,56 +190,98 @@
                     usePopupForceClose: true,
                     usePopupLoader: true,
                     usePopupNav: true,
-                    windowMargin: 50
-                });
-            }
-        })
-        .catch(error => console.error('Error:', error));
-});
-					</script>
-				</div>
+                    windowMargin: 50,
+                  });
+                }
+              })
+              .catch((error) => console.error("Error:", error));
+          });
+        </script>
+      </div>
 
-				<!-- Footer -->
-					<footer id="footer" class="panel">
-						<div class="inner split">
-							<div>
-								<section>
-									<h2>Who am I?</h2>
-									<p>I'm someone who likes to be busy at all times. I dabble in code, Ai, art, photography and more. This site is mainly because people keep asking me to showcase some of my work. Mostly aiming at the generative side of it. So this is just a site to easily upload and showcase some of the work I do that's freely available for everyone.</p>
-								</section>
-								<section>
-									<h2>Follow me on ...</h2>
-									<ul class="icons">
-										<li><a href="https://x.com/johnreijmer" target="_blank" class="icon brands fa-twitter"><span class="label">Twitter</span></a></li>
-										<li><a href="https://facebook.com/johnreijmer" target="_blank" class="icon brands fa-facebook-f"><span class="label">Facebook</span></a></li>
-										<li><a href="https://instagram.com/johnreijmer" target="_blank" class="icon brands fa-instagram"><span class="label">Instagram</span></a></li>
-										<li><a href="https://www.linkedin.com/in/johnreijmer/" target="_blank" class="icon brands fa-linkedin-in"><span class="label">LinkedIn</span></a></li>
-									</ul>
-								</section>
-							</div>
-							<div>
-								<section>
-									<h2>Or...</h2>
-									<p>You can donate for a cup of hot choco.</p>
-									<ul class="icons">
-										<li><a href="https://www.paypal.com/paypalme/johnreijmer" target="_blank" class="icon brands fa-paypal"><span class="label">PayPal</span></a></li>
-									</ul>
-								</section>
-								<p class="copyright">
-									&copy; John Reijmer. Original Design: <a href="http://html5up.net">HTML5 UP</a>.
-								</p>
-							</div>
-						</div>
-					</footer>
-			</div>
+      <!-- Footer -->
+      <footer id="footer" class="panel">
+        <div class="inner split">
+          <div>
+            <section>
+              <h2>Who am I?</h2>
+              <p>
+                I'm someone who likes to be busy at all times. I dabble in code,
+                Ai, art, photography and more. This site is mainly because
+                people keep asking me to showcase some of my work. Mostly aiming
+                at the generative side of it. So this is just a site to easily
+                upload and showcase some of the work I do that's freely
+                available for everyone.
+              </p>
+            </section>
+            <section>
+              <h2>Follow me on ...</h2>
+              <ul class="icons">
+                <li>
+                  <a
+                    href="https://x.com/johnreijmer"
+                    target="_blank"
+                    class="icon brands fa-twitter"
+                    ><span class="label">Twitter</span></a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://facebook.com/johnreijmer"
+                    target="_blank"
+                    class="icon brands fa-facebook-f"
+                    ><span class="label">Facebook</span></a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://instagram.com/johnreijmer"
+                    target="_blank"
+                    class="icon brands fa-instagram"
+                    ><span class="label">Instagram</span></a
+                  >
+                </li>
+                <li>
+                  <a
+                    href="https://www.linkedin.com/in/johnreijmer/"
+                    target="_blank"
+                    class="icon brands fa-linkedin-in"
+                    ><span class="label">LinkedIn</span></a
+                  >
+                </li>
+              </ul>
+            </section>
+          </div>
+          <div>
+            <section>
+              <h2>Or...</h2>
+              <p>You can donate for a cup of hot choco.</p>
+              <ul class="icons">
+                <li>
+                  <a
+                    href="https://www.paypal.com/paypalme/johnreijmer"
+                    target="_blank"
+                    class="icon brands fa-paypal"
+                    ><span class="label">PayPal</span></a
+                  >
+                </li>
+              </ul>
+            </section>
+            <p class="copyright">
+              &copy; John Reijmer. Original Design:
+              <a href="http://html5up.net">HTML5 UP</a>.
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
 
-		<!-- Scripts -->
-			<script src="assets/js/jquery.min.js"></script>
-			<script src="assets/js/jquery.poptrox.min.js"></script>
-			<script src="assets/js/browser.min.js"></script>
-			<script src="assets/js/breakpoints.min.js"></script>
-			<script src="assets/js/util.js"></script>
-			<script src="assets/js/main.js"></script>
-
-	</body>
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.poptrox.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+  </body>
 </html>
