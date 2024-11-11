@@ -93,36 +93,52 @@
 						</nav>
 					</header>
 
+					<!-- Header -->
+    <header id="header">
+        <h1><a href="index.html"><strong>Creative-Ai</strong> by John Reijmer</a></h1>
+        <nav>
+            <ul>
+                <li><a href="#footer" class="icon solid fa-info-circle">About</a></li>
+            </ul>
+        </nav>
+    </header>
+
+				<!-- Gallery Header -->
+		<div class="gallery-header fade-in">
+    		<h2>Creative Thoughts</h2>
+    		<p>A site made out of love for creating art with ComfyUI and Automatic1111</p>
+		</div>
+
 				<!-- Main -->
-				<div id="main">
-					<script>
-document.addEventListener('DOMContentLoaded', function() {
-    fetch('images-metadata.json')
-        .then(response => response.json())
-        .then(data => {
-            const main = document.getElementById('main');
-            main.innerHTML = '';
+	<div id="main">
+		<script>
+			document.addEventListener('DOMContentLoaded', function() {
+    			fetch('images-metadata.json')
+        			.then(response => response.json())
+        			.then(data => {
+            	const main = document.getElementById('main');
+            	main.innerHTML = '';
             
-            // Sort images by filename number, highest first
-            data.images.sort((a, b) => {
-                const numA = parseInt(a.filename.match(/\d+/)[0]);
-                const numB = parseInt(b.filename.match(/\d+/)[0]);
-                return numB - numA; // Reverse order (highest first)
-            });
-            
-            // Add images
-            data.images.forEach(image => {
-                const article = document.createElement('article');
-                article.className = 'thumb';
-                article.innerHTML = `
-                    <a href="images/fulls/${image.filename}" class="image">
+            	// Sort images by filename number, highest first
+            	data.images.sort((a, b) => {
+	                const numA = parseInt(a.filename.match(/\d+/)[0]);
+                	const numB = parseInt(b.filename.match(/\d+/)[0]);
+                	return numB - numA; // Reverse order (highest first)
+            	});
+				
+            	// Add images
+            	data.images.forEach(image => {
+	                const article = document.createElement('article');
+                	article.className = 'thumb';
+                	article.innerHTML = `
+	                    <a href="images/fulls/${image.filename}" class="image">
                         <img src="images/thumbs/${image.filename}" alt="" />
-                    </a>
-                    <h2>${image.title}</h2>
-                    <p>${image.description}</p>
-                `;
-                main.appendChild(article);
-            });
+                    	</a>
+                    	<h2>${image.title}</h2>
+                    	<p>${image.description}</p>
+                		`;
+                	main.appendChild(article);
+            	});
 
             // Initialize poptrox with existing settings
             if (window.$) {
@@ -177,8 +193,17 @@ document.addEventListener('DOMContentLoaded', function() {
 										<li><a href="https://www.linkedin.com/in/johnreijmer/" target="_blank" class="icon brands fa-linkedin-in"><span class="label">LinkedIn</span></a></li>
 									</ul>
 								</section>
+							</div>
+							<div>
+								<section>
+									<h2>Or...</h2>
+									<p>You can donate for a cup of hot choco.</p>
+									<ul class="icons">
+										<li><a href="https://www.paypal.com/paypalme/johnreijmer" target="_blank" class="icon brands fa-paypal"><span class="label">PayPal</span></a></li>
+									</ul>
+								</section>
 								<p class="copyright">
-									&copy; John Reijmer. Design: <a href="http://html5up.net">HTML5 UP</a>.
+									&copy; John Reijmer. Original Design: <a href="http://html5up.net">HTML5 UP</a>.
 								</p>
 							</div>
 						</div>

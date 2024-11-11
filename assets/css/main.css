@@ -2142,7 +2142,61 @@ img,
 				.poptrox-popup img {
     				filter: grayscale(0%) !important;
 				}
-/* Footer */
+
+				/* Gallery Header */
+				.gallery-header {
+    			text-align: center;
+    			padding: 4em 2em 2em 2em;
+    			max-width: 1200px;
+    			margin: 0 auto;
+    			opacity: 0; /* Start invisible for fade-in */
+				}
+
+				.gallery-header h2 {
+					color: #ffffff;
+					font-size: 2.5em;
+					font-weight: 900;  /* Extra bold */
+					margin-bottom: 0.5em;
+					letter-spacing: 0.1em;
+					text-transform: uppercase;
+				}
+
+				.gallery-header p {
+					color: #a0a0a1;
+					font-size: 1.2em;
+					line-height: 1.6;
+					max-width: 800px;
+					margin: 0 auto;
+				}
+
+				/* Fade-in Animation */
+				.fade-in {
+					animation: fadeIn 1.5s ease-in forwards;
+					animation-delay: 0.5s; /* Delay the start slightly */
+				}
+
+				@keyframes fadeIn {
+					from {
+						opacity: 0;
+						transform: translateY(-20px);
+					}
+					to {
+						opacity: 1;
+						transform: translateY(0);
+					}
+				}
+
+				/* Ensure animation plays when page is loaded */
+				body.is-preload .gallery-header {
+					opacity: 0;
+				}
+
+				body:not(.is-preload) .gallery-header {
+					animation: fadeIn 1.5s ease-in forwards;
+					animation-delay: 0.5s;
+				}
+
+				/* Footer */
 
 	#footer .copyright {
 		color: #505051;
