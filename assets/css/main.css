@@ -171,8 +171,7 @@ img,
     -khtml-user-drag: none;
     -moz-user-drag: none;
     -o-user-drag: none;
-    user-drag: none;
-    pointer-events: none;
+     pointer-events: none;
 }
 
 /* Re-enable pointer events for navigation */
