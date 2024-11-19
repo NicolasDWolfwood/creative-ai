@@ -63,7 +63,9 @@
       <div class="floating-player">
         <div class="player-handle">
           <i class="fas fa-music"></i>
-          <span>Now Playing</span>
+          <div class="song-info">
+            <span id="currentSong">No song selected</span>
+          </div>
           <button class="minimize-btn">
             <i class="fas fa-chevron-down"></i>
           </button>
@@ -111,10 +113,6 @@
             </option>
             <!-- Add more songs as needed -->
           </select>
-
-          <div class="song-info">
-            <span id="currentSong">No song selected</span>
-          </div>
 
           <!-- The visualizer canvas will be inserted here by JavaScript -->
 
