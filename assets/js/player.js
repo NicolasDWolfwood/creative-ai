@@ -297,19 +297,22 @@ class MusicPlayer {
     this.updateButtonStates();
   }
 
-  loadAndPlaySong(src, title) {
+  async loadAndPlaySong(src, title) {
     this.audio.src = src;
     this.audio.load();
     this.elements.currentSongDisplay.textContent = title;
-    this.audio
-      .play()
-      .then(() => {
-        this.isPlaying = true;
-        this.updatePlayPauseIcon();
-        this.saveToLocalStorage("lastPlayedSong", src);
-        this.saveToLocalStorage("lastPlayedSongText", title);
-      })
-      .catch((e) => this.handlePlayError(e));
+
+    try {
+      // Wait for the audio to be ready
+      await this.audio.play();
+      this.isPlaying = true;
+      this.updatePlayPauseIcon();
+      this.saveToLocalStorage("lastPlayedSong", src);
+      this.saveToLocalStorage("lastPlayedSongText", title);
+    } catch (e) {
+      // Handle error if the play promise is rejected
+      this.handlePlayError(e);
+    }
   }
 
   handleSongEnd() {
