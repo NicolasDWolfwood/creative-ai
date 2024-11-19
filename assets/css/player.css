@@ -1,0 +1,383 @@
+/* Enhanced Floating Music Player (Resized to 75%) */
+.floating-player {
+  position: fixed;
+  top: 15px; /* Reduced from 20px to 15px */
+  right: 15px; /* Reduced from 20px to 15px */
+  width: 300px; /* Reduced from 400px to 300px */
+  height: 460px; /* Reduced from 440px to 330px */
+  background: rgba(20, 22, 25, 0.95);
+  border-radius: 5px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(52, 165, 142, 0.1);
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  transform-origin: top right;
+  animation: fadeIn 0.3s ease;
+}
+
+/* Hover effect */
+.floating-player:hover {
+  transform: scale(1.02);
+  box-shadow: 0 9px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(52, 165, 142, 0.2);
+}
+
+/* Minimized state */
+.floating-player.minimized {
+  width: 300px; /* Reduced from 400px to 300px */
+  height: 68px; /* Reduced from 60px to 45px */
+}
+
+.floating-player.minimized .player-content {
+  display: none;
+}
+
+/* Player handle */
+.player-handle {
+  padding: 7.5px 15px; /* Reduced from 10px 20px to 7.5px 15px */
+  background: rgba(0, 0, 0, 0.3);
+  color: white;
+  border-radius: 5px 5px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: move;
+  user-select: none;
+  font-size: 0.9em; /* Reduced font size */
+}
+
+/* Player content */
+.player-content {
+  padding: 11px; /* Reduced from 15px to 11px */
+}
+
+/* Song selection dropdown */
+#song-select {
+  width: 100%;
+  padding: 9px; /* Reduced from 12px to 9px */
+  margin-bottom: 11px; /* Reduced from 15px to 11px */
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.75em; /* Reduced font size */
+  cursor: pointer;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+#song-select:hover,
+#song-select:focus {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(52, 165, 142, 0.5);
+}
+
+/* Current song display */
+#currentSong {
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 7.5px; /* Reduced from 10px to 7.5px */
+  color: white;
+  font-size: 0.85em; /* Reduced font size */
+}
+
+/* Time display */
+.time-display {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6em; /* Reduced font size */
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 7.5px; /* Reduced from 10px to 7.5px */
+}
+
+/* Enhanced seek bar */
+#seekBar {
+  --seek-before-width: 0%;
+  position: relative;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  height: 4.5px; /* Reduced from 6px to 4.5px */
+  width: 100%;
+  cursor: pointer;
+  margin: 7.5px 0; /* Reduced from 10px to 7.5px */
+}
+
+#seekBar::before {
+  content: "";
+  position: absolute;
+  height: 100%;
+  background: rgba(52, 165, 142, 0.9);
+  width: var(--seek-before-width);
+  border-radius: 10px;
+}
+
+#seekBar::-webkit-slider-thumb {
+  appearance: none;
+  height: 11.25px; /* Reduced from 15px to 11.25px */
+  width: 11.25px; /* Reduced from 15px to 11.25px */
+  background: #34a58e;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
+  box-shadow: 0 0.75px 4.5px rgba(0, 0, 0, 0.2);
+}
+
+#seekBar::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+}
+
+#seekBar::-moz-range-thumb {
+  height: 11.25px;
+  width: 11.25px;
+  background: #34a58e;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
+  box-shadow: 0 0.75px 4.5px rgba(0, 0, 0, 0.2);
+}
+
+#seekBar::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 7.5px; /* Reduced from 10px to 7.5px */
+  padding: 3.75px 0; /* Reduced from 5px to 3.75px */
+  flex-wrap: wrap;
+}
+
+/* Player buttons */
+.player-btn {
+  background: rgba(52, 165, 142, 0.9);
+  color: white;
+  border: none;
+  width: 30px; /* Reduced from 40px to 30px */
+  height: 30px; /* Reduced from 40px to 30px */
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9em; /* Reduced font size */
+}
+
+.player-btn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  cursor: not-allowed;
+}
+
+/* Shuffle and Repeat Buttons */
+.shuffle-btn,
+.repeat-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.7);
+  width: 24px !important; /* Reduced from 32px to 24px */
+  height: 24px !important; /* Reduced from 32px to 24px */
+  font-size: 0.8em; /* Reduced font size */
+}
+
+.shuffle-btn.active,
+.repeat-btn.active {
+  background: rgba(52, 165, 142, 0.9) !important;
+  color: white;
+}
+
+/* Hover effects for buttons */
+.player-btn:not(:disabled):hover {
+  transform: translateY(-1.5px); /* Adjusted from -2px */
+  box-shadow: 0 3px 9px rgba(52, 165, 142, 0.3);
+}
+
+.player-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* Enhanced Volume Control */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 6px; /* Reduced from 8px to 6px */
+}
+
+.volume-control i {
+  width: 15px; /* Reduced from 20px to 15px */
+  text-align: center;
+  cursor: pointer;
+  font-size: 0.9em; /* Reduced font size */
+}
+
+#volumeBar {
+  --volume-before-width: 100%;
+  width: 100%;
+  appearance: none;
+  height: 3px; /* Reduced from 4px to 3px */
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  cursor: pointer;
+  position: relative;
+}
+
+#volumeBar::before {
+  content: "";
+  position: absolute;
+  height: 100%;
+  background: rgba(52, 165, 142, 0.9);
+  width: calc(var(--volume-before-width) * 100%);
+  border-radius: 2px;
+}
+
+#volumeBar::-webkit-slider-thumb {
+  appearance: none;
+  height: 9px; /* Reduced from 12px to 9px */
+  width: 9px; /* Reduced from 12px to 9px */
+  background: #34a58e;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0.75px 4.5px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 3;
+}
+
+#volumeBar::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+}
+
+#volumeBar::-moz-range-thumb {
+  height: 9px;
+  width: 9px;
+  background: #34a58e;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0.75px 4.5px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 3;
+}
+
+#volumeBar::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Visualizer Canvas */
+.visualizer {
+  width: 100%;
+  height: 75px; /* Reduced from 100px to 75px */
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  margin: 7.5px 0; /* Reduced from 10px to 7.5px */
+  box-shadow: inset 0 0 7.5px rgba(0, 0, 0, 0.2);
+}
+
+/* Player notification */
+.player-notification {
+  position: absolute;
+  top: -45px; /* Reduced from -60px */
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(52, 165, 142, 0.9);
+  padding: 7.5px 15px; /* Reduced from 10px 20px */
+  border-radius: 8px;
+  color: white;
+  font-size: 0.75em; /* Reduced font size */
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.2);
+  z-index: 1001;
+}
+
+.player-notification.show {
+  top: -37.5px; /* Adjusted to match reduced size */
+  opacity: 1;
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .floating-player {
+    width: calc(75% - 30px); /* Adjusted to 75% */
+    right: 15px;
+    left: 15px;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .volume-control {
+    width: 100%;
+    margin-top: 7.5px; /* Reduced from 10px to 7.5px */
+  }
+}
+
+@media (max-width: 480px) {
+  .floating-player {
+    width: calc(75% - 15px); /* Adjusted to 75% */
+    right: 7.5px;
+    left: 7.5px;
+  }
+
+  .controls {
+    gap: 6px; /* Reduced from 8px to 6px */
+  }
+
+  .shuffle-btn,
+  .repeat-btn {
+    display: none;
+  }
+
+  .volume-control {
+    width: 100%;
+    margin-top: 6px; /* Reduced from 8px to 6px */
+  }
+}
+
+/* Hover effects */
+.player-btn:not(:disabled):hover {
+  transform: translateY(-1.5px);
+  box-shadow: 0 3px 9px rgba(52, 165, 142, 0.3);
+}
+
+.player-btn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* Focus states for accessibility */
+.player-btn:focus,
+#seekBar:focus,
+#volumeBar:focus {
+  outline: none;
+  box-shadow: 0 0 0 1.5px rgba(52, 165, 142, 0.5); /* Reduced from 2px to 1.5px */
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .floating-player {
+    background: rgba(20, 22, 25, 0.95);
+  }
+}

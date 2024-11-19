@@ -1,10 +1,5 @@
 <!DOCTYPE html>
-<!--
-	Multiverse by HTML5UP
-	html5up.net | @ajlkn
-	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
--->
-<html>
+<html lang="en">
   <head>
     <title>Creative-Ai by John Reijmer</title>
     <meta charset="utf-8" />
@@ -16,6 +11,7 @@
     <noscript>
       <link rel="stylesheet" href="assets/css/noscript.css" />
     </noscript>
+    <link rel="stylesheet" href="/assets/css/player.css" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
@@ -26,89 +22,15 @@
     />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+    />
   </head>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      // Function to disable right click
-      function disableRightClick(e) {
-        e.preventDefault();
-        return false;
-      }
-
-      // Function to handle poptrox popup creation
-      function handlePoptroxPopup() {
-        // Target both the popup container and its images
-        const popups = document.querySelectorAll(
-          ".poptrox-popup, .poptrox-popup img, .poptrox-popup .pic"
-        );
-        popups.forEach((popup) => {
-          popup.addEventListener("contextmenu", disableRightClick);
-          popup.addEventListener("mousedown", disableRightClick);
-        });
-      }
-
-      // Disable right click on main gallery images
-      const mainImages = document.querySelectorAll(
-        "#main img, #main .thumb, #main .image"
-      );
-      mainImages.forEach((img) => {
-        img.addEventListener("contextmenu", disableRightClick);
-        img.addEventListener("mousedown", disableRightClick);
-      });
-
-      // Watch for poptrox popup creation
-      const observer = new MutationObserver(function (mutations) {
-        mutations.forEach(function (mutation) {
-          if (mutation.addedNodes.length) {
-            handlePoptroxPopup();
-          }
-        });
-      });
-
-      // Start observing the body for popup creation
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      // Disable keyboard shortcuts
-      document.addEventListener("keydown", function (e) {
-        // Prevent saving with Ctrl+S
-        if (e.ctrlKey && e.key === "s") {
-          e.preventDefault();
-          return false;
-        }
-        // Prevent saving with Ctrl+Shift+I or F12 (Developer Tools)
-        if ((e.ctrlKey && e.shiftKey && e.key === "i") || e.key === "F12") {
-          e.preventDefault();
-          return false;
-        }
-      });
-
-      // Additional protection against dragging
-      document.addEventListener("dragstart", function (e) {
-        if (e.target.tagName === "IMG") {
-          e.preventDefault();
-          return false;
-        }
-      });
-    });
-  </script>
 
   <body class="is-preload">
     <!-- Wrapper -->
     <div id="wrapper">
-      <!-- Header -->
-      <header id="header">
-        <h1>
-          <a href="index.html"><strong>Creative-Ai</strong> by John Reijmer</a>
-        </h1>
-        <nav>
-          <ul>
-            <li>
-              <a href="#footer" class="icon solid fa-info-circle">About</a>
-            </li>
-          </ul>
-        </nav>
-      </header>
-
       <!-- Header -->
       <header id="header">
         <h1>
@@ -134,69 +56,88 @@
 
       <!-- Main -->
       <div id="main">
-        <script>
-          document.addEventListener("DOMContentLoaded", function () {
-            fetch("images-metadata.json")
-              .then((response) => response.json())
-              .then((data) => {
-                const main = document.getElementById("main");
-                main.innerHTML = "";
+        <!-- Gallery content loaded via JavaScript -->
+      </div>
 
-                // Sort images by filename number, highest first
-                data.images.sort((a, b) => {
-                  const numA = parseInt(a.filename.match(/\d+/)[0]);
-                  const numB = parseInt(b.filename.match(/\d+/)[0]);
-                  return numB - numA; // Reverse order (highest first)
-                });
+      <!-- Enhanced Music Player -->
+      <div class="floating-player">
+        <div class="player-handle">
+          <i class="fas fa-music"></i>
+          <span>Now Playing</span>
+          <button class="minimize-btn">
+            <i class="fas fa-chevron-down"></i>
+          </button>
+        </div>
 
-                // Add images
-                data.images.forEach((image) => {
-                  const article = document.createElement("article");
-                  article.className = "thumb";
-                  article.innerHTML = `
-	                    <a href="images/fulls/${image.filename}" class="image">
-                        <img src="images/thumbs/${image.filename}" alt="" />
-                    	</a>
-                    	<h2>${image.title}</h2>
-                    	<p>${image.description}</p>
-                		`;
-                  main.appendChild(article);
-                });
+        <div class="player-notification"></div>
 
-                // Initialize poptrox with existing settings
-                if (window.$) {
-                  $("#main").poptrox({
-                    baseZIndex: 20000,
-                    caption: function ($a) {
-                      return $a.next("h2").text();
-                    },
-                    fadeSpeed: 300,
-                    onPopupClose: function () {
-                      document.body.classList.remove("is-covered");
-                    },
-                    onPopupOpen: function () {
-                      document.body.classList.add("is-covered");
-                    },
-                    overlayColor: "#000000",
-                    overlayOpacity: 0.75,
-                    popupCloserText: "",
-                    popupLoaderText: "",
-                    popupSpeed: 300,
-                    selector: ".thumb > a.image",
-                    useBodyOverflow: false,
-                    usePopupCaption: true,
-                    usePopupCloser: true,
-                    usePopupDefaultStyling: false,
-                    usePopupForceClose: true,
-                    usePopupLoader: true,
-                    usePopupNav: true,
-                    windowMargin: 50,
-                  });
-                }
-              })
-              .catch((error) => console.error("Error:", error));
-          });
-        </script>
+        <div class="player-content">
+          <select id="song-select">
+            <option value="">Select a song...</option>
+            <option
+              value="music/00-LeagueOfArcane-RiseFromTheShadows_Alt.Ending.mp3"
+            >
+              League Of Arcane - From The Shadows
+            </option>
+            <option value="music/01-EternalGuardian.mp3">
+              Kelly Fakes - Eternal Guardian
+            </option>
+            <option value="music/02-EmeraldFlutter.mp3">
+              Florence Noname - Emerald Flutter
+            </option>
+            <!-- Add more songs as needed -->
+          </select>
+
+          <div class="song-info">
+            <span id="currentSong">No song selected</span>
+          </div>
+
+          <!-- The visualizer canvas will be inserted here by JavaScript -->
+
+          <div class="time-display">
+            <span id="currentTime">0:00</span>
+            <span id="duration">0:00</span>
+          </div>
+          <input
+            type="range"
+            id="seekBar"
+            class="seek-bar"
+            value="0"
+            min="0"
+            max="100"
+            step="0.1"
+          />
+
+          <div class="controls">
+            <button id="prevBtn" class="player-btn" title="Previous">
+              <i class="fas fa-step-backward"></i>
+            </button>
+            <button id="playPauseBtn" class="player-btn" title="Play/Pause">
+              <i class="fas fa-play"></i>
+            </button>
+            <button id="nextBtn" class="player-btn" title="Next">
+              <i class="fas fa-step-forward"></i>
+            </button>
+
+            <!-- Shuffle and Repeat buttons will be added here by JavaScript -->
+
+            <div class="volume-control">
+              <i class="fas fa-volume-up"></i>
+              <input
+                type="range"
+                id="volumeBar"
+                class="volume-bar"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+              />
+              <span id="volumeText">100%</span>
+            </div>
+          </div>
+
+          <div class="loading-indicator"></div>
+        </div>
       </div>
 
       <!-- Footer -->
@@ -222,32 +163,36 @@
                     href="https://x.com/johnreijmer"
                     target="_blank"
                     class="icon brands fa-twitter"
-                    ><span class="label">Twitter</span></a
                   >
+                    <span class="label">Twitter</span>
+                  </a>
                 </li>
                 <li>
                   <a
                     href="https://facebook.com/johnreijmer"
                     target="_blank"
                     class="icon brands fa-facebook-f"
-                    ><span class="label">Facebook</span></a
                   >
+                    <span class="label">Facebook</span>
+                  </a>
                 </li>
                 <li>
                   <a
                     href="https://instagram.com/johnreijmer"
                     target="_blank"
                     class="icon brands fa-instagram"
-                    ><span class="label">Instagram</span></a
                   >
+                    <span class="label">Instagram</span>
+                  </a>
                 </li>
                 <li>
                   <a
                     href="https://www.linkedin.com/in/johnreijmer/"
                     target="_blank"
                     class="icon brands fa-linkedin-in"
-                    ><span class="label">LinkedIn</span></a
                   >
+                    <span class="label">LinkedIn</span>
+                  </a>
                 </li>
               </ul>
             </section>
@@ -262,8 +207,9 @@
                     href="https://www.paypal.com/paypalme/johnreijmer"
                     target="_blank"
                     class="icon brands fa-paypal"
-                    ><span class="label">PayPal</span></a
                   >
+                    <span class="label">PayPal</span>
+                  </a>
                 </li>
               </ul>
             </section>
@@ -276,12 +222,14 @@
       </footer>
     </div>
 
-    <!-- Scripts -->
+    <!-- Core Scripts -->
     <script src="assets/js/jquery.min.js"></script>
     <script src="assets/js/jquery.poptrox.min.js"></script>
     <script src="assets/js/browser.min.js"></script>
     <script src="assets/js/breakpoints.min.js"></script>
     <script src="assets/js/util.js"></script>
     <script src="assets/js/main.js"></script>
+    <script src="assets/js/gallery.js"></script>
+    <script src="assets/js/player.js?v=1.1"></script>
   </body>
 </html>
