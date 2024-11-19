@@ -156,6 +156,7 @@
 /* Controls */
 .controls {
   display: flex;
+  justify-content: center;
   align-items: center;
   gap: 7.5px; /* Reduced from 10px to 7.5px */
   padding: 3.75px 0; /* Reduced from 5px to 3.75px */
@@ -167,7 +168,7 @@
   background: rgba(52, 165, 142, 0.9);
   color: white;
   border: none;
-  width: 10px; /* Reduced from 40px to 30px */
+  width: 30%; /* Reduced from 40px to 30px */
   height: 30px; /* Reduced from 40px to 30px */
   border-radius: 15%;
   cursor: pointer;
@@ -188,9 +189,9 @@
 .repeat-btn {
   background: rgba(255, 255, 255, 0.1) !important;
   color: rgba(255, 255, 255, 0.7);
-  width: 24px !important; /* Reduced from 32px to 24px */
+  width: 10px !important; /* Reduced from 32px to 24px */
   height: 24px !important; /* Reduced from 32px to 24px */
-  font-size: 0.8em; /* Reduced font size */
+  font-size: 0.7em; /* Reduced font size */
 }
 
 .shuffle-btn.active,
