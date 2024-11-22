@@ -18,11 +18,11 @@
     />
     <meta property="og:url" content="https://www.creative-ai.nl" />
     <meta property="og:type" content="website" />
-    <link rel="stylesheet" href="assets/css/main.css?v=1.3" />
+    <link rel="stylesheet" href="assets/css/main.css?v=1.4" />
     <noscript>
-      <link rel="stylesheet" href="assets/css/noscript.css" />
+      <link rel="stylesheet" href="assets/css/noscript.css?v=1.4" />
     </noscript>
-    <link rel="stylesheet" href="/assets/css/player.css?v=1.3" />
+    <link rel="stylesheet" href="/assets/css/player.css?v=1.4" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
@@ -35,7 +35,7 @@
     <meta http-equiv="Expires" content="0" />
     <link
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css?v=1.4"
     />
   </head>
 
@@ -255,13 +255,13 @@
     </div>
 
     <!-- Core Scripts -->
-    <script src="assets/js/jquery.min.js"></script>
-    <script src="assets/js/jquery.poptrox.min.js"></script>
-    <script src="assets/js/browser.min.js"></script>
-    <script src="assets/js/breakpoints.min.js"></script>
-    <script src="assets/js/util.js"></script>
-    <script src="assets/js/main.js"></script>
-    <script src="assets/js/gallery.js?v=1.2"></script>
-    <script src="assets/js/player.js?v=1.2"></script>
+    <script src="assets/js/jquery.min.js?v=1.4"></script>
+    <script src="assets/js/jquery.poptrox.min.js?v=1.4"></script>
+    <script src="assets/js/browser.min.js?v=1.4"></script>
+    <script src="assets/js/breakpoints.min.js?v=1.4"></script>
+    <script src="assets/js/util.js?v=1.4"></script>
+    <script src="assets/js/main.js?v=1.4"></script>
+    <script src="assets/js/gallery.js?v=1.4"></script>
+    <script src="assets/js/player.js?v=1.4"></script>
   </body>
 </html>
