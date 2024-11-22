@@ -1,22 +1,22 @@
 {
-    // See https://go.microsoft.com/fwlink/?LinkId=733558
-    // for the documentation about the tasks.json format
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Deploy to Server",
-            "type": "shell",
-            "command": "& {$msg = Read-Host -Prompt 'Enter commit message'; git add .; git commit -m $msg; git push; ssh root@192.168.1.176 -p 5522 'cd /mnt/user/appdata/binhex-nginx && sudo ./update.sh'}",
-            "options": {
-                "shell": {
-                    "executable": "powershell.exe"
-                }
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": []
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Deploy to Server",
+      "type": "shell",
+      "command": "& {$msg = Read-Host -Prompt 'Enter commit message'; git add .; git commit -m $msg; git push; ssh root@192.168.1.176 -p 5522 'cd /mnt/user/appdata/nginxphp8 && sudo ./update.sh'}",
+      "options": {
+        "shell": {
+          "executable": "powershell.exe"
         }
-    ]
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
 }
