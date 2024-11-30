@@ -5,26 +5,24 @@ document.addEventListener("DOMContentLoaded", function () {
       const main = document.getElementById("main");
       main.innerHTML = "";
 
-      // Sort images by filename number, highest first
-      data.images.sort((a, b) => {
-        const numA = parseInt(a.filename.match(/\d+/)[0]);
-        const numB = parseInt(b.filename.match(/\d+/)[0]);
-        return numB - numA;
-      });
+      const maxImageNumber = data.maxImageNumber; // Get max number from JSON
+      const description = data.description; // Get description from JSON
 
-      // Add images
-      data.images.forEach((image) => {
+      // Loop backwards through numbers and create images
+      for (let i = maxImageNumber; i >= 1; i--) {
+        const filename = String(i).padStart(4, "0") + ".jpg"; // Format as 0001.jpg, 0002.jpg, etc.
+
         const article = document.createElement("article");
         article.className = "thumb";
         article.innerHTML = `
-                          <a href="images/fulls/${image.filename}" class="image">
-                              <img src="images/thumbs/${image.filename}" alt="" />
-                          </a>
-                          <h2>${parseInt(image.filename.replace(/\D/g, ""))}</h2>
-                          <p>${image.description}</p>
-                      `;
+          <a href="images/fulls/${filename}" class="image">
+              <img src="images/thumbs/${filename}" alt="" />
+          </a>
+          <h2>${i}</h2> <!-- Use i directly as the title -->
+          <p>${description}</p>
+        `;
         main.appendChild(article);
-      });
+      }
 
       // Initialize poptrox
       if (window.$) {
