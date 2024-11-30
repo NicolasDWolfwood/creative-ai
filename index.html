@@ -3,19 +3,13 @@
   <head>
     <title>Creative-Ai by John Reijmer</title>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <meta property="og:description" content="Creative-Ai" />
     <meta
       property="og:A site made out of love for creating art with ComfyUI and Automatic1111"
       content="A site made out of love for creating art with ComfyUI and Automatic1111"
     />
-    <meta
-      property="og:image"
-      content="https://www.creative-ai.nl/images/preview-site.jpg"
-    />
+    <meta property="og:image" content="https://www.creative-ai.nl/images/preview-site.jpg" />
     <meta property="og:url" content="https://www.creative-ai.nl" />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="assets/css/main.css?v=1.4" />
@@ -27,16 +21,10 @@
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
     <link rel="shortcut icon" href="favicon.ico" />
-    <meta
-      http-equiv="Cache-Control"
-      content="no-cache, no-store, must-revalidate"
-    />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css?v=1.4"
-    />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css?v=1.4" />
   </head>
 
   <body class="is-preload">
@@ -59,10 +47,7 @@
       <!-- Gallery Header -->
       <div class="gallery-header fade-in">
         <h2>Creative Thoughts</h2>
-        <p>
-          A site made out of love for creating art with ComfyUI and
-          Automatic1111
-        </p>
+        <p>A site made out of love for creating art with ComfyUI and Automatic1111</p>
       </div>
 
       <!-- Main -->
@@ -87,41 +72,19 @@
         <div class="player-content">
           <select id="song-select">
             <option value="">Select a song...</option>
-            <option
-              value="music/00-LeagueOfArcane-RiseFromTheShadows_Alt.Ending.mp3"
-            >
+            <option value="music/00-LeagueOfArcane-RiseFromTheShadows_Alt.Ending.mp3">
               League Of Arcane - From The Shadows
             </option>
-            <option value="music/01-EternalGuardian.mp3">
-              Kelly Fakes - Eternal Guardian
-            </option>
-            <option value="music/02-EmeraldFlutter.mp3">
-              Florence Noname - Emerald Flutter
-            </option>
-            <option value="music/03-FarmingOutsideForAMan.mp3">
-              5ive Kids Back - Farming Outside
-            </option>
-            <option value="music/04-BennyHardBenjiAnthem.mp3">
-              Benny Hard - Benji's Anthem
-            </option>
-            <option value="music/05-themusicalforthealliance.mp3">
-              The Musical - For The Alliance
-            </option>
-            <option value="music/06-sidsEnchantedMoor.mp3">
-              Sidical - Enchanted Moor
-            </option>
-            <option value="music/07-theatershowMoistyRepose.mp3">
-              Theater Show - Moisty's Repose
-            </option>
-            <option value="music/08-HooverPhony-SpectrumDreams.mp3">
-              Hooverphone - Spectrum Dreams
-            </option>
-            <option value="music/09-AngelicKCelestialSeraphim.mp3">
-              Angelic-K - Celestial Seraphim
-            </option>
-            <option value="music/10-MoistyOsborne-KingoftheWaves.mp3">
-              Moisty Osborne - King of the Waves
-            </option>
+            <option value="music/01-EternalGuardian.mp3">Kelly Fakes - Eternal Guardian</option>
+            <option value="music/02-EmeraldFlutter.mp3">Florence Noname - Emerald Flutter</option>
+            <option value="music/03-FarmingOutsideForAMan.mp3">5ive Kids Back - Farming Outside</option>
+            <option value="music/04-BennyHardBenjiAnthem.mp3">Benny Hard - Benji's Anthem</option>
+            <option value="music/05-themusicalforthealliance.mp3">The Musical - For The Alliance</option>
+            <option value="music/06-sidsEnchantedMoor.mp3">Sidical - Enchanted Moor</option>
+            <option value="music/07-theatershowMoistyRepose.mp3">Theater Show - Moisty's Repose</option>
+            <option value="music/08-HooverPhony-SpectrumDreams.mp3">Hooverphone - Spectrum Dreams</option>
+            <option value="music/09-AngelicKCelestialSeraphim.mp3">Angelic-K - Celestial Seraphim</option>
+            <option value="music/10-MoistyOsborne-KingoftheWaves.mp3">Moisty Osborne - King of the Waves</option>
             <!-- Add more songs as needed -->
           </select>
 
@@ -131,15 +94,7 @@
             <span id="currentTime">0:00</span>
             <span id="duration">0:00</span>
           </div>
-          <input
-            type="range"
-            id="seekBar"
-            class="seek-bar"
-            value="0"
-            min="0"
-            max="100"
-            step="0.1"
-          />
+          <input type="range" id="seekBar" class="seek-bar" value="0" min="0" max="100" step="0.1" />
           <div class="controls">
             <button id="prevBtn" class="player-btn" title="Previous">
               <i class="fas fa-step-backward"></i>
@@ -155,15 +110,7 @@
 
             <div class="volume-control">
               <i class="fas fa-volume-up"></i>
-              <input
-                type="range"
-                id="volumeBar"
-                class="volume-bar"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-              />
+              <input type="range" id="volumeBar" class="volume-bar" min="0" max="1" step="0.01" value="1" />
               <span id="volumeText">100%</span>
             </div>
           </div>
@@ -179,50 +126,32 @@
             <section>
               <h2>Who am I?</h2>
               <p>
-                I'm someone who likes to be busy at all times. I dabble in code,
-                Ai, art, photography and more. This site is mainly because I'm
-                being asked to showcase some of my work. Mostly aiming at the
-                generative side of it. So this is just a site to easily upload
-                and showcase some of the work I do that's freely available for
-                everyone.
+                I'm someone who likes to be busy at all times. I dabble in code, Ai, art, photography and more. This
+                site is mainly because I'm being asked to showcase some of my work. Mostly aiming at the generative side
+                of it. So this is just a site to easily upload and showcase some of the work I do that's freely
+                available for everyone.
               </p>
             </section>
             <section>
               <h2>Follow me on ...</h2>
               <ul class="icons">
                 <li>
-                  <a
-                    href="https://x.com/johnreijmer"
-                    target="_blank"
-                    class="icon brands fa-twitter"
-                  >
+                  <a href="https://x.com/johnreijmer" target="_blank" class="icon brands fa-twitter">
                     <span class="label">Twitter</span>
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="https://facebook.com/johnreijmer"
-                    target="_blank"
-                    class="icon brands fa-facebook-f"
-                  >
+                  <a href="https://facebook.com/johnreijmer" target="_blank" class="icon brands fa-facebook-f">
                     <span class="label">Facebook</span>
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="https://instagram.com/johnreijmer"
-                    target="_blank"
-                    class="icon brands fa-instagram"
-                  >
+                  <a href="https://instagram.com/johnreijmer" target="_blank" class="icon brands fa-instagram">
                     <span class="label">Instagram</span>
                   </a>
                 </li>
                 <li>
-                  <a
-                    href="https://www.linkedin.com/in/johnreijmer/"
-                    target="_blank"
-                    class="icon brands fa-linkedin-in"
-                  >
+                  <a href="https://www.linkedin.com/in/johnreijmer/" target="_blank" class="icon brands fa-linkedin-in">
                     <span class="label">LinkedIn</span>
                   </a>
                 </li>
@@ -235,11 +164,7 @@
               <p>You can donate for a cup of hot choco.</p>
               <ul class="icons">
                 <li>
-                  <a
-                    href="https://www.paypal.com/paypalme/johnreijmer"
-                    target="_blank"
-                    class="icon brands fa-paypal"
-                  >
+                  <a href="https://www.paypal.com/paypalme/johnreijmer" target="_blank" class="icon brands fa-paypal">
                     <span class="label">PayPal</span>
                   </a>
                 </li>

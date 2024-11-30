@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", function () {
                           <a href="images/fulls/${image.filename}" class="image">
                               <img src="images/thumbs/${image.filename}" alt="" />
                           </a>
-                          <h2>${image.title}</h2>
+                          <h2>${parseInt(image.filename)}</h2>
                           <p>${image.description}</p>
                       `;
         main.appendChild(article);
