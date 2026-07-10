@@ -16,6 +16,8 @@ local development -> pull request and CI -> merge to main
 
 Staging and production run the exact same image. Production never rebuilds a release that was tested on staging.
 
+For a fresh maintenance session, start with [AGENTS.md](AGENTS.md) and [PROJECT_STATUS.md](PROJECT_STATUS.md). They point to the source-of-truth runbooks and list known follow-up work without exposing machine-specific values.
+
 ## Local development
 
 Requirements:
@@ -76,6 +78,32 @@ docker compose --profile tools run --rm --build --no-deps creative-ai-test php a
 
 Equivalent tasks are available from VS Code under `Terminal -> Run Task`.
 
+## Routine code change
+
+Start each change from an up-to-date `main` branch and work on a short-lived branch:
+
+```bash
+git switch main
+git pull --ff-only
+git switch -c feature/describe-the-change
+```
+
+Make the change, rebuild the local stack, and run the relevant tests. Review the diff before committing:
+
+```bash
+git status --short
+git diff --check
+git add --all
+git commit -m "Describe the change"
+git push --set-upstream origin HEAD
+```
+
+Open a pull request, wait for the final **CI result** check, review the proposed changes, and merge only when it is green. After merging, wait for the new workflow run triggered by the push to `main`. That run publishes and smoke-tests the staging candidate and prints the complete immutable image reference in its Actions summary.
+
+A manually dispatched **Test and publish release candidate** workflow validates the repository but does not publish a staging image. Image publication occurs only on a push to `main`.
+
+Protect `main` with a GitHub ruleset that requires a pull request and the final **CI result** status check. Keep direct pushes disabled except for deliberate administrator recovery.
+
 ## First administrator
 
 Administrator identity and passwords live only in PostgreSQL. No administrator values belong in `.env`.
@@ -108,10 +136,10 @@ Only bootstrap and infrastructure values stay outside the database: image digest
 
 ## Releases and Unraid
 
-Pull requests run application tests, build the release image, and smoke-test it with real PostgreSQL and Redis. A successful merge to `main` publishes one immutable GHCR digest. Copy the complete `ghcr.io/...@sha256:...` reference into staging; after testing, approve and copy that same digest into production.
+Pull requests run application tests and a real PostgreSQL/Redis stack smoke test. The push to `main` created by a successful merge publishes and smoke-tests one immutable GHCR digest. Copy the complete `ghcr.io/...@sha256:...` reference into staging; after testing, approve and copy that same digest into production.
 
 Unraid uses Compose Manager and does not run a deployment script. See [UNRAID.md](UNRAID.md) for stack creation, updates, backups, promotion, and rollback.
 
 ## License and credits
 
-The original static presentation was based on Multiverse by HTML5 UP, released under the Creative Commons Attribution 3.0 license. See [LICENSE.txt](LICENSE.txt) for repository licensing information and retained attribution.
+The retired static presentation was based on Multiverse by HTML5 UP, released under the Creative Commons Attribution 3.0 license. Its source remains available in Git history, and the attribution is retained in [LICENSE.txt](LICENSE.txt).

@@ -137,5 +137,7 @@ jobs:
             echo
             echo "  \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
             echo
-            echo "In Compose Manager, stop the stack, paste this complete image reference into .env, and run Compose Up. Compose pulls the digest automatically when it is missing."
+            echo "The moving \`:production\` tag is informational only; never deploy it."
+            echo
+            echo "Follow the [routine production update runbook](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/main/UNRAID.md#8-routine-production-update), including its backup and verification steps."
           } >> "$GITHUB_STEP_SUMMARY"
