@@ -28,16 +28,14 @@ class User extends Authenticatable implements FilamentUser
     {
         return [
             'email_verified_at' => 'datetime',
+            'is_admin' => 'boolean',
             'password' => 'hashed',
         ];
     }
 
     public function canAccessPanel(Panel $panel): bool
     {
-        $adminEmail = config('creative_ai.admin_email');
-
         return $panel->getId() === 'admin'
-            && filled($adminEmail)
-            && strtolower($this->email) === strtolower($adminEmail);
+            && $this->is_admin;
     }
 }

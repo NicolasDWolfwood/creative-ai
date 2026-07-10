@@ -1,17 +1,18 @@
-# Unraid deployment bundle
+# Unraid Compose Manager bundle
 
-Use the same `compose.yaml` for two Compose Manager Plus stacks:
+Use [compose.yaml](compose.yaml) for both website stacks:
 
-- `creative-ai-staging` with `staging.env.example`
-- `creative-ai-production` with `production.env.example`
+- staging with [staging.env.example](staging.env.example)
+- production with [production.env.example](production.env.example)
 
-Use Compose Manager Plus indirect project paths under `/mnt/user/appdata/creative-ai-deploy/`. Copy the matching example into the stack's `.env` tab, replace every placeholder, and keep the resulting file off Git. Copy `update.sh` beside the Compose file.
+Paste the YAML and matching environment template into the Unraid Compose Manager tabs, replace every placeholder locally, and pin a complete GHCR `@sha256` image reference.
 
-Routine update commands from each stack folder:
+For every release use:
 
-```bash
-bash update.sh --yes  # staging
-bash update.sh        # production; requires a digest and asks for backup confirmation
+```text
+Compose Down -> edit exact digest -> Compose Pull -> Compose Up
 ```
 
-Read the complete setup, migration, proxy, promotion, and rollback procedure in [`UNRAID.md`](../../UNRAID.md).
+The migration container must exit `0`, the website must become healthy, and only then will the worker start. No deployment script or host port is used.
+
+See [UNRAID.md](../../UNRAID.md) for initial databases, administrator recovery, staging acceptance, production promotion, backups, proxy cutover, and rollback.

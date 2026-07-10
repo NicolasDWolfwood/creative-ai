@@ -72,7 +72,7 @@ class AiSettings
 
             if (filled($submitted)) {
                 $settings[$field] = 'encrypted:'.Crypt::encryptString($submitted);
-            } elseif (filled($stored[$field] ?? null)) {
+            } elseif (is_string($stored[$field] ?? null) && str_starts_with($stored[$field], 'encrypted:')) {
                 $settings[$field] = $stored[$field];
             } else {
                 unset($settings[$field]);
@@ -185,27 +185,27 @@ class AiSettings
     protected function defaults(): array
     {
         return [
-            'provider' => config('creative_ai.ai.provider', 'ollama'),
-            'ollama_base_url' => config('services.ollama.base_url', 'http://127.0.0.1:11434'),
-            'ollama_model' => config('services.ollama.model', 'qwen3.5:latest'),
-            'ollama_request_timeout' => (int) config('services.ollama.timeout', 150),
-            'ollama_context_length' => (int) config('services.ollama.context_length', 4096),
-            'ollama_keep_alive' => (string) config('services.ollama.keep_alive', '5m'),
-            'openai_api_key' => (string) config('services.openai.api_key', ''),
-            'openai_base_url' => (string) config('services.openai.base_url', 'https://api.openai.com/v1'),
-            'openai_model' => (string) config('services.openai.model', 'gpt-5.4-mini'),
-            'openai_request_timeout' => (int) config('services.openai.timeout', 90),
-            'anthropic_api_key' => (string) config('services.anthropic.api_key', ''),
-            'anthropic_base_url' => (string) config('services.anthropic.base_url', 'https://api.anthropic.com/v1'),
-            'anthropic_model' => (string) config('services.anthropic.model', 'claude-sonnet-4-6'),
-            'anthropic_request_timeout' => (int) config('services.anthropic.timeout', 120),
-            'zai_api_key' => (string) config('services.zai.api_key', ''),
-            'zai_base_url' => (string) config('services.zai.base_url', 'https://api.z.ai/api/paas/v4'),
-            'zai_model' => (string) config('services.zai.model', 'glm-4.6v-flash'),
-            'zai_request_timeout' => (int) config('services.zai.timeout', 120),
-            'auto_analyze_uploads' => (bool) config('creative_ai.ai.auto_analyze_uploads', false),
-            'image_max_width' => (int) config('creative_ai.ai.image_max_width', 768),
-            'image_jpeg_quality' => (int) config('creative_ai.ai.image_jpeg_quality', 72),
+            'provider' => 'ollama',
+            'ollama_base_url' => 'http://ollama:11434',
+            'ollama_model' => 'qwen3.5:latest',
+            'ollama_request_timeout' => 150,
+            'ollama_context_length' => 4096,
+            'ollama_keep_alive' => '5m',
+            'openai_api_key' => '',
+            'openai_base_url' => 'https://api.openai.com/v1',
+            'openai_model' => 'gpt-5.4-mini',
+            'openai_request_timeout' => 90,
+            'anthropic_api_key' => '',
+            'anthropic_base_url' => 'https://api.anthropic.com/v1',
+            'anthropic_model' => 'claude-sonnet-4-6',
+            'anthropic_request_timeout' => 120,
+            'zai_api_key' => '',
+            'zai_base_url' => 'https://api.z.ai/api/paas/v4',
+            'zai_model' => 'glm-4.6v-flash',
+            'zai_request_timeout' => 120,
+            'auto_analyze_uploads' => false,
+            'image_max_width' => 768,
+            'image_jpeg_quality' => 72,
         ];
     }
 
@@ -258,7 +258,7 @@ class AiSettings
         }
 
         if (! str_starts_with($value, 'encrypted:')) {
-            return $value;
+            return '';
         }
 
         try {

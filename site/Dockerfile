@@ -9,7 +9,7 @@ COPY site/resources ./resources
 COPY site/public ./public
 RUN npm run build
 
-FROM php:8.3-apache AS app
+FROM php:8.3-apache AS runtime
 
 ENV APACHE_DOCUMENT_ROOT=/app/public
 WORKDIR /app
@@ -17,6 +17,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
+        gosu \
         curl \
         libfreetype6-dev \
         libicu-dev \
@@ -54,8 +55,6 @@ RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --no-
 
 COPY site/ ./
 COPY --from=assets /build/public/build ./public/build
-COPY images ./legacy/images
-COPY music ./legacy/music
 COPY site/docker/entrypoint.sh /usr/local/bin/creative-ai-entrypoint
 
 RUN mkdir -p \
@@ -67,12 +66,23 @@ RUN mkdir -p \
         bootstrap/cache \
     && chmod +x /usr/local/bin/creative-ai-entrypoint \
     && composer dump-autoload --optimize --no-scripts \
+    && APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= php artisan package:discover --ansi \
+    && APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= php artisan filament:assets \
+    && ln -sfn /app/storage/app/public public/storage \
     && chown -R www-data:www-data storage bootstrap/cache public
 
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl --fail --silent --show-error --header 'Host: localhost' http://127.0.0.1/up >/dev/null || exit 1
+    CMD curl --fail --silent --show-error --header 'Host: localhost' http://127.0.0.1/ready >/dev/null || exit 1
 
 ENTRYPOINT ["creative-ai-entrypoint"]
 CMD ["apache2-foreground"]
+
+FROM runtime AS test
+
+RUN composer install --no-interaction --no-progress --prefer-dist --no-scripts \
+    && APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= php artisan package:discover --ansi \
+    && cp .env.example .env
+
+FROM runtime AS app

@@ -50,12 +50,37 @@ class PlatformExpansionTest extends TestCase
         $this->assertSame('secret-cloud-key', app(AiSettings::class)->apiKey('openai'));
     }
 
+    public function test_plaintext_or_corrupt_database_secrets_fail_closed(): void
+    {
+        SiteSetting::query()->create([
+            'key' => AiSettings::SETTING_KEY,
+            'value' => [
+                'provider' => 'openai',
+                'openai_api_key' => 'legacy-plaintext-key',
+                'anthropic_api_key' => 'encrypted:not-valid-ciphertext',
+            ],
+        ]);
+
+        $settings = app(AiSettings::class);
+
+        $this->assertSame('', $settings->apiKey('openai'));
+        $this->assertSame('', $settings->apiKey('anthropic'));
+
+        $settings->save(['provider' => 'openai']);
+        $stored = SiteSetting::query()->where('key', AiSettings::SETTING_KEY)->firstOrFail()->value;
+
+        $this->assertArrayNotHasKey('openai_api_key', $stored);
+        $this->assertSame('encrypted:not-valid-ciphertext', $stored['anthropic_api_key']);
+        $this->assertSame('', app(AiSettings::class)->apiKey('anthropic'));
+    }
+
     public function test_switching_provider_refreshes_the_matching_model_catalog(): void
     {
-        config([
-            'services.ollama.base_url' => 'http://ollama.test:11434',
-            'services.openai.api_key' => 'openai-test-key',
-            'services.openai.base_url' => 'https://api.openai.com/v1',
+        app(AiSettings::class)->save([
+            'provider' => 'openai',
+            'ollama_base_url' => 'http://ollama.test:11434',
+            'openai_api_key' => 'openai-test-key',
+            'openai_base_url' => 'https://api.openai.com/v1',
         ]);
 
         Http::fake([
@@ -66,7 +91,7 @@ class PlatformExpansionTest extends TestCase
             ]),
         ]);
 
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->admin()->create());
 
         Livewire::test(AiConfiguration::class)
             ->set('data.provider', 'openai')

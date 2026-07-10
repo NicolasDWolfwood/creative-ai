@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_digest:
-        description: Exact sha256 digest reported by the staging Unraid deployment
+        description: Exact sha256 digest tested and approved on staging
         required: true
         type: string
 
@@ -103,7 +103,6 @@ jobs:
       packages: write
     environment:
       name: production
-      url: https://www.creative-ai.nl
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -138,5 +137,5 @@ jobs:
             echo
             echo "  \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
             echo
-            echo "This approves the artifact; the separate Unraid update completes the deployment."
+            echo "In Compose Manager, stop the stack, paste this digest into .env, pull, and run Compose Up."
           } >> "$GITHUB_STEP_SUMMARY"

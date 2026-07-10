@@ -116,7 +116,7 @@ class OpenAiClient
         $apiKey = $this->settings->apiKey('openai', $overrides['api_key'] ?? null);
 
         if (blank($apiKey)) {
-            throw new RuntimeException('An OpenAI API key is required. Configure it in AI providers or OPENAI_API_KEY.');
+            throw new RuntimeException('An OpenAI API key is required. Configure it on the AI providers page.');
         }
 
         return Http::baseUrl(rtrim((string) ($overrides['base_url'] ?? $this->settings->baseUrl('openai')), '/').'/')

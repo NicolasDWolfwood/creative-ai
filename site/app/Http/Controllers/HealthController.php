@@ -15,6 +15,7 @@ class HealthController extends Controller
         try {
             DB::select('select 1');
             Redis::connection()->ping();
+            Redis::connection('cache')->ping();
 
             if (! is_writable(storage_path('app/public'))) {
                 throw new RuntimeException('Persistent storage is not writable.');
