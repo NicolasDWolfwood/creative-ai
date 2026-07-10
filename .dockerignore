@@ -1,0 +1,15 @@
+.git
+.vscode
+node_modules
+site/node_modules
+site/vendor
+site/public/build
+site/storage/app/public
+site/storage/framework/cache
+site/storage/framework/sessions
+site/storage/framework/views
+site/storage/logs
+site/bootstrap/cache/*.php
+*.log
+.env
+site/.env

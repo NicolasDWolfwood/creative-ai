@@ -1,0 +1,87 @@
+x-creative-ai-environment: &creative-ai-environment
+  APP_NAME: "${APP_NAME:-Creative-Ai}"
+  APP_ENV: "${APP_ENV:-production}"
+  APP_KEY: "${APP_KEY}"
+  APP_DEBUG: "${APP_DEBUG:-false}"
+  APP_URL: "${APP_URL:-https://creative-ai.nl}"
+  APP_LOCALE: "${APP_LOCALE:-en}"
+  TRUSTED_PROXIES: "${TRUSTED_PROXIES:-*}"
+  LOG_CHANNEL: "${LOG_CHANNEL:-stack}"
+  LOG_LEVEL: "${LOG_LEVEL:-warning}"
+  DB_CONNECTION: "${DB_CONNECTION:-pgsql}"
+  DB_HOST: "${DB_HOST}"
+  DB_PORT: "${DB_PORT:-5432}"
+  DB_DATABASE: "${DB_DATABASE:-creative_ai}"
+  DB_USERNAME: "${DB_USERNAME}"
+  DB_PASSWORD: "${DB_PASSWORD}"
+  SESSION_DRIVER: "${SESSION_DRIVER:-redis}"
+  CACHE_STORE: "${CACHE_STORE:-redis}"
+  QUEUE_CONNECTION: "${QUEUE_CONNECTION:-redis}"
+  FILESYSTEM_DISK: "${FILESYSTEM_DISK:-public}"
+  REDIS_CLIENT: "${REDIS_CLIENT:-phpredis}"
+  REDIS_HOST: "${REDIS_HOST}"
+  REDIS_USERNAME: "${REDIS_USERNAME:-null}"
+  REDIS_PASSWORD: "${REDIS_PASSWORD:-null}"
+  REDIS_PORT: "${REDIS_PORT:-6379}"
+  REDIS_DB: "${REDIS_DB:-0}"
+  REDIS_CACHE_DB: "${REDIS_CACHE_DB:-1}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.4-mini}"
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+  AI_PROVIDER: "${AI_PROVIDER:-openai}"
+  OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
+  OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen3.5:latest}"
+  OLLAMA_REQUEST_TIMEOUT: "${OLLAMA_REQUEST_TIMEOUT:-150}"
+  OLLAMA_CONTEXT_LENGTH: "${OLLAMA_CONTEXT_LENGTH:-4096}"
+  OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
+  AI_AUTO_ANALYZE_UPLOADS: "${AI_AUTO_ANALYZE_UPLOADS:-false}"
+  AI_IMAGE_MAX_WIDTH: "${AI_IMAGE_MAX_WIDTH:-768}"
+  AI_IMAGE_JPEG_QUALITY: "${AI_IMAGE_JPEG_QUALITY:-72}"
+  AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT:-90}"
+  ADMIN_EMAIL: "${ADMIN_EMAIL}"
+  ADMIN_NAME: "${ADMIN_NAME:-Creative-Ai Admin}"
+  ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+  RUN_MIGRATIONS: "${RUN_MIGRATIONS:-false}"
+  RUN_LEGACY_IMPORT: "${RUN_LEGACY_IMPORT:-false}"
+  CREATIVE_AI_LEGACY_PATH: "/app/legacy"
+
+x-creative-ai-volumes: &creative-ai-volumes
+  - "${CREATIVE_AI_STORAGE:-/mnt/user/appdata/creative-ai/storage}:/app/storage"
+
+services:
+  creative-ai:
+    build:
+      context: .
+      dockerfile: site/Dockerfile
+    image: creative-ai:latest
+    container_name: creative-ai
+    restart: unless-stopped
+    ports:
+      - "${CREATIVE_AI_PORT:-8080}:80"
+    environment: *creative-ai-environment
+    volumes: *creative-ai-volumes
+    labels:
+      net.unraid.docker.webui: "http://[IP]:[PORT:80]/"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/NicolasDWolfwood/creative-ai/main/favicon-32x32.png"
+
+  creative-ai-worker:
+    build:
+      context: .
+      dockerfile: site/Dockerfile
+    image: creative-ai:latest
+    container_name: creative-ai-worker
+    restart: unless-stopped
+    command:
+      - php
+      - artisan
+      - queue:work
+      - redis
+      - --queue=ai-high,ai,default
+      - --sleep=3
+      - --tries=2
+      - --timeout=180
+    environment:
+      <<: *creative-ai-environment
+      RUN_MIGRATIONS: "false"
+      RUN_LEGACY_IMPORT: "false"
+    volumes: *creative-ai-volumes
