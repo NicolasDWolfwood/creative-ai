@@ -118,7 +118,11 @@ services:
       creative-ai:
         condition: service_healthy
     healthcheck:
-      disable: true
+      test: ["CMD-SHELL", 'for file in /proc/[0-9]*/cmdline; do tr "\000" " " < "$$file" 2>/dev/null | grep -q "^php artisan queue:work " && exit 0; done; exit 1']
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     stop_signal: SIGTERM
     stop_grace_period: 4m
 
