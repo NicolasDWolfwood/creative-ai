@@ -3,7 +3,7 @@ FROM node:22-alpine AS assets
 WORKDIR /build
 
 COPY site/package*.json site/vite.config.js ./
-RUN npm install --ignore-scripts
+RUN npm ci --ignore-scripts
 
 COPY site/resources ./resources
 COPY site/public ./public
@@ -17,6 +17,7 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
+        curl \
         libfreetype6-dev \
         libicu-dev \
         libjpeg62-turbo-dev \
@@ -69,6 +70,9 @@ RUN mkdir -p \
     && chown -R www-data:www-data storage bootstrap/cache public
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl --fail --silent --show-error --header 'Host: localhost' http://127.0.0.1/up >/dev/null || exit 1
 
 ENTRYPOINT ["creative-ai-entrypoint"]
 CMD ["apache2-foreground"]

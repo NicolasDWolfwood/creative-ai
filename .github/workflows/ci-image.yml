@@ -1,0 +1,217 @@
+name: Test and build staging image
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publish_staging:
+        description: Publish this ref as the staging candidate
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Laravel and frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.3"
+          extensions: bcmath, exif, gd, intl, mbstring, pdo_sqlite, sqlite3
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Validate Composer metadata
+        run: composer validate --strict --no-interaction
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Configure the test application
+        run: |
+          cp .env.example .env
+          php artisan key:generate --no-interaction
+
+      - name: Check PHP formatting
+        run: vendor/bin/pint --test
+
+      - name: Run PHP tests
+        run: php artisan test --no-ansi
+
+      - name: Build frontend assets
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+
+      - name: Validate Unraid deployment files
+        run: |
+          bash -n ../deploy/unraid/update.sh
+          docker compose --env-file ../deploy/unraid/staging.env.example --file ../deploy/unraid/compose.yaml config --quiet
+          docker compose --env-file ../deploy/unraid/production.env.example --file ../deploy/unraid/compose.yaml config --quiet
+
+  image-check:
+    name: Build container image (check only)
+    needs: test
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.publish_staging)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Normalize the image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: type=sha,format=long,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=Creative-Ai
+            org.opencontainers.image.description=Creative-Ai Laravel and Filament site
+
+      - name: Build the image without publishing
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: site/Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  publish-image:
+    name: Publish staging image
+    needs: test
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_staging)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Normalize the image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,format=long,prefix=sha-
+            type=raw,value=staging
+          labels: |
+            org.opencontainers.image.title=Creative-Ai
+            org.opencontainers.image.description=Creative-Ai Laravel and Filament site
+
+      - name: Build and publish the image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: site/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write candidate details
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "## Staging candidate"
+            echo
+            echo "- Moving staging tag: \`${IMAGE_NAME}:staging\`"
+            echo "- Traceability tag: \`${IMAGE_NAME}:sha-${GITHUB_SHA}\`"
+            echo "- Immutable digest: \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
+            echo
+            echo "Promotion uses the digest actually reported by the Unraid staging deployment."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  result:
+    name: CI result
+    needs:
+      - test
+      - image-check
+      - publish-image
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Confirm all required jobs passed
+        shell: bash
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          CHECK_RESULT: ${{ needs.image-check.result }}
+          PUBLISH_RESULT: ${{ needs.publish-image.result }}
+        run: |
+          if [[ "$TEST_RESULT" != "success" ]]; then
+            echo "Application tests failed or were cancelled." >&2
+            exit 1
+          fi
+
+          if [[ "$CHECK_RESULT" != "success" && "$PUBLISH_RESULT" != "success" ]]; then
+            echo "No container build job completed successfully." >&2
+            exit 1
+          fi

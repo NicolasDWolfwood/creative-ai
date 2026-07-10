@@ -1,0 +1,142 @@
+name: Approve image for production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: Exact sha256 digest reported by the staging Unraid deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-artifact-approval
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve and verify tested image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      digest: ${{ steps.candidate.outputs.digest }}
+      image_name: ${{ steps.image.outputs.name }}
+      revision: ${{ steps.candidate.outputs.revision }}
+    steps:
+      - name: Require the main branch workflow
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Production approval must be dispatched from the main branch." >&2
+            exit 1
+          fi
+
+      - name: Validate the digest input
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: |
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "image_digest must be sha256: followed by 64 lowercase hexadecimal characters." >&2
+            exit 1
+          fi
+
+      - name: Check out main for provenance validation
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Normalize the image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve candidate provenance
+        id: candidate
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: |
+          docker pull "${IMAGE_NAME}@${IMAGE_DIGEST}"
+          revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${IMAGE_NAME}@${IMAGE_DIGEST}")"
+
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The image is missing a valid OCI Git revision label." >&2
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$revision" origin/main; then
+            echo "Image revision $revision is not reachable from origin/main." >&2
+            exit 1
+          fi
+
+          echo "digest=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Verified production candidate"
+            echo
+            echo "- Image: \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
+            echo "- Git revision: \`${revision}\`"
+            echo
+            echo "The next job requires production-environment approval."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    name: Approve exact artifact
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    environment:
+      name: production
+      url: https://www.creative-ai.nl
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Point the production tag at the approved digest
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ needs.resolve.outputs.image_name }}
+          IMAGE_DIGEST: ${{ needs.resolve.outputs.digest }}
+        run: docker buildx imagetools create --tag "${IMAGE_NAME}:production" "${IMAGE_NAME}@${IMAGE_DIGEST}"
+
+      - name: Record the approved production artifact
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ needs.resolve.outputs.image_name }}
+          IMAGE_DIGEST: ${{ needs.resolve.outputs.digest }}
+          REVISION: ${{ needs.resolve.outputs.revision }}
+        run: |
+          {
+            echo "## Approved production artifact"
+            echo
+            echo "- Git revision: \`${REVISION}\`"
+            echo "- Convenience tag: \`${IMAGE_NAME}:production\`"
+            echo "- Pin this exact value in the production Unraid stack:"
+            echo
+            echo "  \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
+            echo
+            echo "This approves the artifact; the separate Unraid update completes the deployment."
+          } >> "$GITHUB_STEP_SUMMARY"

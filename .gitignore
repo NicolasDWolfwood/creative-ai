@@ -1,2 +1,5 @@
 /.env
 /unraid.env
+/deploy/unraid/*.env
+/deploy/unraid/deployments.log
+!/deploy/unraid/*.env.example

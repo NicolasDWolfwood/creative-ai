@@ -8,6 +8,23 @@ use Illuminate\Http\Response;
 
 class DiscoveryController extends Controller
 {
+    public function robots(): Response
+    {
+        if (! config('creative_ai.allow_indexing')) {
+            $contents = "User-agent: *\nDisallow: /\n";
+        } else {
+            $contents = implode("\n", [
+                'User-agent: *',
+                'Allow: /',
+                'Disallow: /admin',
+                'Sitemap: '.rtrim((string) config('app.url'), '/').'/sitemap.xml',
+                '',
+            ]);
+        }
+
+        return response($contents)->header('Content-Type', 'text/plain; charset=UTF-8');
+    }
+
     public function sitemap(): Response
     {
         return response()->view('discovery.sitemap', [

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Artworks\Pages;
 use App\Filament\Resources\Artworks\ArtworkResource;
 use App\Models\Artwork;
 use App\Models\Collection;
+use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkUploadService;
 use Filament\Actions\Action;
@@ -45,13 +46,50 @@ class ManageArtworks extends ManageRecords
                         ->maxValue(10000)
                         ->default(0)
                         ->required(),
+                    Toggle::make('apply_immediately')
+                        ->label('Apply suggestions automatically')
+                        ->helperText('Skips review and publishes the generated metadata as each analysis completes.')
+                        ->default(false),
                 ])
                 ->requiresConfirmation()
                 ->modalDescription('Only artwork without a completed analysis is queued. Existing queued or processing jobs are left alone.')
                 ->action(function (array $data): void {
-                    $count = app(ArtworkAiQueueService::class)->queuePending($data['statuses'], (int) $data['limit']);
+                    $applyImmediately = (bool) ($data['apply_immediately'] ?? false);
+                    $count = app(ArtworkAiQueueService::class)->queuePending(
+                        statuses: $data['statuses'],
+                        limit: (int) $data['limit'],
+                        applyAfterAnalysis: $applyImmediately,
+                    );
 
-                    Notification::make()->success()->title($count.' artwork queued for analysis')->send();
+                    Notification::make()
+                        ->success()
+                        ->title($count.' artwork queued for analysis')
+                        ->body($applyImmediately ? 'Suggestions will be applied automatically.' : 'Suggestions will wait for review.')
+                        ->send();
+                }),
+            Action::make('applyReadySuggestions')
+                ->label('Apply ready')
+                ->icon('heroicon-o-check-circle')
+                ->color('success')
+                ->schema([
+                    TextInput::make('limit')
+                        ->label('Maximum to apply')
+                        ->helperText('Use 0 for every ready suggestion.')
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(10000)
+                        ->default(0)
+                        ->required(),
+                ])
+                ->requiresConfirmation()
+                ->modalDescription('Applies public metadata and tags for ready artwork. Existing slugs remain unchanged.')
+                ->action(function (array $data): void {
+                    $count = app(ArtworkAiMetadataService::class)->applyReadySuggestions((int) $data['limit']);
+
+                    Notification::make()
+                        ->success()
+                        ->title($count.' AI suggestion'.($count === 1 ? '' : 's').' applied')
+                        ->send();
                 }),
             Action::make('bulkUpload')
                 ->label('Bulk upload')

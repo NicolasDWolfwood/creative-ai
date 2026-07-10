@@ -22,8 +22,10 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
@@ -136,6 +138,34 @@ class ArtworkResource extends Resource
                         ->disabled()
                         ->dehydrated(false)
                         ->columnSpanFull(),
+                    Actions::make([
+                        Action::make('applySuggestionFromEdit')
+                            ->label('Apply AI suggestions')
+                            ->icon('heroicon-o-check-circle')
+                            ->color('success')
+                            ->visible(fn (?Artwork $record): bool => filled($record?->ai_suggestion)
+                                && $record->ai_status !== Artwork::AI_STATUS_APPLIED)
+                            ->requiresConfirmation()
+                            ->modalDescription('This replaces the public title, description, alt text, and tags. The existing slug remains unchanged.')
+                            ->action(function (?Artwork $record, Set $set): void {
+                                if (! $record) {
+                                    return;
+                                }
+
+                                $record = app(ArtworkAiMetadataService::class)->applySuggestion($record);
+
+                                $set('title', $record->title);
+                                $set('description', $record->description);
+                                $set('alt_text', $record->alt_text);
+                                $set('ai_status', $record->ai_status);
+                                $set('ai_model', $record->ai_model);
+                                $set('ai_analyzed_at', $record->ai_analyzed_at);
+                                $set('ai_error', null);
+                                $set('ai_suggestion', $record->ai_suggestion);
+
+                                Notification::make()->title('AI suggestions applied.')->success()->send();
+                            }),
+                    ])->columnSpanFull(),
                 ])
                 ->columns(2)
                 ->columnSpanFull(),
@@ -238,13 +268,40 @@ class ArtworkResource extends Resource
                         ->label('Analyze selected with AI')
                         ->icon('heroicon-o-sparkles')
                         ->color('info')
+                        ->schema([
+                            Toggle::make('apply_immediately')
+                                ->label('Apply suggestions automatically')
+                                ->helperText('Skips review and publishes the generated metadata as each analysis completes.')
+                                ->default(false),
+                        ])
                         ->requiresConfirmation()
                         ->deselectRecordsAfterCompletion()
-                        ->action(function (EloquentCollection $records): void {
-                            $records->each(fn (Artwork $record) => app(ArtworkAiQueueService::class)->queue($record));
+                        ->action(function (EloquentCollection $records, array $data): void {
+                            $applyImmediately = (bool) ($data['apply_immediately'] ?? false);
+
+                            $records->each(fn (Artwork $record) => app(ArtworkAiQueueService::class)->queue(
+                                $record,
+                                applyAfterAnalysis: $applyImmediately,
+                            ));
 
                             Notification::make()
                                 ->title($records->count().' artwork queued for AI analysis.')
+                                ->body($applyImmediately ? 'Suggestions will be applied automatically.' : 'Suggestions will wait for review.')
+                                ->success()
+                                ->send();
+                        }),
+                    BulkAction::make('applySelectedAiSuggestions')
+                        ->label('Apply selected AI suggestions')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalDescription('Only selected artwork with unapplied AI suggestions will be changed. Existing slugs remain unchanged.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records): void {
+                            $count = app(ArtworkAiMetadataService::class)->applySuggestions($records);
+
+                            Notification::make()
+                                ->title($count.' AI suggestion'.($count === 1 ? '' : 's').' applied.')
                                 ->success()
                                 ->send();
                         }),

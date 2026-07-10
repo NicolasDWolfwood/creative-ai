@@ -21,24 +21,30 @@ class AnalyzeArtworkWithAi implements ShouldQueue
         public int $artworkId,
         public string $queueToken,
         public bool $force = false,
+        public bool $applyAfterAnalysis = false,
         string $queue = 'ai',
     ) {
         $this->onQueue($queue);
     }
 
-    public static function dispatchFor(Artwork $artwork, bool $force = false, string $queue = 'ai'): string
-    {
+    public static function dispatchFor(
+        Artwork $artwork,
+        bool $force = false,
+        bool $applyAfterAnalysis = false,
+        string $queue = 'ai',
+    ): string {
         $queueToken = (string) Str::uuid();
 
         $artwork->forceFill([
             'ai_status' => Artwork::AI_STATUS_QUEUED,
             'ai_queue_token' => $queueToken,
+            'ai_apply_after_analysis' => $applyAfterAnalysis,
             'ai_error' => null,
             'ai_queued_at' => now(),
             'ai_started_at' => null,
         ])->saveQuietly();
 
-        self::dispatch($artwork->getKey(), $queueToken, $force, $queue);
+        self::dispatch($artwork->getKey(), $queueToken, $force, $applyAfterAnalysis, $queue);
 
         return $queueToken;
     }
@@ -48,6 +54,17 @@ class AnalyzeArtworkWithAi implements ShouldQueue
         $artwork = Artwork::query()->findOrFail($this->artworkId);
 
         if (! hash_equals((string) $artwork->ai_queue_token, $this->queueToken)) {
+            return;
+        }
+
+        if (
+            $this->applyAfterAnalysis
+            && $artwork->ai_apply_after_analysis
+            && filled($artwork->ai_suggestion)
+            && in_array($artwork->ai_status, [Artwork::AI_STATUS_READY, Artwork::AI_STATUS_APPLIED], true)
+        ) {
+            $this->applyStoredSuggestion($artwork, $service);
+
             return;
         }
 
@@ -75,13 +92,18 @@ class AnalyzeArtworkWithAi implements ShouldQueue
 
         $artwork->forceFill([
             'ai_status' => Artwork::AI_STATUS_READY,
-            'ai_queue_token' => null,
+            'ai_queue_token' => $this->applyAfterAnalysis ? $this->queueToken : null,
+            'ai_apply_after_analysis' => $this->applyAfterAnalysis,
             'ai_suggestion' => $suggestion,
             'ai_model' => $service->model(),
             'ai_error' => null,
             'ai_started_at' => null,
             'ai_analyzed_at' => now(),
         ])->saveQuietly();
+
+        if ($this->applyAfterAnalysis) {
+            $this->applyStoredSuggestion($artwork->refresh(), $service);
+        }
     }
 
     public function failed(?Throwable $exception): void
@@ -99,7 +121,19 @@ class AnalyzeArtworkWithAi implements ShouldQueue
         $artwork->forceFill([
             'ai_status' => Artwork::AI_STATUS_FAILED,
             'ai_queue_token' => null,
+            'ai_apply_after_analysis' => $this->applyAfterAnalysis,
             'ai_error' => Str::of($exception?->getMessage() ?: 'AI analysis failed.')->squish()->limit(1000, '')->toString(),
+            'ai_started_at' => null,
+        ])->saveQuietly();
+    }
+
+    protected function applyStoredSuggestion(Artwork $artwork, ArtworkAiMetadataService $service): void
+    {
+        $service->applySuggestion($artwork, preserveQueueState: true);
+
+        $artwork->forceFill([
+            'ai_queue_token' => null,
+            'ai_apply_after_analysis' => false,
             'ai_started_at' => null,
         ])->saveQuietly();
     }
