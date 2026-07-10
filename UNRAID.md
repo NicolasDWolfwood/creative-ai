@@ -27,6 +27,10 @@ ghcr.io/example/creative-ai@sha256:0123456789abcdef...
 
 The GitHub Actions summary prints the exact value after a successful `main` build.
 
+Only the workflow run triggered by a push to `main` publishes a staging candidate. A manually dispatched **Test and publish release candidate** run performs validation but does not publish an image.
+
+The production approval workflow accepts the bare digest (`sha256:...`) as its input. Compose Manager always receives the complete image reference (`ghcr.io/...@sha256:...`). The moving `:production` tag is informational and must not be deployed.
+
 ## 2. One-time prerequisites
 
 Before creating a stack, prepare:
@@ -38,7 +42,28 @@ Before creating a stack, prepare:
 - one persistent Unraid storage directory per environment;
 - GHCR read access when the package is private.
 
+The external Docker network must be routable from the reverse-proxy host. This matters when Nginx Proxy Manager runs on another machine: an isolated bridge that exists only inside Unraid is not sufficient.
+
+Redis logical database numbers separate key namespaces but are not a security boundary. A client with broad commands can still select or flush another logical database. Prefer one restricted ACL user per environment and keep the application prefixes enabled. If a shared default user is unavoidable, use different verified-empty database numbers and plan a later ACL migration.
+
+Common Redis URL forms are:
+
+```text
+# No authentication, only on a deliberately trusted isolated service
+redis://redis.example.invalid:6379/10
+
+# Password on the default ACL user
+redis://:URL_ENCODED_PASSWORD@redis.example.invalid:6379/10
+
+# Dedicated named ACL user, preferred
+redis://creative_ai_staging:URL_ENCODED_PASSWORD@redis.example.invalid:6379/10
+```
+
+Never use the literal username `null`. Before assigning a shared logical database, authenticate with `redis-cli`, select the proposed number, and confirm `DBSIZE` is zero. Staging data, staging cache, production data, and production cache must each resolve to a distinct Redis endpoint/database pair.
+
 Create a GitHub deployment environment named `production` under the repository's **Settings -> Environments**. Enable **Required reviewers** and select the reviewer who must approve promotion. The workflow references this exact environment name; without a protection rule, GitHub does not pause the promotion job for a second approval.
+
+Also protect `main` with a repository ruleset that requires pull requests and the final **CI result** status check. Disable routine direct pushes to `main`.
 
 If the GHCR package is private, authenticate Unraid once with a classic personal access token that has only `read:packages` access:
 
@@ -97,6 +122,21 @@ Startup is intentionally ordered:
 
 An exited migration container with exit code `0` is expected. Compose Manager may therefore show `partial (2/3)` even while the website and worker are healthy. If migration fails, the website and worker remain stopped; inspect the migration logs, fix the database or release, and run Compose Up again.
 
+### First staging acceptance
+
+Do not create or expose production until the initial staging stack passes the same acceptance gate used for later releases:
+
+1. Confirm `creative-ai-migrate` exited with code `0`.
+2. Confirm the website and worker are both healthy and `/ready` returns `{"status":"ready"}`.
+3. Load the staging page through HTTPS and confirm its CSS and JavaScript assets return `200` without mixed-content warnings.
+4. Confirm the proxy access rule blocks non-LAN/VPN clients and the response contains the staging no-index policy.
+5. Create the first administrator and verify `/admin` login.
+6. Upload an image, publish it, and verify the original, display variant, and thumbnail return `200`.
+7. Run one queued action and confirm the worker consumes it.
+8. Run Compose Down followed by Compose Up and confirm the administrator, uploaded record, media, and settings persist.
+
+Record the complete image reference that passed this gate. Missing media variants, queue failures, or lost data are release failures unless explicitly accepted and recorded in [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 ## 4. Create the first administrator
 
 After the website is healthy, open its Unraid container console and run:
@@ -120,6 +160,19 @@ The final administrator cannot be revoked accidentally.
 
 Route the private staging hostname directly to the staging web container’s static Docker address on internal port `80`. Route the public hostname to the production web container in the same way. No Unraid host port is published.
 
+For Nginx Proxy Manager or Nginx Proxy Manager Plus, create or edit a **Proxy Host** with:
+
+- the literal environment hostname in **Domain Names**;
+- `http` as the upstream scheme;
+- the web container's static address as **Forward Hostname/IP**;
+- `80` as **Forward Port**;
+- a LAN/VPN access list for staging and public access for production;
+- a valid certificate, **Force SSL**, and HTTP/2 in the TLS settings.
+
+When the canonical public hostname uses `www`, create a separate **Redirection Host** for the apex domain. Redirect it permanently (`301`) to the canonical HTTPS hostname, preserve the path and query string, and select a certificate that explicitly covers the apex name. A wildcard certificate alone does not cover the apex domain.
+
+Keep proxy request-body and timeout limits aligned with the container's PHP upload limits. The current known limit mismatch is tracked in [PROJECT_STATUS.md](PROJECT_STATUS.md); increasing only the proxy limit does not increase PHP's accepted upload size.
+
 The proxy must replace client-supplied forwarded headers and set at least:
 
 - `Host`
@@ -138,14 +191,14 @@ For staging, also enforce a LAN/VPN allowlist at the proxy or firewall. `ALLOW_I
 
 ## 6. Routine staging update
 
-After a pull request is merged and the `main` workflow succeeds:
+After a pull request is merged and its push-triggered `main` workflow succeeds:
 
-1. Copy the complete immutable image reference from the Actions summary.
+1. Open that merge-triggered Actions run and copy the complete immutable image reference from its summary. A manual workflow run has no staging candidate.
 2. In Compose Manager, run Compose Down for the staging stack. This gracefully stops the worker and website.
 3. Replace only `CREATIVE_AI_IMAGE` in the staging `.env` tab and apply it.
-4. Run Compose Up. It pulls the missing exact digest before creating the containers. Do not use Restart; Restart does not apply changed Compose or environment values.
+4. Run Compose Up. It pulls the missing exact digest before creating the containers. A separate Compose Pull is unnecessary; do not use Restart because Restart does not apply changed Compose or environment values.
 5. Confirm migration exited `0`, website is healthy, and worker is running.
-6. Test public pages, administrator actions, uploads, generated variants, media playback, and one queued job.
+6. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job.
 7. Verify the staging response is still private and non-indexable.
 
 If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible.
@@ -159,20 +212,45 @@ Production uses the same Compose file but its own `.env`, database, Redis namesp
 3. Paste [deploy/unraid/production.env.example](deploy/unraid/production.env.example) into its `.env` tab.
 4. Replace every placeholder with production-only values.
 5. Keep the stack stopped while staging is tested.
-6. Run the GitHub **Approve image for production** workflow with the staging-tested `sha256:...` digest.
+6. Run the GitHub **Approve image for production** workflow from `main` with the bare staging-tested `sha256:...` digest.
 7. After approval, put the workflow’s complete image reference into the production `.env`.
 8. Run Compose Up; Compose pulls the missing approved digest automatically.
 9. Create a new production administrator and enter production provider settings in the admin interface.
-10. Validate production through a temporary private HTTPS proxy rule before public cutover.
+10. Rotate any bootstrap credential that was exposed in chat, screenshots, logs, or shell history. Update the matching protected `.env`, recreate the stack, and verify login again. Do not rotate `APP_KEY` after storing encrypted provider credentials without a separate re-encryption plan.
+11. Preflight the backend from Unraid using the real production Host header before public cutover. Adapt these documentation values locally:
+
+    ```bash
+    PRODUCTION_IP=192.0.2.21
+    PRODUCTION_HOST=www.example.com
+
+    curl --fail --silent --show-error \
+      --header "Host: ${PRODUCTION_HOST}" \
+      "http://${PRODUCTION_IP}/ready"
+
+    curl --fail --silent --show-error \
+      --header "Host: ${PRODUCTION_HOST}" \
+      "http://${PRODUCTION_IP}/robots.txt"
+    ```
+
+    Expect readiness JSON, production `Allow: /`, the `/admin` exclusion, and the canonical sitemap URL.
 
 This is a clean production environment. Do not copy the staging database, Redis data, storage, users, or encrypted application settings. Upload desired content through the new administration process.
 
-When validation succeeds, change the existing public reverse-proxy rule from the old website backend to the new production container. Keep the old backend stopped or unreachable for a short rollback window.
+Before cutover, record or export the old proxy backend. Change only the existing public Proxy Host's upstream address to the new production web container; keep the scheme `http`, port `80`, domains, certificate, access policy, and advanced settings unchanged. Keep the old backend intact and unrouted for a short rollback window.
+
+Immediately after saving the proxy change:
+
+1. Load the canonical HTTPS homepage in a private browser window and confirm styling.
+2. Check `/ready`, `/robots.txt`, and at least one compiled CSS and JavaScript asset over public HTTPS.
+3. Log in to `/admin` to verify secure sessions through the proxy.
+4. Confirm the apex domain redirects once to the canonical hostname with a valid certificate and preserved path.
+
+If any check fails, restore the old Proxy Host upstream first. This returns traffic to the old site without changing DNS while the new backend is investigated.
 
 ## 8. Routine production update
 
 1. Confirm the digest passed staging acceptance and GitHub production approval.
-2. Run Compose Down for production so web writes and queue processing stop consistently.
+2. Finish or deliberately defer in-flight administration and queue work, then run Compose Down so web writes and queue processing stop consistently.
 3. Back up PostgreSQL, persistent storage, the protected `.env`/`APP_KEY`, and reverse-proxy configuration.
 4. Replace `CREATIVE_AI_IMAGE` with the complete approved staging image reference.
 5. Run Compose Up; Compose pulls the missing approved digest automatically.
@@ -180,6 +258,8 @@ When validation succeeds, change the existing public reverse-proxy rule from the
 7. Verify HTTPS, login, media, uploads, indexing, and a queued job.
 
 This deliberately uses a short maintenance window in exchange for a small and understandable deployment process.
+
+Never replace the complete digest reference with the convenience `:production` tag. The tag moves; the approved digest is the rollback and audit identity.
 
 ## 9. Backups and rollback
 
@@ -191,7 +271,21 @@ A usable production backup contains matching copies of:
 - reverse-proxy configuration
 - deployed image digest
 
-Run `pg_dump` against the production database after the stack is down, copy the storage directory, verify the dump with `pg_restore --list`, and retain an off-server copy.
+After the application stack is down, create a PostgreSQL custom-format archive using protected connection credentials:
+
+```bash
+pg_dump --format=custom --no-owner --no-acl \
+  --file creative-ai-production-YYYYMMDD-HHMM.dump \
+  PRODUCTION_DATABASE_NAME
+
+pg_restore --list creative-ai-production-YYYYMMDD-HHMM.dump >/dev/null
+```
+
+Do not put the database password directly in shell history. Use the database container's protected environment, a temporary `PGPASSFILE`, or an equivalent backup facility. `pg_restore --list` checks archive readability, not full recoverability; periodically restore into a disposable database and run `/ready` against it.
+
+Copy the storage directory while the application is down or through a storage snapshot. Back up the protected Compose Manager project `.env`, the reverse-proxy host and certificate configuration, and a text record of the complete current and previous image references. Keep checksums and at least one encrypted off-server copy according to the local retention policy.
+
+Redis cache and sessions may be treated as disposable, but queued jobs are not equivalent to PostgreSQL content. Drain queues before a planned backup or document how pending work will be recreated. When Redis ACL users are enabled, include the external ACL configuration in the infrastructure backup.
 
 For a backward-compatible code rollback:
 
@@ -212,3 +306,67 @@ PostgreSQL stores users, roles, content, AI provider choice, models, behavior se
 - PostgreSQL and Redis connection URLs
 
 Keep completed `.env` files out of Git and screenshots. The tracked examples intentionally contain only generic documentation values.
+
+When rotating credentials:
+
+- replace a PostgreSQL role password in both PostgreSQL and the protected stack `.env`, then recreate and verify the stack;
+- prefer adding a new Redis ACL user/password, switching the application, verifying it, and only then revoking the old credential;
+- remember that rotating a shared Redis default password affects every client, including dormant containers;
+- reset an administrator password with the bundled Artisan command instead of putting it in `.env`;
+- refresh a GHCR read token with `docker login` and revoke the old token after a successful pull;
+- treat `APP_KEY` differently from an ordinary password: changing it invalidates sessions and makes existing encrypted provider settings unreadable unless a deliberate key-migration procedure is used.
+
+## 11. Reboot and autostart
+
+The website and worker use Docker's `restart: unless-stopped` policy. The migration service is deliberately one-shot with `restart: "no"`; it should remain exited after a successful deployment.
+
+Compose Manager's stack **Autostart** toggle is host state and is not stored in this repository. Before enabling it:
+
+1. Ensure the external Docker network is preserved and available at Docker startup.
+2. Enable and verify autostart for the external PostgreSQL and Redis services.
+3. Enable stack Autostart for production and staging only after their first acceptance checks pass.
+4. Perform one controlled Unraid reboot during a maintenance window.
+5. Confirm PostgreSQL and Redis are ready, migration is either successfully completed or already satisfied, website and worker are healthy, and public `/ready` returns `200`.
+
+The current migration command has no bounded wait for external PostgreSQL. If Compose Manager starts the stack before PostgreSQL is ready, migration can exit nonzero and prevent the dependent services from starting. Wait for the external services, inspect the migration error, and run Compose Up again. Dependency retry hardening remains tracked in [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
+If reliable stack ordering cannot be guaranteed, leave Compose Manager stack Autostart disabled and rely on the long-running containers' restart policies, with a documented manual Compose Up recovery after the external services are healthy. Do not claim reboot readiness until the controlled test has passed.
+
+## 12. Troubleshooting
+
+### Stack shows `0/0` or no containers
+
+From the Compose Manager project directory, validate the exact files the plugin is using:
+
+```bash
+docker compose --env-file .env --file compose.yaml config --services
+```
+
+Expect `creative-ai-migrate`, `creative-ai`, and `creative-ai-worker`. If they are absent, open the stack editor and check the **Editing file** path. A normal project uses `/boot/config/plugins/compose.manager/projects/STACK_NAME/compose.yaml`; an external path must already exist and contain the intended file.
+
+### Compose Pull closes without activity
+
+Use Compose Up. The normal deployment flow does not require a separate Pull because Up pulls a missing pinned digest before creation. Verify the image reference was saved in the stack's actual `.env` tab.
+
+### Migration exits nonzero
+
+Inspect the one-shot container before changing anything:
+
+```bash
+docker compose --env-file .env --file compose.yaml ps --all
+docker compose --env-file .env --file compose.yaml logs creative-ai-migrate
+```
+
+Common causes are a missing database, wrong role/password, trailing whitespace in a database name, an unreachable external service, or reserved URL characters that were not encoded. Fix the underlying configuration and run Compose Up again. Do not remove the migration dependency.
+
+### Website is healthy but unstyled
+
+Request the homepage through its real HTTPS hostname and inspect the generated asset URLs. HTTP assets on an HTTPS page indicate incorrect forwarded-scheme trust. Confirm the proxy's source address in the application access log, set the smallest correct `TRUSTED_PROXIES` value, recreate the stack, and retest.
+
+### Stack shows `partial (2/3)`
+
+This is normal when migration exited with code `0` and both long-running services are healthy. It is not normal when migration exited nonzero or either running service is unhealthy.
+
+### Artwork exists but its preview is blank
+
+Confirm the original media file is reachable, then inspect application logs and the artwork's display/thumbnail variant state. The current known variant-recovery gap is documented in [PROJECT_STATUS.md](PROJECT_STATUS.md); do not diagnose it by restoring the retired root static-site folders.

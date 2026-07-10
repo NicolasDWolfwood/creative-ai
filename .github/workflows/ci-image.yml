@@ -106,12 +106,31 @@ jobs:
           const productionWeb = production.services['creative-ai'];
           const isolatedKeys = ['APP_KEY', 'APP_URL', 'DB_URL', 'REDIS_URL', 'REDIS_CACHE_URL', 'SESSION_COOKIE', 'CACHE_PREFIX', 'REDIS_PREFIX'];
 
+          function redisNamespace(value, label) {
+              const url = new URL(value);
+              const database = url.pathname.match(/^\/(\d+)$/)?.[1];
+
+              assertContract(url.protocol === 'redis:' || url.protocol === 'rediss:', `${label}: Redis URL must use redis or rediss`);
+              assertContract(database !== undefined, `${label}: Redis URL must select a numeric logical database`);
+
+              return `${url.protocol}//${url.hostname}:${url.port || '6379'}/${database}`;
+          }
+
           assertContract(stagingWeb.environment.ALLOW_INDEXING === 'false', 'staging indexing must stay disabled');
           assertContract(productionWeb.environment.ALLOW_INDEXING === 'true', 'production indexing must be explicit');
           assertContract(staging.name !== production.name, 'project names must be isolated');
           assertContract(stagingWeb.networks['app-network'].ipv4_address !== productionWeb.networks['app-network'].ipv4_address, 'web addresses must be isolated');
           assertContract(stagingWeb.volumes[0].source !== productionWeb.volumes[0].source, 'storage paths must be isolated');
           assertContract(isolatedKeys.every((key) => stagingWeb.environment[key] !== productionWeb.environment[key]), 'environment data must be isolated');
+
+          const redisNamespaces = [
+              redisNamespace(stagingWeb.environment.REDIS_URL, 'staging data'),
+              redisNamespace(stagingWeb.environment.REDIS_CACHE_URL, 'staging cache'),
+              redisNamespace(productionWeb.environment.REDIS_URL, 'production data'),
+              redisNamespace(productionWeb.environment.REDIS_CACHE_URL, 'production cache'),
+          ];
+
+          assertContract(new Set(redisNamespaces).size === redisNamespaces.length, 'Redis endpoints and logical databases must be isolated');
           NODE
 
   stack-test:
