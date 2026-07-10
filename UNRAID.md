@@ -12,12 +12,12 @@ Production never rebuilds an approved release. It only accepts the exact `@sha25
 
 ## Environment layout
 
-| Environment | Hostname | Host port | Image | Persistent data |
-| --- | --- | ---: | --- | --- |
-| Staging | `test.creative-ai.nl` | `8080` | `:staging`, resolved once per update to a digest | staging database/user, storage, Redis DBs `2`/`3` |
-| Production | `www.creative-ai.nl` | `8081` | required approved `@sha256:...` digest | production database/user, storage, Redis DBs `0`/`1` |
+| Environment | Hostname | Internal endpoint | Image | Persistent data |
+| --- | --- | --- | --- | --- |
+| Staging | `test.creative-ai.nl` | `10.18.0.223:80` on `creanet` | `:staging`, resolved once per update to a digest | staging database/user, storage, Redis DBs `2`/`3` |
+| Production | `www.creative-ai.nl` | `10.18.0.224:80` on `creanet` | required approved `@sha256:...` digest | production database/user, storage, Redis DBs `0`/`1` |
 
-PostgreSQL, Redis, Ollama, and the reverse proxy remain existing Unraid services. Each site environment gets its own web and queue-worker containers.
+PostgreSQL, Redis, Ollama, and the reverse proxy remain existing Unraid services. Each site environment gets its own web and queue-worker containers. The web containers publish no host ports: the reverse proxy reaches their reserved addresses directly over the existing external `creanet` network. Workers join the same network with dynamic addresses.
 
 ## Deployment files
 
@@ -96,19 +96,19 @@ Never share these between staging and production:
 - session cookie name and admin password
 - Redis database numbers, prefixes, and preferably credentials
 
-The templates assign distinct names, paths, ports, Redis databases/prefixes, and cookies. Create the PostgreSQL databases and roles first.
+The templates assign distinct names, storage paths, `creanet` addresses, Redis databases/prefixes, and cookies. Create the PostgreSQL databases and roles first. Confirm that `10.18.0.223` and `10.18.0.224` remain inside the `creanet` IPAM subnet and unused before each first start.
 
-Redis database numbers are collision protection, not a security boundary. Because staging can run manually published branch code, use separate Redis instances or ACL users constrained to each environment's prefixed keys when possible. Never expose PostgreSQL, Redis, Ollama, or ports `8080`/`8081` to the WAN.
+Redis database numbers are collision protection, not a security boundary. Because staging can run manually published branch code, use separate Redis instances or ACL users constrained to each environment's prefixed keys when possible. Never expose PostgreSQL, Redis, Ollama, or the application containers outside their trusted Docker networks.
 
 The worker timeout is 180 seconds and Redis retry-after is 240 seconds. Keep retry-after above the worker timeout to prevent duplicate execution of a slow AI job.
 
 ### Reverse proxy
 
-- `test.creative-ai.nl` -> Unraid LAN IP port `8080`
-- `www.creative-ai.nl` -> Unraid LAN IP port `8081`
+- `test.creative-ai.nl` -> `http://10.18.0.223:80` over `creanet`
+- `www.creative-ai.nl` -> `http://10.18.0.224:80` over `creanet`
 - `creative-ai.nl` -> permanent redirect to `https://www.creative-ai.nl`
 
-The proxy must overwrite, rather than append or trust client values for, `Host`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Port`, and `X-Forwarded-Proto`; remove an unused `X-Forwarded-Prefix`. Determine the actual proxy source address seen by the app and set `TRUSTED_PROXIES` to that IP or the smallest dedicated proxy-network CIDR. Do not use `*` or a whole client LAN.
+The reverse proxy must itself join `creanet`. It must overwrite, rather than append or trust client values for, `Host`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Port`, and `X-Forwarded-Proto`; remove an unused `X-Forwarded-Prefix`. Determine its actual `creanet` address and set `TRUSTED_PROXIES` to that exact IP or the smallest dedicated proxy-network CIDR. Do not use `*` or a whole client LAN.
 
 For staging, apply all of these:
 
@@ -117,11 +117,11 @@ For staging, apply all of these:
 3. `ALLOW_INDEXING=false` in Laravel;
 4. proxy-wide `X-Robots-Tag: noindex, nofollow, noarchive`, which also covers Apache-served media/assets.
 
-Robots directives are defense in depth, not access control. Bind the direct ports to the Unraid LAN IP and firewall them from other networks.
+Robots directives are defense in depth, not access control. Do not add published `ports:` to the staging service; restrict access at the reverse proxy and Docker-network boundaries.
 
 ## 4. Convert the existing test stack
 
-The existing test stack already occupies port `8080`. Convert it before adding the new production stack:
+The existing test stack shares the database and storage that the new staging stack will adopt. It must be stopped before the new staging web or worker starts, even though the new `creanet` endpoint does not conflict:
 
 1. Finish/drain queued AI jobs and pause uploads.
 2. Record its current database, storage path, and `APP_KEY`.
@@ -131,7 +131,7 @@ The existing test stack already occupies port `8080`. Convert it before adding t
 6. Move staging to Redis DBs `2`/`3` and staging-specific prefixes. Existing Redis sessions/cache/queues are disposable; expect to sign in again.
 7. Run `bash update.sh --yes` from the new staging project and validate `https://test.creative-ai.nl`.
 
-Keeping the current storage path (for example `/mnt/user/appdata/creative-ai/storage`) is fine as long as production uses a different path. If both stacks must overlap temporarily, give the new staging stack a temporary unused port instead of `8080`.
+Keeping the current storage path (for example `/mnt/user/appdata/creative-ai/storage`) is fine as long as production uses a different path. Never run old and new stacks simultaneously against that shared database/storage. Temporary overlap is safe only with cloned, isolated database and storage resources.
 
 ## 5. Consistent backups
 
@@ -183,7 +183,7 @@ The cloned database may contain cloud API keys encrypted with Laravel. Productio
 1. Deploy and test a candidate on staging with `bash update.sh --yes`. Copy the exact `sha256:...` portion from `Resolved deployment image` or the last `deployments.log` entry.
 2. Run GitHub Actions **Approve image for production** from `main`, enter that digest, inspect the resolved Git revision, and approve the protected `production` job.
 3. Paste the workflow's complete `ghcr.io/...@sha256:...` value into production `CREATIVE_AI_IMAGE`.
-4. Before creating the containers, create a temporary LAN-only HTTPS preview hostname/rule to port `8081` and include that literal hostname in production `TRUSTED_HOSTS`. Container environment is fixed when Compose creates it, so configure this before the first updater run.
+4. Before creating the containers, create a temporary LAN-only HTTPS preview hostname/rule targeting `http://10.18.0.224:80` over `creanet` and include that literal hostname in production `TRUSTED_HOSTS`. Container environment is fixed when Compose creates it, so configure this before the first updater run.
 5. Restore the cloned database/storage and use the source `APP_KEY` as described above.
 6. Run `bash update.sh` from `/mnt/user/appdata/creative-ai-deploy/production` and confirm the verified backup prompt.
 
@@ -192,9 +192,9 @@ The script preflights the image, enables maintenance mode, gracefully stops the 
 Before public cutover, direct HTTP can validate only public responses:
 
 ```bash
-curl -fsS -H 'Host: www.creative-ai.nl' http://192.168.1.176:8081/up
-curl -fsS -H 'Host: www.creative-ai.nl' http://192.168.1.176:8081/ready
-curl -fsS -H 'Host: www.creative-ai.nl' http://192.168.1.176:8081/ >/dev/null
+curl -fsS -H 'Host: www.creative-ai.nl' http://10.18.0.224/up
+curl -fsS -H 'Host: www.creative-ai.nl' http://10.18.0.224/ready
+curl -fsS -H 'Host: www.creative-ai.nl' http://10.18.0.224/ >/dev/null
 ```
 
 Admin login uses secure cookies and must be tested through the temporary HTTPS preview. Complete the following credential cleanup before authenticating and before exposing this backend publicly.
@@ -224,7 +224,7 @@ Re-enter only test-safe provider credentials. Do not run a manually published br
 
 Using the temporary preview, log in with the newly generated production admin credentials. Check admin, full-size images, thumbnails, one audio track, robots, sitemap, and a small queued AI job before continuing.
 
-Cut over by switching the `www.creative-ai.nl` proxy target from the old backend to port `8081`. Verify HTTPS, canonical links, login, media, forwarded client IP, `/up`, and `/ready`. Keep the old backend intact but unreachable for a rollback window, and remove any deployed copy of the old `phpinfo.php`.
+Cut over by switching the `www.creative-ai.nl` proxy target from the old backend to `http://10.18.0.224:80`. Verify HTTPS, canonical links, login, media, forwarded client IP, `/up`, and `/ready`. Keep the old backend intact but unreachable for a rollback window, and remove any deployed copy of the old `phpinfo.php`.
 
 Remove the temporary preview DNS/proxy rule immediately after cutover. Remove its hostname from production `TRUSTED_HOSTS` and apply that environment change with the next controlled `bash update.sh` (or repeat the same approved digest deployment after another verified backup).
 
