@@ -7,7 +7,7 @@ This runbook creates two clean and isolated website stacks:
 | Staging | Private network or VPN | Staging PostgreSQL database, Redis namespaces, storage, and `APP_KEY` | Exact GHCR digest from `main` |
 | Production | Public reverse proxy | Production PostgreSQL database, Redis namespaces, storage, and `APP_KEY` | The exact digest tested on staging |
 
-The stacks contain the migration, website, and queue-worker containers. Existing Unraid PostgreSQL, Redis, reverse-proxy, and Docker-network services remain external to the stacks.
+Each completed stack contains the migration, website, and queue-worker containers. Existing PostgreSQL, Redis, reverse-proxy, and Docker-network services remain external to the website stacks.
 
 There is no host deployment script and no published website port. Compose Manager owns the complete lifecycle.
 
@@ -80,14 +80,14 @@ Changing `APP_KEY` later invalidates sessions and prevents decryption of provide
 ## 3. Create staging in Compose Manager
 
 1. Add a stack named `creative-ai-staging` in the Unraid Compose Manager plugin.
-2. If using an external/indirect project path, create the directory first. Otherwise let the plugin use its normal project folder.
+2. Prefer the plugin's normal project folder so the Compose and `.env` tabs remain the single source of truth. Use an external/indirect path only when deliberately managing those files elsewhere, create it first, and verify the editor's **Editing file** path before saving.
 3. Paste [deploy/unraid/compose.yaml](deploy/unraid/compose.yaml) into the Compose tab.
 4. Paste [deploy/unraid/staging.env.example](deploy/unraid/staging.env.example) into the `.env` tab.
 5. Replace every placeholder and every documentation address/hostname with local values.
 6. Keep `DEPLOYMENT_ENV=staging` and `ALLOW_INDEXING=false`.
-7. Put the exact digest from the successful GitHub Actions `main` run in `CREATIVE_AI_IMAGE`.
+7. Put the complete immutable image reference from the successful GitHub Actions `main` run in `CREATIVE_AI_IMAGE`.
 8. Save/apply the Compose and `.env` tabs.
-9. Use Compose Pull, then Compose Up.
+9. Use Compose Up. Compose automatically pulls the exact digest when it is not already present; a separate Compose Pull is optional.
 
 Startup is intentionally ordered:
 
@@ -95,7 +95,7 @@ Startup is intentionally ordered:
 2. `creative-ai` starts only after migrations succeed and becomes healthy through `/ready`.
 3. `creative-ai-worker` starts only after the website is healthy.
 
-An exited migration container with exit code `0` is expected. If migration fails, the website and worker remain stopped; inspect the migration logs, fix the database or release, and run Compose Up again.
+An exited migration container with exit code `0` is expected. Compose Manager may therefore show `partial (2/3)` even while the website and worker are healthy. If migration fails, the website and worker remain stopped; inspect the migration logs, fix the database or release, and run Compose Up again.
 
 ## 4. Create the first administrator
 
@@ -128,7 +128,11 @@ The proxy must replace client-supplied forwarded headers and set at least:
 - `X-Forwarded-Port`
 - `X-Forwarded-Proto`
 
-Set `TRUSTED_PROXIES` to the actual proxy address or smallest dedicated proxy-network CIDR. Set `TRUSTED_HOSTS` to the literal environment hostnames.
+Set `TRUSTED_PROXIES` to the source address the website container actually receives, not necessarily the reverse proxy's host address. Docker routing or source NAT can make this the application network gateway. Make one proxied request, inspect the website access log, and trust only the observed proxy-side address or smallest dedicated CIDR. Set `TRUSTED_HOSTS` to the literal environment hostnames.
+
+If that observed address is a gateway shared by other clients, restrict direct access to the container at the firewall or network layer so only the intended reverse proxy can supply forwarded headers.
+
+After enabling HTTPS, inspect the rendered page once and confirm its CSS and JavaScript URLs also start with `https://`. HTTP asset URLs on an HTTPS page mean the forwarded scheme was not trusted and browsers will block the styling as mixed content.
 
 For staging, also enforce a LAN/VPN allowlist at the proxy or firewall. `ALLOW_INDEXING=false` and robots headers prevent indexing but are not access control.
 
@@ -139,13 +143,12 @@ After a pull request is merged and the `main` workflow succeeds:
 1. Copy the complete immutable image reference from the Actions summary.
 2. In Compose Manager, run Compose Down for the staging stack. This gracefully stops the worker and website.
 3. Replace only `CREATIVE_AI_IMAGE` in the staging `.env` tab and apply it.
-4. Run Compose Pull.
-5. Run Compose Up. Do not use Restart; Restart does not apply changed Compose or environment values.
-6. Confirm migration exited `0`, website is healthy, and worker is running.
-7. Test public pages, administrator actions, uploads, generated variants, media playback, and one queued job.
-8. Verify the staging response is still private and non-indexable.
+4. Run Compose Up. It pulls the missing exact digest before creating the containers. Do not use Restart; Restart does not apply changed Compose or environment values.
+5. Confirm migration exited `0`, website is healthy, and worker is running.
+6. Test public pages, administrator actions, uploads, generated variants, media playback, and one queued job.
+7. Verify the staging response is still private and non-indexable.
 
-If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down, Pull, and Up. Code rollback is safe only while database migrations remain backward-compatible.
+If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible.
 
 ## 7. Create production after staging is proven
 
@@ -158,7 +161,7 @@ Production uses the same Compose file but its own `.env`, database, Redis namesp
 5. Keep the stack stopped while staging is tested.
 6. Run the GitHub **Approve image for production** workflow with the staging-tested `sha256:...` digest.
 7. After approval, put the workflow’s complete image reference into the production `.env`.
-8. Pull and run Compose Up.
+8. Run Compose Up; Compose pulls the missing approved digest automatically.
 9. Create a new production administrator and enter production provider settings in the admin interface.
 10. Validate production through a temporary private HTTPS proxy rule before public cutover.
 
@@ -171,8 +174,8 @@ When validation succeeds, change the existing public reverse-proxy rule from the
 1. Confirm the digest passed staging acceptance and GitHub production approval.
 2. Run Compose Down for production so web writes and queue processing stop consistently.
 3. Back up PostgreSQL, persistent storage, the protected `.env`/`APP_KEY`, and reverse-proxy configuration.
-4. Replace `CREATIVE_AI_IMAGE` with the approved staging digest.
-5. Run Compose Pull and Compose Up.
+4. Replace `CREATIVE_AI_IMAGE` with the complete approved staging image reference.
+5. Run Compose Up; Compose pulls the missing approved digest automatically.
 6. Confirm migration exited `0`, web is healthy, and worker is running.
 7. Verify HTTPS, login, media, uploads, indexing, and a queued job.
 
@@ -193,8 +196,8 @@ Run `pg_dump` against the production database after the stack is down, copy the 
 For a backward-compatible code rollback:
 
 1. Compose Down.
-2. Restore the previous exact digest in `.env`.
-3. Compose Pull and Compose Up.
+2. Restore the previous complete image reference in `.env`.
+3. Compose Up.
 
 For an incompatible schema or data change, restore the matching database, storage, `.env`/`APP_KEY`, and image digest together. All normal migrations should therefore use an expand/contract approach and remain backward-compatible through at least one release.
 

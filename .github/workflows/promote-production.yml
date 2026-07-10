@@ -137,5 +137,5 @@ jobs:
             echo
             echo "  \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
             echo
-            echo "In Compose Manager, stop the stack, paste this digest into .env, pull, and run Compose Up."
+            echo "In Compose Manager, stop the stack, paste this complete image reference into .env, and run Compose Up. Compose pulls the digest automatically when it is missing."
           } >> "$GITHUB_STEP_SUMMARY"

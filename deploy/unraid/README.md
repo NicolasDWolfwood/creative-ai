@@ -10,9 +10,9 @@ Paste the YAML and matching environment template into the Unraid Compose Manager
 For every release use:
 
 ```text
-Compose Down -> edit exact digest -> Compose Pull -> Compose Up
+Compose Down -> edit complete image reference -> Compose Up
 ```
 
-The migration container must exit `0`, the website must become healthy, and only then will the worker start. No deployment script or host port is used.
+Compose Up pulls the exact digest when it is not already present. The migration container must exit `0`, the website must become healthy, and only then will the worker start. Compose Manager may describe the settled stack as partial because the completed migration container is intentionally stopped. No deployment script or host port is used.
 
 See [UNRAID.md](../../UNRAID.md) for initial databases, administrator recovery, staging acceptance, production promotion, backups, proxy cutover, and rollback.
