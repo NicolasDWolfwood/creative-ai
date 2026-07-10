@@ -61,13 +61,13 @@ jobs:
       - name: Check PHP formatting
         run: vendor/bin/pint --test
 
-      - name: Run PHP tests
-        run: php artisan test --no-ansi
-
       - name: Build frontend assets
         run: |
           npm ci --ignore-scripts
           npm run build
+
+      - name: Run PHP tests
+        run: php artisan test --no-ansi
 
       - name: Validate Unraid deployment files
         run: |
