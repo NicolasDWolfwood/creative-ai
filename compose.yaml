@@ -1,92 +1,107 @@
-x-creative-ai-environment: &creative-ai-environment
-  APP_NAME: "${APP_NAME:-Creative-Ai}"
-  APP_ENV: "${APP_ENV:-production}"
-  APP_KEY: "${APP_KEY}"
-  APP_DEBUG: "${APP_DEBUG:-false}"
-  APP_URL: "${APP_URL:-https://www.creative-ai.nl}"
-  ALLOW_INDEXING: "${ALLOW_INDEXING:-false}"
-  APP_LOCALE: "${APP_LOCALE:-en}"
+name: creative-ai-dev
+
+x-app-environment: &app-environment
+  DEPLOYMENT_ENV: "development"
+  APP_NAME: "Creative-Ai Dev"
+  APP_ENV: "local"
+  APP_KEY: "${APP_KEY:?Copy .env.example to .env and set a generated APP_KEY}"
+  APP_DEBUG: "true"
+  APP_URL: "${APP_URL:-http://localhost:8080}"
+  APP_LOCALE: "en"
+  ALLOW_INDEXING: "false"
   TRUSTED_HOSTS: "${TRUSTED_HOSTS:-}"
   TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1}"
-  LOG_CHANNEL: "${LOG_CHANNEL:-stack}"
-  LOG_LEVEL: "${LOG_LEVEL:-warning}"
-  DB_CONNECTION: "${DB_CONNECTION:-pgsql}"
-  DB_HOST: "${DB_HOST}"
-  DB_PORT: "${DB_PORT:-5432}"
-  DB_DATABASE: "${DB_DATABASE:-creative_ai}"
-  DB_USERNAME: "${DB_USERNAME}"
-  DB_PASSWORD: "${DB_PASSWORD}"
-  SESSION_DRIVER: "${SESSION_DRIVER:-redis}"
-  CACHE_STORE: "${CACHE_STORE:-redis}"
-  QUEUE_CONNECTION: "${QUEUE_CONNECTION:-redis}"
-  FILESYSTEM_DISK: "${FILESYSTEM_DISK:-public}"
-  REDIS_CLIENT: "${REDIS_CLIENT:-phpredis}"
-  REDIS_HOST: "${REDIS_HOST}"
-  REDIS_USERNAME: "${REDIS_USERNAME:-null}"
-  REDIS_PASSWORD: "${REDIS_PASSWORD:-null}"
-  REDIS_PORT: "${REDIS_PORT:-6379}"
-  REDIS_DB: "${REDIS_DB:-0}"
-  REDIS_CACHE_DB: "${REDIS_CACHE_DB:-1}"
-  REDIS_PREFIX: "${REDIS_PREFIX:-creative-ai-database-}"
-  CACHE_PREFIX: "${CACHE_PREFIX:-creative-ai-cache-}"
-  REDIS_QUEUE_RETRY_AFTER: "${REDIS_QUEUE_RETRY_AFTER:-240}"
-  SESSION_COOKIE: "${SESSION_COOKIE:-creative_ai_session}"
-  SESSION_SECURE_COOKIE: "${SESSION_SECURE_COOKIE:-true}"
-  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-  OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.4-mini}"
-  OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
-  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-  ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
-  ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
-  ANTHROPIC_REQUEST_TIMEOUT: "${ANTHROPIC_REQUEST_TIMEOUT:-120}"
-  ZAI_API_KEY: "${ZAI_API_KEY:-}"
-  ZAI_MODEL: "${ZAI_MODEL:-glm-4.6v-flash}"
-  ZAI_BASE_URL: "${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}"
-  ZAI_REQUEST_TIMEOUT: "${ZAI_REQUEST_TIMEOUT:-120}"
-  AI_PROVIDER: "${AI_PROVIDER:-openai}"
-  OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://127.0.0.1:11434}"
-  OLLAMA_MODEL: "${OLLAMA_MODEL:-qwen3.5:latest}"
-  OLLAMA_REQUEST_TIMEOUT: "${OLLAMA_REQUEST_TIMEOUT:-150}"
-  OLLAMA_CONTEXT_LENGTH: "${OLLAMA_CONTEXT_LENGTH:-4096}"
-  OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
-  AI_AUTO_ANALYZE_UPLOADS: "${AI_AUTO_ANALYZE_UPLOADS:-false}"
-  AI_IMAGE_MAX_WIDTH: "${AI_IMAGE_MAX_WIDTH:-768}"
-  AI_IMAGE_JPEG_QUALITY: "${AI_IMAGE_JPEG_QUALITY:-72}"
-  AI_REQUEST_TIMEOUT: "${AI_REQUEST_TIMEOUT:-90}"
-  ADMIN_EMAIL: "${ADMIN_EMAIL}"
-  ADMIN_NAME: "${ADMIN_NAME:-Creative-Ai Admin}"
-  ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
-  RUN_MIGRATIONS: "${RUN_MIGRATIONS:-false}"
-  RUN_LEGACY_IMPORT: "${RUN_LEGACY_IMPORT:-false}"
-  CREATIVE_AI_LEGACY_PATH: "/app/legacy"
+  LOG_CHANNEL: "stderr"
+  LOG_LEVEL: "debug"
 
-x-creative-ai-volumes: &creative-ai-volumes
-  - "${CREATIVE_AI_STORAGE:-/mnt/user/appdata/creative-ai/storage}:/app/storage"
+  DB_CONNECTION: "pgsql"
+  DB_URL: "pgsql://creative_ai_dev:local-development-only@postgres:5432/creative_ai_dev"
+  DB_SSLMODE: "disable"
+
+  REDIS_CLIENT: "phpredis"
+  REDIS_URL: "redis://redis:6379/0"
+  REDIS_CACHE_URL: "redis://redis:6379/1"
+  REDIS_PREFIX: "creative-ai-dev-database-"
+  REDIS_QUEUE_RETRY_AFTER: "240"
+
+  SESSION_DRIVER: "redis"
+  SESSION_COOKIE: "creative_ai_dev_session"
+  SESSION_SECURE_COOKIE: "${SESSION_SECURE_COOKIE:-false}"
+  CACHE_STORE: "redis"
+  CACHE_PREFIX: "creative-ai-dev-cache-"
+  QUEUE_CONNECTION: "redis"
+  FILESYSTEM_DISK: "public"
+  MAIL_MAILER: "log"
+
+x-app-runtime: &app-runtime
+  build:
+    context: .
+    dockerfile: site/Dockerfile
+  image: creative-ai-dev:local
+  init: true
+  environment: *app-environment
+  volumes:
+    - app-storage:/app/storage
+  security_opt:
+    - no-new-privileges:true
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: creative_ai_dev
+      POSTGRES_USER: creative_ai_dev
+      POSTGRES_PASSWORD: local-development-only
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=creative_ai_dev --dbname=creative_ai_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  creative-ai-migrate:
+    <<: *app-runtime
+    restart: "no"
+    command: ["php", "artisan", "migrate", "--force", "--no-interaction"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
   creative-ai:
-    build:
-      context: .
-      dockerfile: site/Dockerfile
-    image: creative-ai:latest
-    container_name: creative-ai
-    init: true
+    <<: *app-runtime
     restart: unless-stopped
     ports:
-      - "${CREATIVE_AI_PORT:-8080}:80"
-    environment: *creative-ai-environment
-    volumes: *creative-ai-volumes
-    labels:
-      net.unraid.docker.webui: "http://[IP]:[PORT:80]/"
-      net.unraid.docker.icon: "https://raw.githubusercontent.com/NicolasDWolfwood/creative-ai/main/favicon-32x32.png"
+      - "127.0.0.1:${DEV_HTTP_PORT:-8080}:80"
+    depends_on:
+      creative-ai-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--header", "Host: localhost", "http://127.0.0.1/ready"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
 
   creative-ai-worker:
-    build:
-      context: .
-      dockerfile: site/Dockerfile
-    image: creative-ai:latest
-    container_name: creative-ai-worker
-    init: true
+    <<: *app-runtime
     restart: unless-stopped
     command:
       - php
@@ -97,12 +112,41 @@ services:
       - --sleep=3
       - --tries=2
       - --timeout=180
-    environment:
-      <<: *creative-ai-environment
-      RUN_MIGRATIONS: "false"
-      RUN_LEGACY_IMPORT: "false"
-    volumes: *creative-ai-volumes
+      - --max-time=3600
+      - --memory=384
+    depends_on:
+      creative-ai:
+        condition: service_healthy
     healthcheck:
       disable: true
     stop_signal: SIGTERM
     stop_grace_period: 4m
+
+  creative-ai-test:
+    <<: *app-runtime
+    profiles:
+      - tools
+    build:
+      context: .
+      dockerfile: site/Dockerfile
+      target: test
+    image: creative-ai-dev-test:local
+    restart: "no"
+    environment:
+      <<: *app-environment
+      APP_ENV: "testing"
+      APP_DEBUG: "false"
+      DB_CONNECTION: "sqlite"
+      DB_DATABASE: ":memory:"
+      DB_URL: ""
+      CACHE_STORE: "array"
+      QUEUE_CONNECTION: "sync"
+      SESSION_DRIVER: "array"
+      MAIL_MAILER: "array"
+    healthcheck:
+      disable: true
+
+volumes:
+  postgres-data:
+  redis-data:
+  app-storage:

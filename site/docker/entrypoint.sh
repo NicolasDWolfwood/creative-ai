@@ -1,36 +1,31 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-mkdir -p \
+if [[ ! "${APP_KEY:-}" =~ ^base64:[A-Za-z0-9+/]{43}=$ ]]; then
+    echo "APP_KEY must be a persistent base64-encoded 32-byte Laravel key." >&2
+    exit 78
+fi
+
+install -d -m 0775 -o www-data -g www-data \
     storage/app/public \
-    storage/framework/cache \
+    storage/framework/cache/data \
     storage/framework/sessions \
     storage/framework/views \
     storage/logs \
     bootstrap/cache
-
-chown -R www-data:www-data storage bootstrap/cache public || true
-
-if [ -z "${APP_KEY:-}" ]; then
-    echo "APP_KEY is empty. Generate one with: docker compose run --rm creative-ai php artisan key:generate --show"
-fi
-
-php artisan package:discover --ansi || true
-php artisan storage:link --force || true
-php artisan filament:assets || true
-
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-    php artisan migrate --force
-fi
-
-if [ "${RUN_LEGACY_IMPORT:-false}" = "true" ]; then
-    php artisan creative-ai:import-legacy
-fi
+chown www-data:www-data storage bootstrap/cache
 
 if [ "${APP_ENV:-production}" = "production" ]; then
-    php artisan config:cache || true
-    php artisan route:cache || true
-    php artisan view:cache || true
+    php artisan config:cache
+
+    if [ "${1:-}" = "apache2-foreground" ]; then
+        php artisan route:cache
+        php artisan view:cache
+    fi
 fi
 
-exec "$@"
+if [ "${1:-}" = "apache2-foreground" ]; then
+    exec "$@"
+fi
+
+exec gosu www-data "$@"

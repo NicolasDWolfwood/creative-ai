@@ -30,9 +30,9 @@ class ArtworkAiMetadataTest extends TestCase
     public function test_analysis_image_is_downscaled_and_reencoded_as_jpeg(): void
     {
         Storage::fake('public');
-        config([
-            'creative_ai.ai.image_max_width' => 768,
-            'creative_ai.ai.image_jpeg_quality' => 72,
+        app(AiSettings::class)->save([
+            'image_max_width' => 768,
+            'image_jpeg_quality' => 72,
         ]);
 
         $path = $this->storeImage(width: 1400, height: 900);
@@ -53,11 +53,7 @@ class ArtworkAiMetadataTest extends TestCase
         Storage::fake('public');
         $artwork = $this->createArtwork();
 
-        config([
-            'services.openai.api_key' => 'test-key',
-            'services.openai.base_url' => 'https://api.openai.com/v1',
-            'creative_ai.ai.model' => 'gpt-5.4-mini',
-        ]);
+        $this->configureOpenAi();
 
         Http::fake([
             'api.openai.com/v1/responses' => Http::response([
@@ -186,8 +182,8 @@ class ArtworkAiMetadataTest extends TestCase
             'ollama.test:11434/api/tags' => Http::response(['models' => []]),
         ]);
 
-        config(['services.ollama.base_url' => 'http://ollama.test:11434']);
-        $user = User::factory()->create();
+        $this->configureOllama();
+        $user = User::factory()->admin()->create();
         $this->actingAs($user);
 
         Livewire::test(AiConfiguration::class)
@@ -218,10 +214,7 @@ class ArtworkAiMetadataTest extends TestCase
             'ai_suggestion' => $this->suggestionPayload(title: 'Old Suggestion'),
         ]);
 
-        config([
-            'services.openai.api_key' => 'test-key',
-            'services.openai.base_url' => 'https://api.openai.com/v1',
-        ]);
+        $this->configureOpenAi();
 
         Http::fake([
             'api.openai.com/v1/responses' => Http::response([
@@ -254,10 +247,7 @@ class ArtworkAiMetadataTest extends TestCase
             'description' => 'Original description.',
         ]);
 
-        config([
-            'services.openai.api_key' => 'test-key',
-            'services.openai.base_url' => 'https://api.openai.com/v1',
-        ]);
+        $this->configureOpenAi();
 
         Http::fake([
             'api.openai.com/v1/responses' => Http::response([
@@ -289,7 +279,7 @@ class ArtworkAiMetadataTest extends TestCase
         Storage::fake('public');
         $artwork = $this->createArtwork();
 
-        config(['services.openai.api_key' => null]);
+        app(AiSettings::class)->save(['provider' => 'openai']);
 
         $token = 'analysis-token';
         $artwork->forceFill([
@@ -310,7 +300,7 @@ class ArtworkAiMetadataTest extends TestCase
 
         $this->assertSame(Artwork::AI_STATUS_FAILED, $artwork->ai_status);
         $this->assertNull($artwork->ai_queue_token);
-        $this->assertStringContainsString('OPENAI_API_KEY', $artwork->ai_error);
+        $this->assertStringContainsString('AI providers page', $artwork->ai_error);
     }
 
     public function test_retry_continues_when_the_previous_attempt_left_the_artwork_processing(): void
@@ -321,10 +311,7 @@ class ArtworkAiMetadataTest extends TestCase
             'ai_queue_token' => 'analysis-token',
         ]);
 
-        config([
-            'services.openai.api_key' => 'test-key',
-            'services.openai.base_url' => 'https://api.openai.com/v1',
-        ]);
+        $this->configureOpenAi();
 
         Http::fake([
             'api.openai.com/v1/responses' => Http::response([
@@ -349,11 +336,6 @@ class ArtworkAiMetadataTest extends TestCase
         $artwork = $this->createArtwork([
             'ai_status' => Artwork::AI_STATUS_QUEUED,
             'ai_queue_token' => 'current-token',
-        ]);
-
-        config([
-            'services.openai.api_key' => 'test-key',
-            'services.openai.base_url' => 'https://api.openai.com/v1',
         ]);
 
         Http::fake();
@@ -398,7 +380,7 @@ class ArtworkAiMetadataTest extends TestCase
         Storage::fake('public');
         Queue::fake();
 
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $artwork = $this->createArtwork();
 
         $this->actingAs($user);
@@ -416,7 +398,7 @@ class ArtworkAiMetadataTest extends TestCase
         Storage::fake('public');
         Queue::fake();
 
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $first = $this->createArtwork(['title' => 'First']);
         $second = $this->createArtwork(['title' => 'Second']);
 
@@ -435,18 +417,16 @@ class ArtworkAiMetadataTest extends TestCase
         Storage::fake('public');
         Queue::fake();
 
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $first = $this->createArtwork(['title' => 'First']);
         $second = $this->createArtwork(['title' => 'Second']);
 
         $this->actingAs($user);
 
         Livewire::test(ManageArtworks::class)
-            ->callTableBulkAction(
-                'analyzeSelectedWithAi',
-                [$first, $second],
-                ['apply_immediately' => true],
-            );
+            ->mountTableBulkAction('analyzeSelectedWithAi', [$first, $second])
+            ->setTableBulkActionData(['apply_immediately' => true])
+            ->callMountedTableBulkAction();
 
         Queue::assertPushed(
             AnalyzeArtworkWithAi::class,
@@ -464,7 +444,7 @@ class ArtworkAiMetadataTest extends TestCase
     {
         Storage::fake('public');
 
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $first = $this->createArtwork([
             'title' => 'First',
             'ai_status' => Artwork::AI_STATUS_READY,
@@ -514,7 +494,7 @@ class ArtworkAiMetadataTest extends TestCase
         Storage::fake('public');
         Queue::fake();
 
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $queued = $this->createArtwork(['title' => 'Queued']);
         $processing = $this->createArtwork([
             'title' => 'Processing',
@@ -579,6 +559,17 @@ class ArtworkAiMetadataTest extends TestCase
             'ollama_request_timeout' => 150,
             'ollama_context_length' => 4096,
             'ollama_keep_alive' => '5m',
+        ], $overrides));
+    }
+
+    protected function configureOpenAi(array $overrides = []): void
+    {
+        app(AiSettings::class)->save(array_replace([
+            'provider' => 'openai',
+            'openai_api_key' => 'test-key',
+            'openai_base_url' => 'https://api.openai.com/v1',
+            'openai_model' => 'gpt-5.4-mini',
+            'openai_request_timeout' => 90,
         ], $overrides));
     }
 

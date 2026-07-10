@@ -14,9 +14,12 @@ class ReadinessTest extends TestCase
 
     public function test_readiness_requires_database_redis_and_writable_storage(): void
     {
-        $connection = Mockery::mock();
-        $connection->shouldReceive('ping')->once()->andReturn(true);
-        Redis::shouldReceive('connection')->once()->andReturn($connection);
+        $dataConnection = Mockery::mock();
+        $dataConnection->shouldReceive('ping')->once()->andReturn(true);
+        $cacheConnection = Mockery::mock();
+        $cacheConnection->shouldReceive('ping')->once()->andReturn(true);
+        Redis::shouldReceive('connection')->once()->withNoArgs()->andReturn($dataConnection);
+        Redis::shouldReceive('connection')->once()->with('cache')->andReturn($cacheConnection);
 
         $this->get('/ready')
             ->assertOk()

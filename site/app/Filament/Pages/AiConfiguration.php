@@ -211,7 +211,7 @@ class AiConfiguration extends Page
             ['label' => 'Application URL', 'value' => (string) config('app.url'), 'state' => 'Unraid environment'],
             ['label' => 'Database', 'value' => strtoupper((string) config('database.default')), 'state' => 'Unraid environment'],
             ['label' => 'Cache and queue', 'value' => ucfirst((string) config('queue.default')), 'state' => 'Unraid environment'],
-            ['label' => 'Cloud credentials', 'value' => collect(['openai', 'anthropic', 'zai'])->filter(fn (string $provider): bool => $settings->hasApiKey($provider))->count().' configured', 'state' => 'Encrypted database values or environment fallback'],
+            ['label' => 'Cloud credentials', 'value' => collect(['openai', 'anthropic', 'zai'])->filter(fn (string $provider): bool => $settings->hasApiKey($provider))->count().' configured', 'state' => 'Encrypted database settings'],
         ];
     }
 

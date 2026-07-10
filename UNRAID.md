@@ -1,290 +1,211 @@
-# Creative-Ai staging and production on Unraid
+# Creative-Ai on Unraid with Compose Manager
 
-This is the deployment runbook for the Laravel/Filament replacement site.
+This runbook creates two clean and isolated website stacks:
+
+| Environment | Access | Data | Image |
+| --- | --- | --- | --- |
+| Staging | Private network or VPN | Staging PostgreSQL database, Redis namespaces, storage, and `APP_KEY` | Exact GHCR digest from `main` |
+| Production | Public reverse proxy | Production PostgreSQL database, Redis namespaces, storage, and `APP_KEY` | The exact digest tested on staging |
+
+The stacks contain the migration, website, and queue-worker containers. Existing Unraid PostgreSQL, Redis, reverse-proxy, and Docker-network services remain external to the stacks.
+
+There is no host deployment script and no published website port. Compose Manager owns the complete lifecycle.
+
+## 1. Release model
 
 ```text
-branch or Codex change -> pull request -> CI -> merge to main
-    -> GHCR candidate -> private staging -> exact digest recorded
-    -> GitHub production approval -> same digest on production
+branch -> pull request -> CI -> merge main -> immutable GHCR digest
+  -> Compose Manager staging -> test -> GitHub production approval
+  -> same digest in Compose Manager production
 ```
 
-Production never rebuilds an approved release. It only accepts the exact `@sha256:...` digest that ran on staging.
+Never deploy `latest`, a moving staging tag, or a rebuilt copy. Both environments use a complete reference such as:
 
-## Environment layout
+```text
+ghcr.io/example/creative-ai@sha256:0123456789abcdef...
+```
 
-| Environment | Hostname | Host port | Image | Persistent data |
-| --- | --- | ---: | --- | --- |
-| Staging | `test.creative-ai.nl` | `8080` | `:staging`, resolved once per update to a digest | staging database/user, storage, Redis DBs `2`/`3` |
-| Production | `www.creative-ai.nl` | `8081` | required approved `@sha256:...` digest | production database/user, storage, Redis DBs `0`/`1` |
+The GitHub Actions summary prints the exact value after a successful `main` build.
 
-PostgreSQL, Redis, Ollama, and the reverse proxy remain existing Unraid services. Each site environment gets its own web and queue-worker containers.
+## 2. One-time prerequisites
 
-## Deployment files
+Before creating a stack, prepare:
 
-- `deploy/unraid/compose.yaml`: use for both Unraid stacks.
-- `deploy/unraid/staging.env.example`: staging `.env` template.
-- `deploy/unraid/production.env.example`: production `.env` template.
-- `deploy/unraid/update.sh`: locked, digest-pinned migration/restart/health workflow.
+- an existing Docker network reachable by the reverse proxy, PostgreSQL, and Redis;
+- one unused static address for each website container;
+- a new PostgreSQL database and login role per environment;
+- distinct Redis database numbers or, preferably, separate Redis ACL users;
+- one persistent Unraid storage directory per environment;
+- GHCR read access when the package is private.
 
-The root `compose.yaml` builds the current local checkout. Do not use it for these image-based staging and production stacks.
+Create a GitHub deployment environment named `production` under the repository's **Settings -> Environments**. Enable **Required reviewers** and select the reviewer who must approve promotion. The workflow references this exact environment name; without a protection rule, GitHub does not pause the promotion job for a second approval.
 
-## 1. One-time GitHub setup
-
-1. Merge `.github/workflows/` into `main`. Pull requests run formatting, tests, frontend build, deployment-file validation, and a container build. A merge to `main` publishes:
-   - moving candidate `ghcr.io/nicolasdwolfwood/creative-ai:staging`
-   - traceability tag `ghcr.io/nicolasdwolfwood/creative-ai:sha-<full-git-sha>`
-   - the immutable digest shown in the workflow summary
-2. In GitHub **Settings -> Environments**, create `production`, add a required reviewer, and restrict deployment branches to `main`. Enable prevent-self-review when a second trusted reviewer is available; in a solo repository, leave it off so your own deliberate approval remains possible. See [GitHub deployment environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
-3. Protect `main`: require a pull request and the `Laravel and frontend tests` and `CI result` checks.
-4. After the first build, choose a [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) access model:
-   - make the package public for anonymous Unraid pulls; or
-   - keep it private and authenticate Unraid with a classic token carrying only `read:packages`.
-
-For a private package:
+If the GHCR package is private, authenticate Unraid once with a classic personal access token that has only `read:packages` access:
 
 ```bash
-read -rsp 'GHCR read token: ' CR_PAT; echo
-printf '%s' "$CR_PAT" | docker login ghcr.io -u NicolasDWolfwood --password-stdin
+read -rsp "GHCR token: " CR_PAT; echo
+printf '%s' "$CR_PAT" | docker login ghcr.io --username YOUR_GITHUB_USER --password-stdin
 unset CR_PAT
-chmod 600 /root/.docker/config.json
 ```
 
-Docker stores this credential in root's Docker configuration. Restrict and back up that file appropriately, rotate the token, and never put it in Compose or Git.
+Docker retains registry credentials for future pulls. Restrict access to the Unraid administrator account and its Docker configuration.
 
-## 2. Create the Compose Manager Plus projects
+Example PostgreSQL statements, run as a PostgreSQL administrator and adapted locally:
 
-Use Compose Manager Plus **Indirect Path** projects on the array instead of its default `/boot` flash folder. This gives normal permissions, avoids flash writes, and lets the VS Code SSH tasks use stable paths.
+```sql
+CREATE ROLE creative_ai_staging LOGIN PASSWORD 'replace-with-a-long-password';
+CREATE DATABASE creative_ai_staging OWNER creative_ai_staging;
+
+CREATE ROLE creative_ai_production LOGIN PASSWORD 'replace-with-a-different-long-password';
+CREATE DATABASE creative_ai_production OWNER creative_ai_production;
+```
+
+Do not put these passwords or real network details in Git. URL-encode reserved characters when building `DB_URL`.
+
+Create the two storage directories using the Unraid file manager or terminal. Generic examples are:
+
+```text
+/mnt/user/appdata/creative-ai/staging/storage
+/mnt/user/appdata/creative-ai/production/storage
+```
+
+Generate a separate persistent `APP_KEY` for each clean environment:
 
 ```bash
-mkdir -p \
-  /mnt/user/appdata/creative-ai-deploy/staging \
-  /mnt/user/appdata/creative-ai-deploy/production
-chmod 700 /mnt/user/appdata/creative-ai-deploy/{staging,production}
+docker run --rm php:8.3-cli php -r 'echo "base64:".base64_encode(random_bytes(32)).PHP_EOL;'
 ```
 
-In **Docker -> Compose**:
+Changing `APP_KEY` later invalidates sessions and prevents decryption of provider API keys saved in PostgreSQL. Back it up securely with the matching environment.
 
-1. Add `creative-ai-staging` with indirect path `/mnt/user/appdata/creative-ai-deploy/staging`.
-2. Paste `deploy/unraid/compose.yaml` into its Compose tab.
-3. Paste `deploy/unraid/staging.env.example` into its `.env` tab.
-4. Replace every placeholder and keep `DEPLOYMENT_ENV=staging` and `ALLOW_INDEXING=false`.
-5. Copy `update.sh` alongside the Compose file.
-6. Repeat for `creative-ai-production` with indirect path `/mnt/user/appdata/creative-ai-deploy/production`. Do not start it yet.
+## 3. Create staging in Compose Manager
 
-Protect the completed environment files:
+1. Add a stack named `creative-ai-staging` in the Unraid Compose Manager plugin.
+2. If using an external/indirect project path, create the directory first. Otherwise let the plugin use its normal project folder.
+3. Paste [deploy/unraid/compose.yaml](deploy/unraid/compose.yaml) into the Compose tab.
+4. Paste [deploy/unraid/staging.env.example](deploy/unraid/staging.env.example) into the `.env` tab.
+5. Replace every placeholder and every documentation address/hostname with local values.
+6. Keep `DEPLOYMENT_ENV=staging` and `ALLOW_INDEXING=false`.
+7. Put the exact digest from the successful GitHub Actions `main` run in `CREATIVE_AI_IMAGE`.
+8. Save/apply the Compose and `.env` tabs.
+9. Use Compose Pull, then Compose Up.
+
+Startup is intentionally ordered:
+
+1. `creative-ai-migrate` runs all pending migrations and exits with code `0`.
+2. `creative-ai` starts only after migrations succeed and becomes healthy through `/ready`.
+3. `creative-ai-worker` starts only after the website is healthy.
+
+An exited migration container with exit code `0` is expected. If migration fails, the website and worker remain stopped; inspect the migration logs, fix the database or release, and run Compose Up again.
+
+## 4. Create the first administrator
+
+After the website is healthy, open its Unraid container console and run:
 
 ```bash
-chmod 600 /mnt/user/appdata/creative-ai-deploy/{staging,production}/.env
+gosu www-data php artisan creative-ai:admin:create admin@example.com
 ```
 
-Invoke the script with `bash update.sh`; this also works if you intentionally keep a project under `/boot`, where executable bits and `chmod 600` are not reliable. If secrets stay on flash, disable/restrict the Flash SMB share and protect flash backups.
+The command prompts for the display name and a hidden password. Administrator identity and password hashes are stored in PostgreSQL, not `.env`.
 
-Generate a new 32-byte Laravel key with:
+Recovery commands are available inside the same image:
 
 ```bash
-printf 'base64:%s\n' "$(openssl rand -base64 32)"
+gosu www-data php artisan creative-ai:admin:reset-password admin@example.com --generate-password
+gosu www-data php artisan creative-ai:admin:revoke admin@example.com
 ```
 
-The update script rejects missing environment classification, placeholders, malformed keys, a wrong project name, concurrent updates, and non-digest production images. If an `.env` value contains `$`, spaces, or `#`, single-quote the value so Compose does not reinterpret it.
+The final administrator cannot be revoked accidentally.
 
-## 3. Isolation and networking
+## 5. Reverse proxy
 
-Never share these between staging and production:
+Route the private staging hostname directly to the staging web container’s static Docker address on internal port `80`. Route the public hostname to the production web container in the same way. No Unraid host port is published.
 
-- PostgreSQL database, role, and password
-- storage path
-- session cookie name and admin password
-- Redis database numbers, prefixes, and preferably credentials
+The proxy must replace client-supplied forwarded headers and set at least:
 
-The templates assign distinct names, paths, ports, Redis databases/prefixes, and cookies. Create the PostgreSQL databases and roles first.
+- `Host`
+- `X-Forwarded-For`
+- `X-Forwarded-Host`
+- `X-Forwarded-Port`
+- `X-Forwarded-Proto`
 
-Redis database numbers are collision protection, not a security boundary. Because staging can run manually published branch code, use separate Redis instances or ACL users constrained to each environment's prefixed keys when possible. Never expose PostgreSQL, Redis, Ollama, or ports `8080`/`8081` to the WAN.
+Set `TRUSTED_PROXIES` to the actual proxy address or smallest dedicated proxy-network CIDR. Set `TRUSTED_HOSTS` to the literal environment hostnames.
 
-The worker timeout is 180 seconds and Redis retry-after is 240 seconds. Keep retry-after above the worker timeout to prevent duplicate execution of a slow AI job.
+For staging, also enforce a LAN/VPN allowlist at the proxy or firewall. `ALLOW_INDEXING=false` and robots headers prevent indexing but are not access control.
 
-### Reverse proxy
+## 6. Routine staging update
 
-- `test.creative-ai.nl` -> Unraid LAN IP port `8080`
-- `www.creative-ai.nl` -> Unraid LAN IP port `8081`
-- `creative-ai.nl` -> permanent redirect to `https://www.creative-ai.nl`
+After a pull request is merged and the `main` workflow succeeds:
 
-The proxy must overwrite, rather than append or trust client values for, `Host`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Port`, and `X-Forwarded-Proto`; remove an unused `X-Forwarded-Prefix`. Determine the actual proxy source address seen by the app and set `TRUSTED_PROXIES` to that IP or the smallest dedicated proxy-network CIDR. Do not use `*` or a whole client LAN.
+1. Copy the complete immutable image reference from the Actions summary.
+2. In Compose Manager, run Compose Down for the staging stack. This gracefully stops the worker and website.
+3. Replace only `CREATIVE_AI_IMAGE` in the staging `.env` tab and apply it.
+4. Run Compose Pull.
+5. Run Compose Up. Do not use Restart; Restart does not apply changed Compose or environment values.
+6. Confirm migration exited `0`, website is healthy, and worker is running.
+7. Test public pages, administrator actions, uploads, generated variants, media playback, and one queued job.
+8. Verify the staging response is still private and non-indexable.
 
-For staging, apply all of these:
+If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down, Pull, and Up. Code rollback is safe only while database migrations remain backward-compatible.
 
-1. split-horizon/internal DNS or no public DNS record;
-2. reverse-proxy LAN/VPN allowlist;
-3. `ALLOW_INDEXING=false` in Laravel;
-4. proxy-wide `X-Robots-Tag: noindex, nofollow, noarchive`, which also covers Apache-served media/assets.
+## 7. Create production after staging is proven
 
-Robots directives are defense in depth, not access control. Bind the direct ports to the Unraid LAN IP and firewall them from other networks.
+Production uses the same Compose file but its own `.env`, database, Redis namespaces, storage, address, and `APP_KEY`.
 
-## 4. Convert the existing test stack
+1. Create a second Compose Manager stack named `creative-ai-production`.
+2. Paste the same Compose YAML.
+3. Paste [deploy/unraid/production.env.example](deploy/unraid/production.env.example) into its `.env` tab.
+4. Replace every placeholder with production-only values.
+5. Keep the stack stopped while staging is tested.
+6. Run the GitHub **Approve image for production** workflow with the staging-tested `sha256:...` digest.
+7. After approval, put the workflow’s complete image reference into the production `.env`.
+8. Pull and run Compose Up.
+9. Create a new production administrator and enter production provider settings in the admin interface.
+10. Validate production through a temporary private HTTPS proxy rule before public cutover.
 
-The existing test stack already occupies port `8080`. Convert it before adding the new production stack:
+This is a clean production environment. Do not copy the staging database, Redis data, storage, users, or encrypted application settings. Upload desired content through the new administration process.
 
-1. Finish/drain queued AI jobs and pause uploads.
-2. Record its current database, storage path, and `APP_KEY`.
-3. Back it up using the consistent-backup procedure below.
-4. Stop/down the old single-instance Compose stack so its fixed container names and port are released.
-5. Configure the new `creative-ai-staging` stack to use the existing test database, storage path, and existing `APP_KEY`. Do not generate a different key for this adopted database.
-6. Move staging to Redis DBs `2`/`3` and staging-specific prefixes. Existing Redis sessions/cache/queues are disposable; expect to sign in again.
-7. Run `bash update.sh --yes` from the new staging project and validate `https://test.creative-ai.nl`.
+When validation succeeds, change the existing public reverse-proxy rule from the old website backend to the new production container. Keep the old backend stopped or unreachable for a short rollback window.
 
-Keeping the current storage path (for example `/mnt/user/appdata/creative-ai/storage`) is fine as long as production uses a different path. If both stacks must overlap temporarily, give the new staging stack a temporary unused port instead of `8080`.
+## 8. Routine production update
 
-## 5. Consistent backups
+1. Confirm the digest passed staging acceptance and GitHub production approval.
+2. Run Compose Down for production so web writes and queue processing stop consistently.
+3. Back up PostgreSQL, persistent storage, the protected `.env`/`APP_KEY`, and reverse-proxy configuration.
+4. Replace `CREATIVE_AI_IMAGE` with the approved staging digest.
+5. Run Compose Pull and Compose Up.
+6. Confirm migration exited `0`, web is healthy, and worker is running.
+7. Verify HTTPS, login, media, uploads, indexing, and a queued job.
 
-For a production backup, first pause web writes and gracefully stop the worker. Replace service/container/database placeholders as appropriate:
+This deliberately uses a short maintenance window in exchange for a small and understandable deployment process.
 
-```bash
-cd /mnt/user/appdata/creative-ai-deploy/production
-docker compose exec creative-ai php artisan down --retry=60
-docker compose stop --timeout 240 creative-ai-worker
+## 9. Backups and rollback
 
-umask 077
-backup_dir="/mnt/user/backups/creative-ai/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$backup_dir/storage"
-docker exec POSTGRES_CONTAINER pg_dump \
-  --username=PRODUCTION_ROLE \
-  --format=custom \
-  PRODUCTION_DATABASE \
-  > "$backup_dir/database.dump"
-rsync -aH --numeric-ids --exclude='/framework/down' \
-  /mnt/user/appdata/creative-ai-production/storage/ \
-  "$backup_dir/storage/"
-sha256sum "$backup_dir/database.dump" > "$backup_dir/SHA256SUMS"
-docker exec -i POSTGRES_CONTAINER pg_restore --list \
-  < "$backup_dir/database.dump" >/dev/null
+A usable production backup contains matching copies of:
 
-docker compose start creative-ai-worker
-docker compose exec creative-ai php artisan up
-```
+- PostgreSQL database
+- persistent `/app/storage` data
+- `.env`, especially `APP_KEY`
+- reverse-proxy configuration
+- deployed image digest
 
-Also back up the protected deployment `.env`/`APP_KEY` and reverse-proxy configuration. Encrypt sensitive backups, keep an off-server copy, verify checksums, and test a restore before relying on the process.
+Run `pg_dump` against the production database after the stack is down, copy the storage directory, verify the dump with `pg_restore --list`, and retain an off-server copy.
 
-For the initial staging-to-production clone, create a new production database/role, then restore without importing staging ownership or grants:
+For a backward-compatible code rollback:
 
-```bash
-docker exec -i POSTGRES_CONTAINER pg_restore \
-  --username=PRODUCTION_ROLE \
-  --dbname=PRODUCTION_DATABASE \
-  --no-owner \
-  --no-privileges \
-  < /mnt/user/backups/creative-ai/INITIAL_BACKUP/database.dump
-```
+1. Compose Down.
+2. Restore the previous exact digest in `.env`.
+3. Compose Pull and Compose Up.
 
-Verify that the production role owns the restored schema/tables and audit its grants. Clone storage into `/mnt/user/appdata/creative-ai-production/storage/` with `rsync --exclude='/framework/down'`, remove any stale `/mnt/user/appdata/creative-ai-production/storage/framework/down` marker from an older backup, then test the restored production database before cutover. The updater also clears maintenance mode on a first deployment before it checks readiness.
+For an incompatible schema or data change, restore the matching database, storage, `.env`/`APP_KEY`, and image digest together. All normal migrations should therefore use an expand/contract approach and remain backward-compatible through at least one release.
 
-The cloned database may contain cloud API keys encrypted with Laravel. Production must initially retain the source `APP_KEY` so those values remain decryptable.
+## 10. Environment ownership
 
-## 6. Initial production cutover
+PostgreSQL stores users, roles, content, AI provider choice, models, behavior settings, and encrypted provider keys. The `.env` contains only values required before PostgreSQL can be used or values that define the Docker/security boundary:
 
-1. Deploy and test a candidate on staging with `bash update.sh --yes`. Copy the exact `sha256:...` portion from `Resolved deployment image` or the last `deployments.log` entry.
-2. Run GitHub Actions **Approve image for production** from `main`, enter that digest, inspect the resolved Git revision, and approve the protected `production` job.
-3. Paste the workflow's complete `ghcr.io/...@sha256:...` value into production `CREATIVE_AI_IMAGE`.
-4. Before creating the containers, create a temporary LAN-only HTTPS preview hostname/rule to port `8081` and include that literal hostname in production `TRUSTED_HOSTS`. Container environment is fixed when Compose creates it, so configure this before the first updater run.
-5. Restore the cloned database/storage and use the source `APP_KEY` as described above.
-6. Run `bash update.sh` from `/mnt/user/appdata/creative-ai-deploy/production` and confirm the verified backup prompt.
+- project and environment identity
+- immutable image digest
+- Docker network, static address, and storage mount
+- `APP_KEY`, canonical URL, indexing policy, trusted hosts, and trusted proxies
+- PostgreSQL and Redis connection URLs
 
-The script preflights the image, enables maintenance mode, gracefully stops the old worker, migrates, starts the web container, waits for `/ready` (PostgreSQL, Redis, and storage), performs smoke checks as `www-data`, then starts the new worker. It records the exact deployed digest.
-
-Before public cutover, direct HTTP can validate only public responses:
-
-```bash
-curl -fsS -H 'Host: www.creative-ai.nl' http://192.168.1.176:8081/up
-curl -fsS -H 'Host: www.creative-ai.nl' http://192.168.1.176:8081/ready
-curl -fsS -H 'Host: www.creative-ai.nl' http://192.168.1.176:8081/ >/dev/null
-```
-
-Admin login uses secure cookies and must be tested through the temporary HTTPS preview. Complete the following credential cleanup before authenticating and before exposing this backend publicly.
-
-### Required credential cleanup before public cutover
-
-Cloning copies admin password hashes and encrypted provider keys:
-
-1. From the production project, run `creative-ai:create-admin` with a newly generated password, audit/remove every other cloned user, and verify that only intended production provider credentials remain:
-
-```bash
-cd /mnt/user/appdata/creative-ai-deploy/production
-docker compose exec creative-ai php artisan creative-ai:create-admin
-```
-
-2. Give staging a different admin password and remove stale users.
-3. Blank cloud-key fallbacks in the staging `.env`, delete the staging `ai_configuration` setting from the staging project explicitly, and only then rotate staging's `APP_KEY` and recreate its containers:
-
-```bash
-cd /mnt/user/appdata/creative-ai-deploy/staging
-docker compose exec creative-ai php artisan tinker --execute="App\Models\SiteSetting::query()->where('key', 'ai_configuration')->delete();"
-# Put a newly generated base64 key in the staging .env, then:
-bash update.sh --yes
-```
-
-Re-enter only test-safe provider credentials. Do not run a manually published branch against production-derived credentials.
-
-Using the temporary preview, log in with the newly generated production admin credentials. Check admin, full-size images, thumbnails, one audio track, robots, sitemap, and a small queued AI job before continuing.
-
-Cut over by switching the `www.creative-ai.nl` proxy target from the old backend to port `8081`. Verify HTTPS, canonical links, login, media, forwarded client IP, `/up`, and `/ready`. Keep the old backend intact but unreachable for a rollback window, and remove any deployed copy of the old `phpinfo.php`.
-
-Remove the temporary preview DNS/proxy rule immediately after cutover. Remove its hostname from production `TRUSTED_HOSTS` and apply that environment change with the next controlled `bash update.sh` (or repeat the same approved digest deployment after another verified backup).
-
-The fastest cutover rollback is switching the proxy back to the old backend; no DNS change is required.
-
-## 7. Routine releases
-
-### Publish and deploy staging
-
-From VS Code, Codex Desktop, or Codex Web:
-
-1. Create a short-lived branch, make the change, and review the diff.
-2. Commit only intended files and push. The VS Code push task does not stage or commit unrelated work.
-3. Open a pull request and wait for CI.
-4. Merge to `main`; GitHub updates `:staging` and publishes the build digest.
-5. Run **Creative-Ai: update staging on Unraid** or `bash update.sh --yes` in the staging project.
-6. Record the exact deployed digest printed by the script, then test homepage/gallery/journal, admin workflow, media, worker/AI behavior, and staging robots controls.
-
-To test a branch before merging, manually run **Test and build staging image** on that branch with `publish_staging=true`. Such branch code receives only staging credentials.
-
-[Compose Manager Plus](https://ca.unraid.net/apps/compose-manager-plus-0wft8je0ra0zhy) can detect a changed staging tag, but its generic auto-update does not run this migration/maintenance/smoke workflow. Keep scheduled replacement disabled.
-
-### Approve and deploy production
-
-1. Run **Approve image for production** from the GitHub Actions `main` branch.
-2. Enter the exact `sha256:...` digest reported by the tested Unraid staging deployment.
-3. Review the resolved digest/revision and approve the `production` environment job.
-4. Put the complete approved `ghcr.io/...@sha256:...` value in production `CREATIVE_AI_IMAGE`.
-5. Make and verify a consistent production backup.
-6. Run **Creative-Ai: update production on Unraid** or `bash update.sh` in the production project.
-7. Verify `https://www.creative-ai.nl/up`, `/ready`, homepage, admin, media, and worker.
-
-The GitHub environment records artifact approval, not the final LAN deployment. The Unraid update and external verification complete it.
-
-Codex Web can create the branch/PR and run GitHub workflows but cannot reach LAN-only Unraid. Keep the final pull as a local Unraid/SSH action unless you later install a tightly restricted deploy runner. Never run pull-request code on a runner with the Docker socket; that socket is effectively root access.
-
-## Failure handling and rollback
-
-Before migration the updater stops web writes and the old worker. If preflight/migration fails, it restores the old web availability and worker. If a failure occurs after a successful migration, it deliberately leaves the worker stopped so old code cannot process jobs against the new schema; inspect logs and either finish deploying that digest or restore the paired backup.
-
-All migrations and queued-job changes should use expand/contract compatibility. A code rollback alone is safe only while the migrated schema remains backward-compatible.
-
-Each successful update appends timestamp, exact digest, and Git revision to `deployments.log`. For a code-only rollback, put the prior approved digest from that ledger in `CREATIVE_AI_IMAGE` and run `bash update.sh`. For incompatible schema/data changes, restore matching PostgreSQL, storage, `.env`/`APP_KEY`, and proxy backups together.
-
-Do not use `latest`, rely on a mutable `sha-...` tag, rebuild an old commit, or run `migrate:rollback` blindly.
-
-## First-boot administration
-
-Create or update the configured administrator after migrations:
-
-```bash
-docker compose exec creative-ai php artisan creative-ai:create-admin
-```
-
-With `ADMIN_PASSWORD` blank, the command prints a generated password once. Leave that variable blank afterward so Compose does not retain a reusable plaintext password.
-
-Run legacy import only when the database/storage does not already contain imported media:
-
-```bash
-docker compose run --rm creative-ai php artisan creative-ai:import-legacy
-```
-
-Never leave `RUN_LEGACY_IMPORT=true` in normal deployment configuration.
+Keep completed `.env` files out of Git and screenshots. The tracked examples intentionally contain only generic documentation values.

@@ -26,13 +26,13 @@ class DeploymentSafetyTest extends TestCase
 
     public function test_production_robots_uses_the_configured_canonical_url(): void
     {
-        config()->set('app.url', 'https://www.creative-ai.nl');
+        config()->set('app.url', 'https://www.example.com');
         config()->set('creative_ai.allow_indexing', true);
 
         $this->get('/robots.txt')
             ->assertOk()
             ->assertHeaderMissing('X-Robots-Tag')
             ->assertSee('Disallow: /admin', escape: false)
-            ->assertSee('Sitemap: https://www.creative-ai.nl/sitemap.xml', escape: false);
+            ->assertSee('Sitemap: https://www.example.com/sitemap.xml', escape: false);
     }
 }

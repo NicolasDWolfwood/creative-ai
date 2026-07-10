@@ -1,4 +1,4 @@
-name: Test and build staging image
+name: Test and publish release candidate
 
 on:
   pull_request:
@@ -6,12 +6,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      publish_staging:
-        description: Publish this ref as the staging candidate
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -71,14 +65,58 @@ jobs:
 
       - name: Validate Unraid deployment files
         run: |
-          bash -n ../deploy/unraid/update.sh
+          docker compose --env-file ../.env.example --file ../compose.yaml config --quiet
           docker compose --env-file ../deploy/unraid/staging.env.example --file ../deploy/unraid/compose.yaml config --quiet
           docker compose --env-file ../deploy/unraid/production.env.example --file ../deploy/unraid/compose.yaml config --quiet
+          docker compose --env-file ../deploy/unraid/staging.env.example --file ../deploy/unraid/compose.yaml config --format json > /tmp/creative-ai-staging.json
+          docker compose --env-file ../deploy/unraid/production.env.example --file ../deploy/unraid/compose.yaml config --format json > /tmp/creative-ai-production.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
 
-  image-check:
-    name: Build container image (check only)
+          const staging = JSON.parse(fs.readFileSync('/tmp/creative-ai-staging.json', 'utf8'));
+          const production = JSON.parse(fs.readFileSync('/tmp/creative-ai-production.json', 'utf8'));
+          const serviceNames = ['creative-ai-migrate', 'creative-ai', 'creative-ai-worker'];
+          const bannedEnvironment = /^(?:ADMIN_|RUN_|AI_|OPENAI_|ANTHROPIC_|ZAI_|OLLAMA_|CREATIVE_AI_(?:BIND_IP|PORT))/;
+
+          function assertContract(condition, message) {
+              if (! condition) {
+                  throw new Error(message);
+              }
+          }
+
+          for (const [environment, config] of Object.entries({ staging, production })) {
+              const services = config.services;
+              const images = new Set(serviceNames.map((name) => services[name].image));
+              const staticServices = serviceNames.filter((name) => services[name].networks?.['app-network']?.ipv4_address);
+              const environmentKeys = serviceNames.flatMap((name) => Object.keys(services[name].environment ?? {}));
+
+              assertContract(serviceNames.every((name) => services[name]), `${environment}: required service missing`);
+              assertContract(serviceNames.every((name) => ! ('ports' in services[name])), `${environment}: host ports are forbidden`);
+              assertContract(images.size === 1, `${environment}: all app services must use one image`);
+              assertContract(/^.+@sha256:[0-9a-f]{64}$/.test([...images][0]), `${environment}: image must use an exact digest`);
+              assertContract(config.networks?.['app-network']?.external === true, `${environment}: app network must be external`);
+              assertContract(staticServices.length === 1 && staticServices[0] === 'creative-ai', `${environment}: only web gets a static address`);
+              assertContract(services['creative-ai'].depends_on?.['creative-ai-migrate']?.condition === 'service_completed_successfully', `${environment}: web must wait for migrations`);
+              assertContract(services['creative-ai-worker'].depends_on?.['creative-ai']?.condition === 'service_healthy', `${environment}: worker must wait for healthy web`);
+              assertContract(! environmentKeys.some((key) => bannedEnvironment.test(key)), `${environment}: application settings leaked into Compose`);
+          }
+
+          const stagingWeb = staging.services['creative-ai'];
+          const productionWeb = production.services['creative-ai'];
+          const isolatedKeys = ['APP_KEY', 'APP_URL', 'DB_URL', 'REDIS_URL', 'REDIS_CACHE_URL', 'SESSION_COOKIE', 'CACHE_PREFIX', 'REDIS_PREFIX'];
+
+          assertContract(stagingWeb.environment.ALLOW_INDEXING === 'false', 'staging indexing must stay disabled');
+          assertContract(productionWeb.environment.ALLOW_INDEXING === 'true', 'production indexing must be explicit');
+          assertContract(staging.name !== production.name, 'project names must be isolated');
+          assertContract(stagingWeb.networks['app-network'].ipv4_address !== productionWeb.networks['app-network'].ipv4_address, 'web addresses must be isolated');
+          assertContract(stagingWeb.volumes[0].source !== productionWeb.volumes[0].source, 'storage paths must be isolated');
+          assertContract(isolatedKeys.every((key) => stagingWeb.environment[key] !== productionWeb.environment[key]), 'environment data must be isolated');
+          NODE
+
+  stack-test:
+    name: PostgreSQL and Redis stack smoke test
     needs: test
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.publish_staging)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -88,40 +126,54 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Normalize the image name
-        id: image
-        shell: bash
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Generate image metadata
-        id: metadata
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        with:
-          images: ${{ steps.image.outputs.name }}
-          tags: type=sha,format=long,prefix=sha-
-          labels: |
-            org.opencontainers.image.title=Creative-Ai
-            org.opencontainers.image.description=Creative-Ai Laravel and Filament site
-
-      - name: Build the image without publishing
+      - name: Build the release image without publishing
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: site/Dockerfile
           platforms: linux/amd64
           push: false
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
+          load: true
+          tags: creative-ai-dev:local
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Configure the isolated development stack
+        shell: bash
+        run: |
+          cp .env.example .env
+          key="$(docker run --rm php:8.3-cli php -r 'echo "base64:".base64_encode(random_bytes(32));')"
+          sed -i "s|^APP_KEY=.*|APP_KEY=${key}|" .env
+          sed -i 's|^APP_URL=.*|APP_URL=http://localhost:8080|' .env
+          sed -i 's|^TRUSTED_HOSTS=.*|TRUSTED_HOSTS=localhost,127.0.0.1|' .env
+
+      - name: Start and verify PostgreSQL, Redis, migrations, web, and worker
+        shell: bash
+        run: |
+          docker compose up --detach --no-build --wait --wait-timeout 180
+          curl --fail --silent --show-error http://127.0.0.1:8080/ready
+          curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null
+          docker compose exec --no-TTY creative-ai php artisan migrate:status --no-ansi
+          docker compose exec --no-TTY redis redis-cli ping | grep -qx PONG
+          docker compose exec --no-TTY --user www-data creative-ai sh -c 'touch storage/app/public/.write-test && rm storage/app/public/.write-test'
+          docker compose run --rm --no-deps creative-ai-migrate php artisan creative-ai:admin:create ci-admin@example.test --name='CI Administrator' --generate-password
+          docker compose top creative-ai-worker | grep -q 'queue:work'
+
+      - name: Show stack logs
+        if: always()
+        run: docker compose logs --no-color
+
+      - name: Remove the isolated stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
   publish-image:
-    name: Publish staging image
+    name: Publish and smoke-test release candidate
     needs: test
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_staging)
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -152,9 +204,7 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ steps.image.outputs.name }}
-          tags: |
-            type=sha,format=long,prefix=sha-
-            type=raw,value=staging
+          tags: type=sha,format=long,prefix=sha-
           labels: |
             org.opencontainers.image.title=Creative-Ai
             org.opencontainers.image.description=Creative-Ai Laravel and Filament site
@@ -172,6 +222,42 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Configure the isolated candidate stack
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "${IMAGE_NAME}@${IMAGE_DIGEST}"
+          docker tag "${IMAGE_NAME}@${IMAGE_DIGEST}" creative-ai-dev:local
+          cp .env.example .env
+          key="$(docker run --rm php:8.3-cli php -r 'echo "base64:".base64_encode(random_bytes(32));')"
+          sed -i "s|^APP_KEY=.*|APP_KEY=${key}|" .env
+          sed -i 's|^APP_URL=.*|APP_URL=http://localhost:8080|' .env
+          sed -i 's|^TRUSTED_HOSTS=.*|TRUSTED_HOSTS=localhost,127.0.0.1|' .env
+
+      - name: Smoke-test the exact published digest
+        shell: bash
+        run: |
+          docker compose up --detach --no-build --wait --wait-timeout 180
+          curl --fail --silent --show-error http://127.0.0.1:8080/ready
+          curl --fail --silent --show-error http://127.0.0.1:8080/ >/dev/null
+          docker compose exec --no-TTY creative-ai php artisan migrate:status --no-ansi
+          docker compose exec --no-TTY redis redis-cli ping | grep -qx PONG
+          docker compose exec --no-TTY --user www-data creative-ai sh -c 'touch storage/app/public/.write-test && rm storage/app/public/.write-test'
+          docker compose run --rm --no-deps creative-ai-migrate php artisan creative-ai:admin:create ci-admin@example.test --name='CI Administrator' --generate-password
+          docker compose top creative-ai-worker | grep -q 'queue:work'
+
+      - name: Show candidate stack logs
+        if: always()
+        continue-on-error: true
+        run: docker compose logs --no-color
+
+      - name: Remove the isolated candidate stack
+        if: always()
+        continue-on-error: true
+        run: docker compose down --volumes --remove-orphans
+
       - name: Write candidate details
         shell: bash
         env:
@@ -181,18 +267,19 @@ jobs:
           {
             echo "## Staging candidate"
             echo
-            echo "- Moving staging tag: \`${IMAGE_NAME}:staging\`"
             echo "- Traceability tag: \`${IMAGE_NAME}:sha-${GITHUB_SHA}\`"
-            echo "- Immutable digest: \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
+            echo "- Copy this immutable reference into the staging Compose Manager .env:"
             echo
-            echo "Promotion uses the digest actually reported by the Unraid staging deployment."
+            echo "  \`${IMAGE_NAME}@${IMAGE_DIGEST}\`"
+            echo
+            echo "Production promotion must use this exact digest after staging approval."
           } >> "$GITHUB_STEP_SUMMARY"
 
   result:
     name: CI result
     needs:
       - test
-      - image-check
+      - stack-test
       - publish-image
     if: always()
     runs-on: ubuntu-latest
@@ -203,15 +290,21 @@ jobs:
         shell: bash
         env:
           TEST_RESULT: ${{ needs.test.result }}
-          CHECK_RESULT: ${{ needs.image-check.result }}
+          STACK_RESULT: ${{ needs.stack-test.result }}
           PUBLISH_RESULT: ${{ needs.publish-image.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [[ "$TEST_RESULT" != "success" ]]; then
             echo "Application tests failed or were cancelled." >&2
             exit 1
           fi
 
-          if [[ "$CHECK_RESULT" != "success" && "$PUBLISH_RESULT" != "success" ]]; then
-            echo "No container build job completed successfully." >&2
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            if [[ "$PUBLISH_RESULT" != "success" ]]; then
+              echo "The exact published release candidate did not pass its stack smoke test." >&2
+              exit 1
+            fi
+          elif [[ "$STACK_RESULT" != "success" ]]; then
+            echo "The PostgreSQL and Redis stack smoke test failed or was cancelled." >&2
             exit 1
           fi

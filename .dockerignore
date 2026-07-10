@@ -15,5 +15,6 @@ site/bootstrap/cache/*.php
 site/.env
 *.env
 *.env.*
+!site/.env.example
 unraid.env
 unraid.env.*
