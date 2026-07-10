@@ -3,9 +3,11 @@ x-creative-ai-environment: &creative-ai-environment
   APP_ENV: "${APP_ENV:-production}"
   APP_KEY: "${APP_KEY}"
   APP_DEBUG: "${APP_DEBUG:-false}"
-  APP_URL: "${APP_URL:-https://creative-ai.nl}"
+  APP_URL: "${APP_URL:-https://www.creative-ai.nl}"
+  ALLOW_INDEXING: "${ALLOW_INDEXING:-false}"
   APP_LOCALE: "${APP_LOCALE:-en}"
-  TRUSTED_PROXIES: "${TRUSTED_PROXIES:-*}"
+  TRUSTED_HOSTS: "${TRUSTED_HOSTS:-}"
+  TRUSTED_PROXIES: "${TRUSTED_PROXIES:-127.0.0.1}"
   LOG_CHANNEL: "${LOG_CHANNEL:-stack}"
   LOG_LEVEL: "${LOG_LEVEL:-warning}"
   DB_CONNECTION: "${DB_CONNECTION:-pgsql}"
@@ -25,6 +27,11 @@ x-creative-ai-environment: &creative-ai-environment
   REDIS_PORT: "${REDIS_PORT:-6379}"
   REDIS_DB: "${REDIS_DB:-0}"
   REDIS_CACHE_DB: "${REDIS_CACHE_DB:-1}"
+  REDIS_PREFIX: "${REDIS_PREFIX:-creative-ai-database-}"
+  CACHE_PREFIX: "${CACHE_PREFIX:-creative-ai-cache-}"
+  REDIS_QUEUE_RETRY_AFTER: "${REDIS_QUEUE_RETRY_AFTER:-240}"
+  SESSION_COOKIE: "${SESSION_COOKIE:-creative_ai_session}"
+  SESSION_SECURE_COOKIE: "${SESSION_SECURE_COOKIE:-true}"
   OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
   OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5.4-mini}"
   OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
@@ -63,6 +70,7 @@ services:
       dockerfile: site/Dockerfile
     image: creative-ai:latest
     container_name: creative-ai
+    init: true
     restart: unless-stopped
     ports:
       - "${CREATIVE_AI_PORT:-8080}:80"
@@ -78,6 +86,7 @@ services:
       dockerfile: site/Dockerfile
     image: creative-ai:latest
     container_name: creative-ai-worker
+    init: true
     restart: unless-stopped
     command:
       - php
@@ -93,3 +102,7 @@ services:
       RUN_MIGRATIONS: "false"
       RUN_LEGACY_IMPORT: "false"
     volumes: *creative-ai-volumes
+    healthcheck:
+      disable: true
+    stop_signal: SIGTERM
+    stop_grace_period: 4m

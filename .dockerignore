@@ -13,3 +13,7 @@ site/bootstrap/cache/*.php
 *.log
 .env
 site/.env
+*.env
+*.env.*
+unraid.env
+unraid.env.*

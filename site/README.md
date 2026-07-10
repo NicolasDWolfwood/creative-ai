@@ -19,4 +19,4 @@ php artisan creative-ai:import-legacy
 npm run build
 ```
 
-The intended production deployment path is the root `compose.yaml` through Unraid Compose Manager Plus.
+The production deployment path is `deploy/unraid/compose.yaml` through two isolated Unraid Compose Manager Plus stacks. See the root `UNRAID.md` for staging, promotion, cutover, and rollback instructions. The root `compose.yaml` is for building the current checkout locally.

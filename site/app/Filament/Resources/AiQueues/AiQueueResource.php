@@ -88,6 +88,11 @@ class AiQueueResource extends Resource
                         Artwork::AI_STATUS_QUEUED => 'warning',
                         default => 'gray',
                     }),
+                TextColumn::make('ai_apply_after_analysis')
+                    ->label('After analysis')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'Auto-apply' : 'Review')
+                    ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
                 TextColumn::make('ai_queued_at')
                     ->label('Queued')
                     ->since()

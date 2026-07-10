@@ -2,6 +2,7 @@
 
 return [
     'admin_email' => env('ADMIN_EMAIL'),
+    'allow_indexing' => filter_var(env('ALLOW_INDEXING', false), FILTER_VALIDATE_BOOL),
     'legacy_path' => env('CREATIVE_AI_LEGACY_PATH', base_path('legacy')),
     'image_variants' => [
         'thumb' => 720,

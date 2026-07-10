@@ -1,22 +1,86 @@
 {
-  // See https://go.microsoft.com/fwlink/?LinkId=733558
-  // for the documentation about the tasks.json format
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Deploy to Server",
-      "type": "shell",
-      "command": "& {$msg = Read-Host -Prompt 'Enter commit message'; git add .; git commit -m $msg; git push; ssh root@192.168.1.176 -p 5522 'cd /mnt/user/appdata/nginxphp8 && sudo ./update.sh'}",
-      "options": {
-        "shell": {
-          "executable": "powershell.exe"
-        }
-      },
+      "label": "Creative-Ai: build local image",
+      "type": "process",
+      "command": "docker",
+      "args": [
+        "build",
+        "--file",
+        "site/Dockerfile",
+        "--tag",
+        "creative-ai:dev",
+        "."
+      ],
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "problemMatcher": []
+    },
+    {
+      "label": "Creative-Ai: push current branch",
+      "type": "process",
+      "command": "git",
+      "args": [
+        "push",
+        "--set-upstream",
+        "origin",
+        "HEAD"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Creative-Ai: update staging on Unraid",
+      "type": "process",
+      "command": "ssh",
+      "args": [
+        "-p",
+        "${input:unraidSshPort}",
+        "${input:unraidSshHost}",
+        "cd ${input:stagingStackPath} && bash ./update.sh --yes"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Creative-Ai: update production on Unraid",
+      "type": "process",
+      "command": "ssh",
+      "args": [
+        "-t",
+        "-p",
+        "${input:unraidSshPort}",
+        "${input:unraidSshHost}",
+        "cd ${input:productionStackPath} && bash ./update.sh"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "unraidSshHost",
+      "type": "promptString",
+      "description": "Unraid SSH user and host",
+      "default": "root@192.168.1.176"
+    },
+    {
+      "id": "unraidSshPort",
+      "type": "promptString",
+      "description": "Unraid SSH port",
+      "default": "5522"
+    },
+    {
+      "id": "stagingStackPath",
+      "type": "promptString",
+      "description": "Compose Manager Plus staging project folder",
+      "default": "/mnt/user/appdata/creative-ai-deploy/staging"
+    },
+    {
+      "id": "productionStackPath",
+      "type": "promptString",
+      "description": "Compose Manager Plus production project folder",
+      "default": "/mnt/user/appdata/creative-ai-deploy/production"
     }
   ]
 }

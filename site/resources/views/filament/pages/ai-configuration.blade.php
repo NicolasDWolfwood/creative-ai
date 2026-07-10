@@ -63,9 +63,9 @@
                                 @foreach (['vision', 'completion', 'structured', 'tools', 'thinking'] as $capability)
                                     <td class="ca-ai-capability">
                                         @if (in_array($capability, $model['capabilities'], true))
-                                            <x-heroicon-m-check title="Supported" /><span class="sr-only">Supported</span>
+                                            <x-filament::icon icon="heroicon-m-check" title="Supported" /><span class="sr-only">Supported</span>
                                         @else
-                                            <x-heroicon-m-minus title="Not reported" /><span class="sr-only">Not reported</span>
+                                            <x-filament::icon icon="heroicon-m-minus" title="Not reported" /><span class="sr-only">Not reported</span>
                                         @endif
                                     </td>
                                 @endforeach
@@ -74,7 +74,7 @@
                                         <span class="ca-ai-selected-label">Selected</span>
                                     @elseif ($model['suitable'])
                                         <button type="button" wire:click="chooseModel(@js($model['name']))" title="Use {{ $model['name'] }}">
-                                            <x-heroicon-o-check-circle /><span class="sr-only">Select {{ $model['name'] }}</span>
+                                            <x-filament::icon icon="heroicon-o-check-circle" /><span class="sr-only">Select {{ $model['name'] }}</span>
                                         </button>
                                     @endif
                                 </td>

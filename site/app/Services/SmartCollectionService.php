@@ -22,7 +22,11 @@ class SmartCollectionService
             $query->where('published', true);
         }
 
-        if ((bool) ($rules['only_analyzed'] ?? false)) {
+        if ($collection->is_auto_generated || (bool) ($rules['only_ai_applied'] ?? false)) {
+            $query
+                ->where('ai_status', Artwork::AI_STATUS_APPLIED)
+                ->whereNotNull('ai_analyzed_at');
+        } elseif ((bool) ($rules['only_analyzed'] ?? false)) {
             $query->whereNotNull('ai_analyzed_at');
         }
 

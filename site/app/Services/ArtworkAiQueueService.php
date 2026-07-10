@@ -12,11 +12,12 @@ class ArtworkAiQueueService
 
     public const HIGH_PRIORITY_QUEUE = 'ai-high';
 
-    public function queue(Artwork $artwork, bool $priority = false): void
+    public function queue(Artwork $artwork, bool $priority = false, bool $applyAfterAnalysis = false): void
     {
         AnalyzeArtworkWithAi::dispatchFor(
             $artwork,
             force: true,
+            applyAfterAnalysis: $applyAfterAnalysis,
             queue: $priority ? self::HIGH_PRIORITY_QUEUE : self::DEFAULT_QUEUE,
         );
     }
@@ -27,7 +28,11 @@ class ArtworkAiQueueService
             return;
         }
 
-        $this->queue($artwork, priority: true);
+        $this->queue(
+            $artwork,
+            priority: true,
+            applyAfterAnalysis: (bool) $artwork->ai_apply_after_analysis,
+        );
     }
 
     public function retry(Artwork $artwork): void
@@ -36,7 +41,7 @@ class ArtworkAiQueueService
             return;
         }
 
-        $this->queue($artwork);
+        $this->queue($artwork, applyAfterAnalysis: (bool) $artwork->ai_apply_after_analysis);
     }
 
     public function cancelQueued(Artwork $artwork): bool
@@ -48,6 +53,7 @@ class ArtworkAiQueueService
         $artwork->forceFill([
             'ai_status' => Artwork::AI_STATUS_IDLE,
             'ai_queue_token' => null,
+            'ai_apply_after_analysis' => false,
             'ai_error' => null,
             'ai_queued_at' => null,
             'ai_started_at' => null,
@@ -70,6 +76,7 @@ class ArtworkAiQueueService
             ->update([
                 'ai_status' => Artwork::AI_STATUS_IDLE,
                 'ai_queue_token' => null,
+                'ai_apply_after_analysis' => false,
                 'ai_error' => null,
                 'ai_queued_at' => null,
                 'ai_started_at' => null,
@@ -84,7 +91,7 @@ class ArtworkAiQueueService
             ->get();
 
         foreach ($records as $artwork) {
-            $this->queue($artwork);
+            $this->retry($artwork);
         }
 
         return $records->count();
@@ -96,8 +103,11 @@ class ArtworkAiQueueService
      *
      * @param  array<int, string>  $statuses
      */
-    public function queuePending(array $statuses = [Artwork::AI_STATUS_IDLE, Artwork::AI_STATUS_FAILED], int $limit = 0): int
-    {
+    public function queuePending(
+        array $statuses = [Artwork::AI_STATUS_IDLE, Artwork::AI_STATUS_FAILED],
+        int $limit = 0,
+        bool $applyAfterAnalysis = false,
+    ): int {
         $query = Artwork::query()
             ->whereIn('ai_status', $statuses)
             ->whereNull('ai_analyzed_at')
@@ -110,7 +120,7 @@ class ArtworkAiQueueService
         $records = $query->get();
 
         foreach ($records as $artwork) {
-            $this->queue($artwork);
+            $this->queue($artwork, applyAfterAnalysis: $applyAfterAnalysis);
         }
 
         return $records->count();

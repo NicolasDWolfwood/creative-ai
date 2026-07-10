@@ -246,6 +246,44 @@ class ArtworkAiMetadataTest extends TestCase
         $this->assertSame('Original description.', $artwork->description);
     }
 
+    public function test_job_can_apply_ai_suggestion_immediately_after_analysis(): void
+    {
+        Storage::fake('public');
+        $artwork = $this->createArtwork([
+            'title' => 'Original Title',
+            'description' => 'Original description.',
+        ]);
+
+        config([
+            'services.openai.api_key' => 'test-key',
+            'services.openai.base_url' => 'https://api.openai.com/v1',
+        ]);
+
+        Http::fake([
+            'api.openai.com/v1/responses' => Http::response([
+                'output_text' => json_encode($this->suggestionPayload(title: 'Applied Immediately')),
+            ]),
+        ]);
+
+        $token = 'auto-apply-token';
+        $artwork->forceFill([
+            'ai_status' => Artwork::AI_STATUS_QUEUED,
+            'ai_queue_token' => $token,
+            'ai_apply_after_analysis' => true,
+        ])->saveQuietly();
+
+        (new AnalyzeArtworkWithAi($artwork->id, $token, force: true, applyAfterAnalysis: true))
+            ->handle(app(ArtworkAiMetadataService::class));
+
+        $artwork->refresh();
+
+        $this->assertSame(Artwork::AI_STATUS_APPLIED, $artwork->ai_status);
+        $this->assertSame('Applied Immediately', $artwork->title);
+        $this->assertNull($artwork->ai_queue_token);
+        $this->assertFalse($artwork->ai_apply_after_analysis);
+        $this->assertNotEmpty($artwork->tags()->pluck('name'));
+    }
+
     public function test_failed_job_marks_artwork_failed(): void
     {
         Storage::fake('public');
@@ -390,6 +428,63 @@ class ArtworkAiMetadataTest extends TestCase
         Queue::assertPushed(AnalyzeArtworkWithAi::class, 2);
         $this->assertSame(Artwork::AI_STATUS_QUEUED, $first->refresh()->ai_status);
         $this->assertSame(Artwork::AI_STATUS_QUEUED, $second->refresh()->ai_status);
+    }
+
+    public function test_filament_bulk_analysis_can_auto_apply_suggestions(): void
+    {
+        Storage::fake('public');
+        Queue::fake();
+
+        $user = User::factory()->create();
+        $first = $this->createArtwork(['title' => 'First']);
+        $second = $this->createArtwork(['title' => 'Second']);
+
+        $this->actingAs($user);
+
+        Livewire::test(ManageArtworks::class)
+            ->callTableBulkAction(
+                'analyzeSelectedWithAi',
+                [$first, $second],
+                ['apply_immediately' => true],
+            );
+
+        Queue::assertPushed(
+            AnalyzeArtworkWithAi::class,
+            2,
+        );
+        Queue::assertPushed(
+            AnalyzeArtworkWithAi::class,
+            fn (AnalyzeArtworkWithAi $job): bool => $job->applyAfterAnalysis,
+        );
+        $this->assertTrue($first->refresh()->ai_apply_after_analysis);
+        $this->assertTrue($second->refresh()->ai_apply_after_analysis);
+    }
+
+    public function test_filament_bulk_action_applies_selected_ai_suggestions(): void
+    {
+        Storage::fake('public');
+
+        $user = User::factory()->create();
+        $first = $this->createArtwork([
+            'title' => 'First',
+            'ai_status' => Artwork::AI_STATUS_READY,
+            'ai_suggestion' => $this->suggestionPayload(title: 'First Applied'),
+        ]);
+        $second = $this->createArtwork([
+            'title' => 'Second',
+            'ai_status' => Artwork::AI_STATUS_READY,
+            'ai_suggestion' => $this->suggestionPayload(title: 'Second Applied'),
+        ]);
+
+        $this->actingAs($user);
+
+        Livewire::test(ManageArtworks::class)
+            ->callTableBulkAction('applySelectedAiSuggestions', [$first, $second]);
+
+        $this->assertSame('First Applied', $first->refresh()->title);
+        $this->assertSame(Artwork::AI_STATUS_APPLIED, $first->ai_status);
+        $this->assertSame('Second Applied', $second->refresh()->title);
+        $this->assertSame(Artwork::AI_STATUS_APPLIED, $second->ai_status);
     }
 
     public function test_prioritizing_queued_artwork_dispatches_high_priority_job_and_invalidates_old_token(): void

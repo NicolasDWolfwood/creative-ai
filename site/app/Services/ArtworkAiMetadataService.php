@@ -41,8 +41,11 @@ class ArtworkAiMetadataService
         return $this->normalizeSuggestion($suggestion);
     }
 
-    public function applySuggestion(Artwork $artwork): Artwork
-    {
+    public function applySuggestion(
+        Artwork $artwork,
+        bool $syncSmartCollections = true,
+        bool $preserveQueueState = false,
+    ): Artwork {
         if (blank($artwork->ai_suggestion)) {
             throw new RuntimeException('This artwork has no AI suggestion to apply.');
         }
@@ -55,14 +58,56 @@ class ArtworkAiMetadataService
             'alt_text' => $suggestion['alt_text'] ?: $artwork->alt_text,
             'ai_suggestion' => $suggestion,
             'ai_status' => Artwork::AI_STATUS_APPLIED,
+            'ai_queue_token' => $preserveQueueState ? $artwork->ai_queue_token : null,
+            'ai_apply_after_analysis' => $preserveQueueState ? $artwork->ai_apply_after_analysis : false,
             'ai_error' => null,
+            'ai_started_at' => $preserveQueueState ? $artwork->ai_started_at : null,
             'ai_analyzed_at' => $artwork->ai_analyzed_at ?: now(),
         ])->save();
 
         $this->syncTags($artwork, $suggestion);
-        app(SmartCollectionService::class)->syncAutomatic();
+        if ($syncSmartCollections) {
+            app(AutomaticCollectionService::class)->refreshExisting(sync: false);
+            app(SmartCollectionService::class)->syncAutomatic();
+        }
 
         return $artwork->refresh();
+    }
+
+    /** @param iterable<Artwork> $artworks */
+    public function applySuggestions(iterable $artworks): int
+    {
+        $applied = 0;
+
+        foreach ($artworks as $artwork) {
+            if (blank($artwork->ai_suggestion) || $artwork->ai_status === Artwork::AI_STATUS_APPLIED) {
+                continue;
+            }
+
+            $this->applySuggestion($artwork, syncSmartCollections: false);
+            $applied++;
+        }
+
+        if ($applied > 0) {
+            app(AutomaticCollectionService::class)->refreshExisting(sync: false);
+            app(SmartCollectionService::class)->syncAutomatic();
+        }
+
+        return $applied;
+    }
+
+    public function applyReadySuggestions(int $limit = 0): int
+    {
+        $query = Artwork::query()
+            ->where('ai_status', Artwork::AI_STATUS_READY)
+            ->whereNotNull('ai_suggestion')
+            ->orderBy('id');
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        return $this->applySuggestions($query->get());
     }
 
     public function model(): string

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Collections;
 
 use App\Filament\Resources\Collections\Pages\ManageCollections;
+use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Tag;
 use App\Services\SmartCollectionService;
@@ -79,15 +80,22 @@ class CollectionResource extends Resource
             Toggle::make('is_smart')
                 ->label('Smart collection')
                 ->helperText('Automatically select artwork using approved metadata tags.')
+                ->disabled(fn (?Collection $record): bool => (bool) $record?->is_auto_generated)
                 ->live(),
             Section::make('Smart collection rules')
-                ->description('AI can suggest a focused rule later, or select tags manually now.')
+                ->description('Choose approved tags manually or let AI suggest a focused rule.')
                 ->visible(fn (Get $get): bool => (bool) $get('is_smart'))
                 ->columns(2)
                 ->schema([
                     Select::make('smart_rules.tag_ids')
                         ->label('Artwork tags')
-                        ->options(fn (): array => Tag::query()->whereHas('artworks')->orderBy('name')->pluck('name', 'id')->all())
+                        ->options(fn (): array => Tag::query()
+                            ->whereHas('artworks', fn (Builder $query): Builder => $query
+                                ->where('ai_status', Artwork::AI_STATUS_APPLIED)
+                                ->whereNotNull('ai_analyzed_at'))
+                            ->orderBy('name')
+                            ->pluck('name', 'id')
+                            ->all())
                         ->multiple()
                         ->searchable()
                         ->preload()
@@ -98,7 +106,10 @@ class CollectionResource extends Resource
                         ->default('any')
                         ->native(false),
                     Toggle::make('smart_rules.only_published')->label('Published artwork only')->default(true),
-                    Toggle::make('smart_rules.only_analyzed')->label('Analyzed artwork only')->default(false),
+                    Toggle::make('smart_rules.only_ai_applied')
+                        ->label('AI-approved artwork only')
+                        ->helperText('Requires reviewed or automatically applied AI metadata.')
+                        ->default(true),
                     Toggle::make('auto_sync')->label('Keep collection synchronized')->default(true),
                 ])
                 ->columnSpanFull(),
@@ -113,10 +124,15 @@ class CollectionResource extends Resource
                 ImageColumn::make('hero_image_path')->disk('public')->square()->label('Hero'),
                 TextColumn::make('title')->searchable()->sortable(),
                 TextColumn::make('artworks_count')->counts('artworks')->label('Artwork')->sortable(),
-                TextColumn::make('is_smart')->label('Type')->badge()->formatStateUsing(fn (bool $state): string => $state ? 'Smart' : 'Manual')->color(fn (bool $state): string => $state ? 'info' : 'gray'),
+                TextColumn::make('is_auto_generated')
+                    ->label('Type')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state, Collection $record): string => $state ? 'Automatic' : ($record->is_smart ? 'Smart' : 'Manual'))
+                    ->color(fn (bool $state, Collection $record): string => $state ? 'success' : ($record->is_smart ? 'info' : 'gray')),
                 TextColumn::make('sort_order')->sortable(),
                 IconColumn::make('featured')->boolean(),
                 IconColumn::make('published')->boolean(),
+                TextColumn::make('last_synced_at')->label('Synced')->since()->placeholder('Never')->toggleable(),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -139,11 +155,18 @@ class CollectionResource extends Resource
                                 'artwork collection',
                                 $record->title,
                                 $record->description,
-                                Tag::query()->whereHas('artworks')->orderBy('name')->get(),
+                                Tag::query()
+                                    ->whereHas('artworks', fn (Builder $query): Builder => $query
+                                        ->where('ai_status', Artwork::AI_STATUS_APPLIED)
+                                        ->whereNotNull('ai_analyzed_at'))
+                                    ->orderBy('name')
+                                    ->get(),
                             );
                             $rules = array_replace($record->smart_rules ?? [], [
                                 'tag_ids' => $suggestion['tag_ids'],
                                 'match' => 'any',
+                                'only_analyzed' => true,
+                                'only_ai_applied' => true,
                                 'ai_explanation' => $suggestion['explanation'],
                                 'ai_model' => $suggestion['model'],
                             ]);
@@ -151,6 +174,21 @@ class CollectionResource extends Resource
                             $count = app(SmartCollectionService::class)->sync($record);
 
                             Notification::make()->success()->title('AI rules suggested')->body($suggestion['explanation'].' '.$count.' artwork matched.')->send();
+                        }),
+                    Action::make('keepAsCustom')
+                        ->label('Keep as custom smart collection')
+                        ->icon('heroicon-o-lock-open')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalDescription('Stops the automatic collection generator from replacing or removing this collection. Tag-based synchronization stays enabled.')
+                        ->visible(fn (Collection $record): bool => $record->is_auto_generated)
+                        ->action(function (Collection $record): void {
+                            $record->forceFill([
+                                'is_auto_generated' => false,
+                                'auto_generation_key' => null,
+                            ])->saveQuietly();
+
+                            Notification::make()->success()->title('Collection is now custom')->send();
                         }),
                     EditAction::make(),
                     DeleteAction::make(),

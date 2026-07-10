@@ -21,7 +21,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <title>{{ $metaTitle }}</title>
         <meta name="description" content="{{ $metaDescription }}">
-        <meta name="robots" content="index,follow,max-image-preview:large">
+        <meta name="robots" content="{{ config('creative_ai.allow_indexing') ? 'index,follow,max-image-preview:large' : 'noindex,nofollow,noarchive' }}">
         <link rel="canonical" href="{{ $canonical }}">
         <link rel="alternate" type="application/rss+xml" title="Creative-Ai Journal" href="{{ route('feed') }}">
         <meta property="og:site_name" content="Creative-Ai">
