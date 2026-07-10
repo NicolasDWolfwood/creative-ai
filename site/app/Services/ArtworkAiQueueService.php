@@ -89,4 +89,30 @@ class ArtworkAiQueueService
 
         return $records->count();
     }
+
+    /**
+     * Queue records that have never completed analysis. Existing queued and
+     * processing records are deliberately excluded to prevent duplicate work.
+     *
+     * @param  array<int, string>  $statuses
+     */
+    public function queuePending(array $statuses = [Artwork::AI_STATUS_IDLE, Artwork::AI_STATUS_FAILED], int $limit = 0): int
+    {
+        $query = Artwork::query()
+            ->whereIn('ai_status', $statuses)
+            ->whereNull('ai_analyzed_at')
+            ->orderBy('id');
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        $records = $query->get();
+
+        foreach ($records as $artwork) {
+            $this->queue($artwork);
+        }
+
+        return $records->count();
+    }
 }

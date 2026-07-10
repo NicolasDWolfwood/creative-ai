@@ -33,4 +33,11 @@ class Tag extends Model
             ->withPivot('category')
             ->withTimestamps();
     }
+
+    public function tracks(): BelongsToMany
+    {
+        return $this->belongsToMany(Track::class, 'track_tag')
+            ->withPivot('category')
+            ->withTimestamps();
+    }
 }

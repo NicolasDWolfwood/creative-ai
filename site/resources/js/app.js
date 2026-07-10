@@ -1,7 +1,5 @@
 import { createIcons, icons } from 'lucide';
 
-createIcons({ icons });
-
 class CreativePlayer {
     constructor(payload) {
         this.playlists = payload.playlists || [];
@@ -35,7 +33,7 @@ class CreativePlayer {
             volume: document.querySelector('[data-volume]'),
             currentTime: document.querySelector('[data-current-time]'),
             duration: document.querySelector('[data-duration]'),
-            collapse: document.querySelector('[data-player-collapse]'),
+            collapses: document.querySelectorAll('[data-player-collapse]'),
             canvas: document.querySelector('[data-visualizer]'),
         };
     }
@@ -48,7 +46,7 @@ class CreativePlayer {
         this.elements.repeat?.addEventListener('click', () => this.toggleRepeat());
         this.elements.seek?.addEventListener('input', () => this.seek());
         this.elements.volume?.addEventListener('input', () => this.setVolume());
-        this.elements.collapse?.addEventListener('click', () => this.elements.player.classList.toggle('collapsed'));
+        this.elements.collapses.forEach((button) => button.addEventListener('click', () => this.elements.player.classList.toggle('collapsed')));
         this.elements.playlistSelect?.addEventListener('change', () => {
             this.playlistIndex = Number(this.elements.playlistSelect.value);
             this.trackIndex = 0;
@@ -306,12 +304,32 @@ function setupLightbox() {
     const title = panel.querySelector('[data-lightbox-title]');
     const description = panel.querySelector('[data-lightbox-description]');
 
-    document.querySelectorAll('[data-lightbox]').forEach((button) => {
+    const triggers = [...document.querySelectorAll('[data-lightbox]')];
+    const items = [];
+    const triggerIndexes = triggers.map((trigger) => {
+        const existingIndex = items.findIndex((item) => item.dataset.full === trigger.dataset.full);
+
+        if (existingIndex >= 0) return existingIndex;
+
+        items.push(trigger);
+
+        return items.length - 1;
+    });
+    let activeIndex = 0;
+
+    const show = (index) => {
+        if (!items.length) return;
+        activeIndex = (index + items.length) % items.length;
+        const button = items[activeIndex];
+        image.src = button.dataset.full;
+        image.alt = button.dataset.alt || button.dataset.title || '';
+        title.textContent = button.dataset.title || '';
+        description.textContent = button.dataset.description || '';
+    };
+
+    triggers.forEach((button, index) => {
         button.addEventListener('click', () => {
-            image.src = button.dataset.full;
-            image.alt = button.dataset.alt || button.dataset.title || '';
-            title.textContent = button.dataset.title || '';
-            description.textContent = button.dataset.description || '';
+            show(triggerIndexes[index]);
             panel.classList.add('open');
             panel.setAttribute('aria-hidden', 'false');
             document.body.classList.add('lightbox-open');
@@ -326,15 +344,67 @@ function setupLightbox() {
     };
 
     panel.querySelector('[data-lightbox-close]')?.addEventListener('click', close);
+    panel.querySelector('[data-lightbox-prev]')?.addEventListener('click', () => show(activeIndex - 1));
+    panel.querySelector('[data-lightbox-next]')?.addEventListener('click', () => show(activeIndex + 1));
     panel.addEventListener('click', (event) => {
         if (event.target === panel) close();
     });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') close();
+        if (panel.classList.contains('open') && event.key === 'ArrowLeft') show(activeIndex - 1);
+        if (panel.classList.contains('open') && event.key === 'ArrowRight') show(activeIndex + 1);
     });
 }
 
+function setupNavigation() {
+    const header = document.querySelector('.site-header');
+    const toggle = document.querySelector('[data-nav-toggle]');
+    const nav = document.querySelector('[data-nav]');
+
+    const updateScroll = () => {
+        header?.classList.toggle('scrolled', window.scrollY > 24);
+        const documentHeight = document.documentElement.scrollHeight - window.innerHeight;
+        const progress = documentHeight > 0 ? (window.scrollY / documentHeight) * 100 : 0;
+        document.querySelector('[data-scroll-progress]')?.style.setProperty('width', `${progress}%`);
+    };
+
+    toggle?.addEventListener('click', () => {
+        const open = nav?.classList.toggle('open') || false;
+        toggle.setAttribute('aria-expanded', String(open));
+    });
+
+    nav?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
+        nav.classList.remove('open');
+        toggle?.setAttribute('aria-expanded', 'false');
+    }));
+
+    window.addEventListener('scroll', updateScroll, { passive: true });
+    updateScroll();
+}
+
+function setupReveal() {
+    const elements = document.querySelectorAll('[data-reveal]');
+
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        elements.forEach((element) => element.classList.add('revealed'));
+        return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('revealed');
+            observer.unobserve(entry.target);
+        });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+
+    elements.forEach((element) => observer.observe(element));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    createIcons({ icons });
+    setupNavigation();
+    setupReveal();
     setupLightbox();
     new CreativePlayer(window.creativeAi || {});
 });

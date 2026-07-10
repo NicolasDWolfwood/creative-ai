@@ -35,7 +35,7 @@ The stack maps `/mnt/user/appdata/creative-ai/storage` to `/app/storage`. Upload
 
 ## AI artwork metadata
 
-The app supports local Ollama and the OpenAI API. It sends a downscaled, re-encoded JPEG analysis image instead of the original upload. Ollama is the recommended default for this Unraid deployment:
+The app supports local Ollama plus OpenAI, Claude by Anthropic, and Z.AI cloud APIs. It sends a downscaled, re-encoded JPEG analysis image instead of the original upload. Ollama is the recommended default for this Unraid deployment:
 
 ```env
 AI_PROVIDER=ollama
@@ -49,9 +49,9 @@ AI_IMAGE_MAX_WIDTH=768
 AI_IMAGE_JPEG_QUALITY=72
 ```
 
-These values are first-boot fallbacks. After startup, use `Admin > AI & Automation > AI configuration` to select the provider, change the Ollama server and model, inspect installed model capabilities, and tune image analysis. Saved admin settings are stored in Postgres and take effect on the next queued job without restarting the stack.
+These values are first-boot fallbacks. After startup, use `Admin > AI & Automation > AI providers` to select a provider, configure its server and model, compare model capabilities, and tune image analysis. Saved cloud API keys are encrypted with `APP_KEY` before storage in Postgres, are never displayed again, and take effect on the next queued job without restarting the stack.
 
-To use OpenAI instead, keep the API key in the Compose Manager Plus `.env` tab and select OpenAI in the admin page:
+Cloud keys can be entered in the admin page or kept as recovery fallbacks in the Compose Manager Plus `.env` tab:
 
 ```env
 OPENAI_API_KEY=

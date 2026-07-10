@@ -4,9 +4,11 @@ namespace App\Filament\Resources\Artworks;
 
 use App\Filament\Resources\Artworks\Pages\ManageArtworks;
 use App\Models\Artwork;
+use App\Models\Collection as ArtworkCollection;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -26,7 +28,10 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 
 class ArtworkResource extends Resource
@@ -46,8 +51,16 @@ class ArtworkResource extends Resource
         return $schema->components([
             TextInput::make('title')->required()->maxLength(255),
             TextInput::make('slug')->maxLength(255)->helperText('Leave empty to generate from the title.'),
-            Select::make('collection_id')
-                ->relationship('collection', 'title')
+            Select::make('collections')
+                ->label('Collections')
+                ->relationship(
+                    'collections',
+                    'title',
+                    modifyQueryUsing: fn (Builder $query): Builder => $query
+                        ->select(['collections.id', 'collections.title'])
+                        ->reorder('collections.title'),
+                )
+                ->multiple()
                 ->searchable()
                 ->preload(),
             FileUpload::make('image_path')
@@ -132,12 +145,16 @@ class ArtworkResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->extraAttributes(['class' => 'ca-artwork-table'])
             ->poll('5s')
             ->defaultSort('sort_order', 'desc')
             ->columns([
                 ImageColumn::make('thumb_path')->disk('public')->square()->label('Preview'),
-                TextColumn::make('title')->searchable()->sortable(),
-                TextColumn::make('collection.title')->sortable(),
+                TextColumn::make('title')
+                    ->searchable()
+                    ->sortable()
+                    ->description(fn (Artwork $record): string => $record->collections->pluck('title')->implode(' · ') ?: 'Uncollected')
+                    ->wrap(),
                 TextColumn::make('ai_status')
                     ->label('AI')
                     ->badge()
@@ -149,41 +166,71 @@ class ArtworkResource extends Resource
                         Artwork::AI_STATUS_APPLIED => 'info',
                         default => 'gray',
                     }),
-                TextColumn::make('sort_order')->sortable(),
-                IconColumn::make('featured')->boolean(),
-                IconColumn::make('published')->boolean(),
-                TextColumn::make('updated_at')->dateTime()->sortable(),
+                TextColumn::make('tags.name')
+                    ->label('Tags')
+                    ->badge()
+                    ->limitList(3)
+                    ->toggleable(isToggledHiddenByDefault: true),
+                IconColumn::make('published')->boolean()->label('Live'),
+                TextColumn::make('sort_order')->sortable()->toggleable(isToggledHiddenByDefault: true),
+                IconColumn::make('featured')->boolean()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('updated_at')->since()->sortable()->label('Updated')->toggleable(),
+            ])
+            ->filters([
+                SelectFilter::make('ai_status')
+                    ->label('AI status')
+                    ->options([
+                        Artwork::AI_STATUS_IDLE => 'Not analyzed',
+                        Artwork::AI_STATUS_QUEUED => 'Queued',
+                        Artwork::AI_STATUS_PROCESSING => 'Processing',
+                        Artwork::AI_STATUS_READY => 'Ready to review',
+                        Artwork::AI_STATUS_FAILED => 'Failed',
+                        Artwork::AI_STATUS_APPLIED => 'Applied',
+                    ]),
+                SelectFilter::make('collections')
+                    ->options(fn (): array => ArtworkCollection::query()
+                        ->orderBy('sort_order')
+                        ->orderBy('title')
+                        ->pluck('title', 'id')
+                        ->all())
+                    ->query(fn (Builder $query, array $data): Builder => $query->when(
+                        $data['value'] ?? null,
+                        fn (Builder $query, int|string $collectionId): Builder => $query->whereHas(
+                            'collections',
+                            fn (Builder $query): Builder => $query->whereKey($collectionId),
+                        ),
+                    ))
+                    ->searchable()
+                    ->preload(),
+                TernaryFilter::make('published')->label('Published'),
+                TernaryFilter::make('featured')->label('Featured'),
             ])
             ->recordActions([
-                Action::make('analyzeWithAi')
-                    ->label('Analyze with AI')
-                    ->icon('heroicon-o-sparkles')
-                    ->color('info')
-                    ->requiresConfirmation()
-                    ->action(function (Artwork $record): void {
-                        app(ArtworkAiQueueService::class)->queue($record);
+                ActionGroup::make([
+                    Action::make('analyzeWithAi')
+                        ->label('Analyze with AI')
+                        ->icon('heroicon-o-sparkles')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->action(function (Artwork $record): void {
+                            app(ArtworkAiQueueService::class)->queue($record);
 
-                        Notification::make()
-                            ->title('Artwork queued for AI analysis.')
-                            ->success()
-                            ->send();
-                    }),
-                Action::make('applyAiSuggestion')
-                    ->label('Apply AI Suggestions')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn (Artwork $record): bool => filled($record->ai_suggestion))
-                    ->action(function (Artwork $record): void {
-                        app(ArtworkAiMetadataService::class)->applySuggestion($record);
+                            Notification::make()->title('Artwork queued for AI analysis.')->success()->send();
+                        }),
+                    Action::make('applyAiSuggestion')
+                        ->label('Apply AI suggestions')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn (Artwork $record): bool => filled($record->ai_suggestion))
+                        ->action(function (Artwork $record): void {
+                            app(ArtworkAiMetadataService::class)->applySuggestion($record);
 
-                        Notification::make()
-                            ->title('AI suggestions applied.')
-                            ->success()
-                            ->send();
-                    }),
-                EditAction::make(),
-                DeleteAction::make(),
+                            Notification::make()->title('AI suggestions applied.')->success()->send();
+                        }),
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Artwork actions'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

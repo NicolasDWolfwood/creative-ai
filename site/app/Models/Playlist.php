@@ -24,6 +24,10 @@ class Playlist extends Model
         'featured',
         'published',
         'published_at',
+        'is_smart',
+        'smart_rules',
+        'auto_sync',
+        'last_synced_at',
     ];
 
     protected function casts(): array
@@ -32,6 +36,10 @@ class Playlist extends Model
             'featured' => 'boolean',
             'published' => 'boolean',
             'published_at' => 'datetime',
+            'is_smart' => 'boolean',
+            'smart_rules' => 'array',
+            'auto_sync' => 'boolean',
+            'last_synced_at' => 'datetime',
         ];
     }
 

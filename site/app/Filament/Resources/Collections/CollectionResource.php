@@ -4,21 +4,31 @@ namespace App\Filament\Resources\Collections;
 
 use App\Filament\Resources\Collections\Pages\ManageCollections;
 use App\Models\Collection;
+use App\Models\Tag;
+use App\Services\SmartCollectionService;
+use App\Services\SmartRuleAiService;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class CollectionResource extends Resource
 {
@@ -48,11 +58,50 @@ class CollectionResource extends Resource
                 ->maxSize(25600)
                 ->openable()
                 ->downloadable(),
+            Select::make('artworks')
+                ->relationship(
+                    'artworks',
+                    'title',
+                    modifyQueryUsing: fn (Builder $query): Builder => $query
+                        ->select(['artworks.id', 'artworks.title'])
+                        ->reorder('artworks.title'),
+                )
+                ->multiple()
+                ->searchable()
+                ->preload()
+                ->visible(fn (Get $get): bool => ! (bool) $get('is_smart'))
+                ->columnSpanFull(),
             Textarea::make('description')->rows(4)->columnSpanFull(),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
             Toggle::make('published')->default(true),
             DateTimePicker::make('published_at'),
+            Toggle::make('is_smart')
+                ->label('Smart collection')
+                ->helperText('Automatically select artwork using approved metadata tags.')
+                ->live(),
+            Section::make('Smart collection rules')
+                ->description('AI can suggest a focused rule later, or select tags manually now.')
+                ->visible(fn (Get $get): bool => (bool) $get('is_smart'))
+                ->columns(2)
+                ->schema([
+                    Select::make('smart_rules.tag_ids')
+                        ->label('Artwork tags')
+                        ->options(fn (): array => Tag::query()->whereHas('artworks')->orderBy('name')->pluck('name', 'id')->all())
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->columnSpanFull(),
+                    Select::make('smart_rules.match')
+                        ->label('Tag matching')
+                        ->options(['any' => 'Match any selected tag', 'all' => 'Match every selected tag'])
+                        ->default('any')
+                        ->native(false),
+                    Toggle::make('smart_rules.only_published')->label('Published artwork only')->default(true),
+                    Toggle::make('smart_rules.only_analyzed')->label('Analyzed artwork only')->default(false),
+                    Toggle::make('auto_sync')->label('Keep collection synchronized')->default(true),
+                ])
+                ->columnSpanFull(),
         ]);
     }
 
@@ -63,14 +112,49 @@ class CollectionResource extends Resource
             ->columns([
                 ImageColumn::make('hero_image_path')->disk('public')->square()->label('Hero'),
                 TextColumn::make('title')->searchable()->sortable(),
-                TextColumn::make('slug')->searchable(),
+                TextColumn::make('artworks_count')->counts('artworks')->label('Artwork')->sortable(),
+                TextColumn::make('is_smart')->label('Type')->badge()->formatStateUsing(fn (bool $state): string => $state ? 'Smart' : 'Manual')->color(fn (bool $state): string => $state ? 'info' : 'gray'),
                 TextColumn::make('sort_order')->sortable(),
                 IconColumn::make('featured')->boolean(),
                 IconColumn::make('published')->boolean(),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                ActionGroup::make([
+                    Action::make('syncSmartCollection')
+                        ->label('Sync smart collection')
+                        ->icon('heroicon-o-arrow-path')
+                        ->visible(fn (Collection $record): bool => $record->is_smart)
+                        ->action(function (Collection $record): void {
+                            $count = app(SmartCollectionService::class)->sync($record);
+                            Notification::make()->success()->title($count.' artwork matched')->send();
+                        }),
+                    Action::make('suggestSmartRules')
+                        ->label('Suggest rules with AI')
+                        ->icon('heroicon-o-sparkles')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->visible(fn (Collection $record): bool => $record->is_smart)
+                        ->action(function (Collection $record): void {
+                            $suggestion = app(SmartRuleAiService::class)->suggest(
+                                'artwork collection',
+                                $record->title,
+                                $record->description,
+                                Tag::query()->whereHas('artworks')->orderBy('name')->get(),
+                            );
+                            $rules = array_replace($record->smart_rules ?? [], [
+                                'tag_ids' => $suggestion['tag_ids'],
+                                'match' => 'any',
+                                'ai_explanation' => $suggestion['explanation'],
+                                'ai_model' => $suggestion['model'],
+                            ]);
+                            $record->forceFill(['smart_rules' => $rules])->saveQuietly();
+                            $count = app(SmartCollectionService::class)->sync($record);
+
+                            Notification::make()->success()->title('AI rules suggested')->body($suggestion['explanation'].' '.$count.' artwork matched.')->send();
+                        }),
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Collection actions'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

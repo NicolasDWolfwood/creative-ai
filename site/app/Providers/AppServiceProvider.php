@@ -3,7 +3,11 @@
 namespace App\Providers;
 
 use App\Models\Artwork;
+use App\Models\Collection;
+use App\Models\Playlist;
 use App\Observers\ArtworkObserver;
+use App\Observers\CollectionObserver;
+use App\Observers\PlaylistObserver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,5 +26,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Artwork::observe(ArtworkObserver::class);
+        Collection::observe(CollectionObserver::class);
+        Playlist::observe(PlaylistObserver::class);
     }
 }

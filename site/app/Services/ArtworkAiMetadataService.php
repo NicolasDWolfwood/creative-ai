@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Artwork;
 use App\Models\Tag;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -13,7 +12,7 @@ class ArtworkAiMetadataService
     public function __construct(
         protected ImageVariantService $imageVariantService,
         protected AiSettings $settings,
-        protected OllamaClient $ollamaClient,
+        protected AiProviderManager $providers,
     ) {}
 
     /**
@@ -37,11 +36,7 @@ class ArtworkAiMetadataService
         $prompt = $this->prompt($artwork, $analysisImage);
         $schema = $this->schema();
 
-        $suggestion = match ($this->settings->provider()) {
-            'ollama' => $this->ollamaClient->analyze($prompt, $schema, $analysisImage),
-            'openai' => $this->analyzeWithOpenAi($prompt, $schema, $analysisImage),
-            default => throw new RuntimeException('Unsupported AI provider configured.'),
-        };
+        $suggestion = $this->providers->analyzeImage($prompt, $schema, $analysisImage);
 
         return $this->normalizeSuggestion($suggestion);
     }
@@ -65,6 +60,7 @@ class ArtworkAiMetadataService
         ])->save();
 
         $this->syncTags($artwork, $suggestion);
+        app(SmartCollectionService::class)->syncAutomatic();
 
         return $artwork->refresh();
     }
@@ -72,59 +68,6 @@ class ArtworkAiMetadataService
     public function model(): string
     {
         return $this->settings->modelDescriptor();
-    }
-
-    /**
-     * @param  array<string, mixed>  $schema
-     * @param  array<string, mixed>  $analysisImage
-     * @return array<string, mixed>
-     */
-    protected function analyzeWithOpenAi(string $prompt, array $schema, array $analysisImage): array
-    {
-        $apiKey = config('services.openai.api_key');
-
-        if (blank($apiKey)) {
-            throw new RuntimeException('OPENAI_API_KEY is not configured.');
-        }
-
-        $response = Http::baseUrl(rtrim(config('services.openai.base_url'), '/'))
-            ->withToken($apiKey)
-            ->acceptJson()
-            ->asJson()
-            ->timeout($this->settings->openAiRequestTimeout())
-            ->retry(2, 750)
-            ->post('responses', [
-                'model' => $this->settings->openAiModel(),
-                'input' => [
-                    [
-                        'role' => 'user',
-                        'content' => [
-                            [
-                                'type' => 'input_text',
-                                'text' => $prompt,
-                            ],
-                            [
-                                'type' => 'input_image',
-                                'image_url' => $analysisImage['data_url'],
-                                'detail' => 'low',
-                            ],
-                        ],
-                    ],
-                ],
-                'text' => [
-                    'format' => [
-                        'type' => 'json_schema',
-                        'name' => 'artwork_metadata',
-                        'strict' => true,
-                        'schema' => $schema,
-                    ],
-                ],
-                'max_output_tokens' => 900,
-            ])
-            ->throw()
-            ->json();
-
-        return $this->decodeSuggestion($response);
     }
 
     /**
@@ -215,38 +158,6 @@ PROMPT);
                 'content_warning',
             ],
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $response
-     * @return array<string, mixed>
-     */
-    protected function decodeSuggestion(array $response): array
-    {
-        $text = $response['output_text'] ?? null;
-
-        if (! is_string($text)) {
-            foreach ($response['output'] ?? [] as $output) {
-                foreach ($output['content'] ?? [] as $content) {
-                    if (is_string($content['text'] ?? null)) {
-                        $text = $content['text'];
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        if (! is_string($text) || blank($text)) {
-            throw new RuntimeException('OpenAI response did not include structured output text.');
-        }
-
-        $decoded = json_decode($text, true);
-
-        if (! is_array($decoded)) {
-            throw new RuntimeException('OpenAI response was not valid JSON.');
-        }
-
-        return $decoded;
     }
 
     /**

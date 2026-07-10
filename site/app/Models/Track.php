@@ -30,6 +30,8 @@ class Track extends Model
         'published',
         'published_at',
         'metadata',
+        'ai_model',
+        'ai_analyzed_at',
     ];
 
     protected function casts(): array
@@ -39,6 +41,7 @@ class Track extends Model
             'published' => 'boolean',
             'published_at' => 'datetime',
             'metadata' => 'array',
+            'ai_analyzed_at' => 'datetime',
         ];
     }
 
@@ -53,6 +56,14 @@ class Track extends Model
             ->withPivot('position')
             ->withTimestamps()
             ->orderByPivot('position');
+    }
+
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'track_tag')
+            ->withPivot('category')
+            ->withTimestamps()
+            ->orderBy('name');
     }
 
     #[Scope]

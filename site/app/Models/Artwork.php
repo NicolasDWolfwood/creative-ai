@@ -77,6 +77,13 @@ class Artwork extends Model
         return $this->belongsTo(Collection::class);
     }
 
+    public function collections(): BelongsToMany
+    {
+        return $this->belongsToMany(Collection::class)
+            ->withTimestamps()
+            ->orderBy('sort_order');
+    }
+
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class)

@@ -4,6 +4,10 @@ namespace App\Filament\Resources\Tracks;
 
 use App\Filament\Resources\Tracks\Pages\ManageTracks;
 use App\Models\Track;
+use App\Services\SmartPlaylistService;
+use App\Services\TrackAiMetadataService;
+use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -14,6 +18,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
@@ -26,9 +31,11 @@ class TrackResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-musical-note';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Music';
+    protected static string|\UnitEnum|null $navigationGroup = 'Music Library';
 
     protected static ?int $navigationSort = 10;
+
+    protected static ?string $navigationLabel = 'Track library';
 
     protected static ?string $recordTitleAttribute = 'title';
 
@@ -53,6 +60,15 @@ class TrackResource extends Resource
                 ->downloadable()
                 ->required(),
             Textarea::make('description')->rows(3)->columnSpanFull(),
+            Select::make('tags')
+                ->relationship('tags', 'name')
+                ->multiple()
+                ->searchable()
+                ->preload()
+                ->createOptionForm([
+                    TextInput::make('name')->required()->maxLength(80),
+                ])
+                ->columnSpanFull(),
             TextInput::make('duration_seconds')->numeric(),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
@@ -68,14 +84,27 @@ class TrackResource extends Resource
             ->columns([
                 TextColumn::make('title')->searchable()->sortable(),
                 TextColumn::make('artist')->searchable()->sortable(),
-                TextColumn::make('duration_seconds')->label('Duration')->sortable(),
-                TextColumn::make('sort_order')->sortable(),
+                TextColumn::make('tags.name')->label('Tags')->badge()->limitList(4),
+                TextColumn::make('playlists_count')->counts('playlists')->label('Playlists')->sortable(),
+                TextColumn::make('duration_seconds')->label('Duration')->sortable()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('sort_order')->sortable()->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('featured')->boolean(),
                 IconColumn::make('published')->boolean(),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                ActionGroup::make([
+                    Action::make('generateTags')
+                        ->label('Generate tags with AI')
+                        ->icon('heroicon-o-sparkles')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->action(function (Track $record): void {
+                            $record = app(TrackAiMetadataService::class)->analyzeAndApply($record);
+                            Notification::make()->success()->title($record->tags->count().' track tags applied')->send();
+                        }),
+                    EditAction::make()->after(fn () => app(SmartPlaylistService::class)->syncAutomatic()),
+                    DeleteAction::make(),
+                ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Track actions'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

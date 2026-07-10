@@ -4,14 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Artwork;
 use App\Models\Collection;
-use App\Models\Playlist;
+use App\Models\Post;
 use App\Models\SiteSetting;
 use App\Models\Tag;
+use App\Services\PublicMediaService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class ShowcaseController extends Controller
 {
+    public function __construct(protected PublicMediaService $media) {}
+
     public function index(Request $request): View
     {
         return $this->renderShowcase(selectedTagSlug: $request->query('tag'));
@@ -32,60 +36,50 @@ class ShowcaseController extends Controller
     protected function renderShowcase(?Collection $selectedCollection = null, int $limit = 72, ?string $selectedTagSlug = null): View
     {
         $intro = SiteSetting::query()->where('key', 'home_intro')->first()?->value ?: [
-            'title' => 'Creative Thoughts',
-            'body' => 'A site made out of love for creating art with ComfyUI and Automatic1111.',
+            'title' => 'Creative-Ai',
+            'body' => 'A living archive of generative artwork, visual experiments, and original sound.',
         ];
-
-        $selectedTag = $selectedTagSlug
-            ? Tag::query()->where('slug', $selectedTagSlug)->first()
-            : null;
-
+        $selectedTag = $selectedTagSlug ? Tag::query()->where('slug', $selectedTagSlug)->first() : null;
         $artworksQuery = Artwork::query()
             ->published()
-            ->with(['collection', 'tags'])
+            ->with(['collections', 'tags'])
             ->orderByDesc('sort_order')
             ->latest();
 
         if ($selectedCollection) {
-            $artworksQuery->whereBelongsTo($selectedCollection);
+            $artworksQuery->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
         }
 
         if ($selectedTag) {
-            $artworksQuery->whereHas('tags', fn ($query) => $query->whereKey($selectedTag->getKey()));
+            $artworksQuery->whereHas('tags', fn (Builder $query) => $query->whereKey($selectedTag->getKey()));
         }
 
         $artworks = $artworksQuery->limit($limit)->get();
         $heroArtwork = $artworks->first()
             ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
-
         $collections = Collection::query()
             ->published()
+            ->with(['artworks' => fn ($query) => $query->published()->limit(1)])
             ->withCount(['artworks' => fn ($query) => $query->published()])
             ->orderByDesc('featured')
             ->orderBy('sort_order')
             ->get();
-
         $tags = Tag::query()
-            ->whereHas('artworks', function ($query) use ($selectedCollection): void {
+            ->whereHas('artworks', function (Builder $query) use ($selectedCollection): void {
                 $query->published();
 
                 if ($selectedCollection) {
-                    $query->whereBelongsTo($selectedCollection);
+                    $query->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
                 }
             })
-            ->orderBy('name')
-            ->limit(48)
+            ->withCount(['artworks' => fn ($query) => $query->published()])
+            ->orderByDesc('artworks_count')
+            ->limit(36)
             ->get();
-
-        $playlists = Playlist::query()
-            ->published()
-            ->with([
-                'coverArtwork',
-                'tracks' => fn ($query) => $query->published()->with('coverArtwork'),
-            ])
-            ->orderByDesc('featured')
-            ->orderBy('sort_order')
-            ->get();
+        $playlists = $this->media->playlists();
+        $posts = Post::query()->published()->orderByDesc('published_at')->limit(3)->get();
+        $pageTitle = $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : 'Creative-Ai');
+        $description = $selectedCollection?->description ?: ($intro['body'] ?? 'Generative art and original music by John Reijmer.');
 
         return view('showcase', [
             'intro' => $intro,
@@ -95,29 +89,17 @@ class ShowcaseController extends Controller
             'selectedTag' => $selectedTag,
             'tags' => $tags,
             'artworks' => $artworks,
+            'totalArtworkCount' => Artwork::query()->published()->count(),
             'playlists' => $playlists,
-            'playerPayload' => $this->playerPayload($playlists),
+            'posts' => $posts,
+            'playerPayload' => $this->media->playerPayload($playlists),
+            'seo' => [
+                'title' => $pageTitle === 'Creative-Ai' ? 'Creative-Ai | Generative Art and Original Music' : $pageTitle.' | Creative-Ai',
+                'description' => str($description)->squish()->limit(200, '')->toString(),
+                'image' => $heroArtwork ? url($heroArtwork->display_url) : null,
+                'canonical' => $selectedCollection ? route('collections.show', $selectedCollection) : request()->url(),
+                'type' => 'website',
+            ],
         ]);
-    }
-
-    protected function playerPayload($playlists): array
-    {
-        return $playlists
-            ->map(fn (Playlist $playlist) => [
-                'id' => $playlist->id,
-                'title' => $playlist->title,
-                'description' => $playlist->description,
-                'cover' => $playlist->cover_url,
-                'tracks' => $playlist->tracks->map(fn ($track) => [
-                    'id' => $track->id,
-                    'title' => $track->title,
-                    'artist' => $track->artist,
-                    'url' => $track->audio_url,
-                    'cover' => $track->cover_url ?: $playlist->cover_url,
-                ])->values(),
-            ])
-            ->filter(fn (array $playlist) => count($playlist['tracks']) > 0)
-            ->values()
-            ->all();
     }
 }

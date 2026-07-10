@@ -42,16 +42,37 @@ class OllamaClient
      */
     public function analyze(string $prompt, array $schema, array $analysisImage): array
     {
+        return $this->chat($prompt, $schema, [Str::after((string) $analysisImage['data_url'], ',')]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $schema
+     * @return array<string, mixed>
+     */
+    public function generateStructured(string $prompt, array $schema): array
+    {
+        return $this->chat($prompt, $schema);
+    }
+
+    /**
+     * @param  array<string, mixed>  $schema
+     * @param  array<int, string>  $images
+     * @return array<string, mixed>
+     */
+    protected function chat(string $prompt, array $schema, array $images = []): array
+    {
+        $message = ['role' => 'user', 'content' => $prompt];
+
+        if ($images !== []) {
+            $message['images'] = $images;
+        }
+
         $response = $this->client(timeout: $this->settings->ollamaRequestTimeout())
             ->retry(2, 750)
             ->post('api/chat', [
                 'model' => $this->settings->model(),
-                'messages' => [[
-                    'role' => 'user',
-                    'content' => $prompt,
-                    'images' => [Str::after((string) $analysisImage['data_url'], ',')],
-                ]],
-                'format' => $schema,
+                'messages' => [$message],
+                'format' => AiSchema::portable($schema),
                 'stream' => false,
                 'think' => false,
                 'keep_alive' => $this->settings->ollamaKeepAlive(),
@@ -118,6 +139,10 @@ class OllamaClient
             ->unique()
             ->values()
             ->all();
+
+        if (in_array('completion', $capabilities, true) && ! in_array('structured', $capabilities, true)) {
+            $capabilities[] = 'structured';
+        }
 
         $contextLength = (int) ($details['context_length'] ?? $this->findContextLength($modelInfo));
         $size = (int) ($model['size'] ?? 0);

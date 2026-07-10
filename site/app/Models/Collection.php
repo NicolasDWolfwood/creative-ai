@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Storage;
 
 class Collection extends Model
@@ -24,6 +24,10 @@ class Collection extends Model
         'featured',
         'published',
         'published_at',
+        'is_smart',
+        'smart_rules',
+        'auto_sync',
+        'last_synced_at',
     ];
 
     protected function casts(): array
@@ -32,12 +36,19 @@ class Collection extends Model
             'featured' => 'boolean',
             'published' => 'boolean',
             'published_at' => 'datetime',
+            'is_smart' => 'boolean',
+            'smart_rules' => 'array',
+            'auto_sync' => 'boolean',
+            'last_synced_at' => 'datetime',
         ];
     }
 
-    public function artworks(): HasMany
+    public function artworks(): BelongsToMany
     {
-        return $this->hasMany(Artwork::class)->orderBy('sort_order')->latest();
+        return $this->belongsToMany(Artwork::class)
+            ->withTimestamps()
+            ->orderByDesc('sort_order')
+            ->latest('artworks.created_at');
     }
 
     #[Scope]

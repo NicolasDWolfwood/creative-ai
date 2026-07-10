@@ -130,7 +130,7 @@ class ImportLegacyMedia extends Command
 
             [$width, $height] = getimagesize($file->getPathname()) ?: [null, null];
 
-            Artwork::query()->updateOrCreate(
+            $artwork = Artwork::query()->updateOrCreate(
                 ['original_filename' => $filename],
                 [
                     'collection_id' => $collection->id,
@@ -148,6 +148,7 @@ class ImportLegacyMedia extends Command
                     'published_at' => now(),
                 ],
             );
+            $artwork->collections()->syncWithoutDetaching([$collection->id]);
 
             $latestHero = $thumbPath;
             $count++;

@@ -9,6 +9,7 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -30,11 +31,13 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('Creative-Ai Studio')
             ->darkMode(true, true)
             ->sidebarCollapsibleOnDesktop()
+            ->maxContentWidth(Width::Full)
             ->navigationGroups([
                 'Showcase',
-                'Music',
+                'Music Library',
+                'Publishing',
                 'AI & Automation',
-                'Configuration',
+                'System',
             ])
             ->colors([
                 'primary' => Color::Teal,
