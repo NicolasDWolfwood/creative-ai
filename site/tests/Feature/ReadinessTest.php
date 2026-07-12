@@ -35,4 +35,31 @@ class ReadinessTest extends TestCase
             ->assertExactJson(['status' => 'unavailable'])
             ->assertDontSee('private connection detail');
     }
+
+    public function test_readiness_requires_the_private_storage_root(): void
+    {
+        $dataConnection = Mockery::mock();
+        $dataConnection->shouldReceive('ping')->once()->andReturn(true);
+        $cacheConnection = Mockery::mock();
+        $cacheConnection->shouldReceive('ping')->once()->andReturn(true);
+        Redis::shouldReceive('connection')->once()->withNoArgs()->andReturn($dataConnection);
+        Redis::shouldReceive('connection')->once()->with('cache')->andReturn($cacheConnection);
+
+        $privateStorage = storage_path('app/private');
+        $movedStorage = storage_path('app/private-readiness-test');
+
+        if (is_dir($movedStorage)) {
+            rmdir($movedStorage);
+        }
+
+        rename($privateStorage, $movedStorage);
+
+        try {
+            $this->get('/ready')
+                ->assertStatus(503)
+                ->assertExactJson(['status' => 'unavailable']);
+        } finally {
+            rename($movedStorage, $privateStorage);
+        }
+    }
 }

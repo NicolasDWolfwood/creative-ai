@@ -7,6 +7,7 @@ if [[ ! "${APP_KEY:-}" =~ ^base64:[A-Za-z0-9+/]{43}=$ ]]; then
 fi
 
 install -d -m 0775 -o www-data -g www-data \
+    storage/app/private \
     storage/app/public \
     storage/framework/cache/data \
     storage/framework/sessions \

@@ -17,8 +17,12 @@ class HealthController extends Controller
             Redis::connection()->ping();
             Redis::connection('cache')->ping();
 
-            if (! is_writable(storage_path('app/public'))) {
-                throw new RuntimeException('Persistent storage is not writable.');
+            foreach (['app/private', 'app/public'] as $storageDirectory) {
+                $path = storage_path($storageDirectory);
+
+                if (! is_dir($path) || ! is_writable($path)) {
+                    throw new RuntimeException('Persistent storage is not ready.');
+                }
             }
         } catch (Throwable) {
             return response()->json(['status' => 'unavailable'], 503);
