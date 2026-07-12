@@ -137,6 +137,10 @@
         </div>
     </section>
 
+    @if ($selectedCollection)
+        @include('partials.connected-stories', ['stories' => $collectionStories, 'headingId' => 'collection-stories-title'])
+    @endif
+
     <section class="music-section" id="music" aria-labelledby="music-title">
         <div class="section-inner music-layout">
             <header class="section-heading" data-reveal>

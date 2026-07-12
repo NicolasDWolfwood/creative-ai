@@ -57,7 +57,7 @@
                             <p class="eyebrow" id="artwork-tags-title">Tags</p>
                             <ul class="artwork-tag-list">
                                 @foreach ($artwork->tags as $tag)
-                                    <li>{{ $tag->name }}</li>
+                                    <li><a href="{{ route('tags.show', $tag) }}" wire:navigate>{{ $tag->name }}</a></li>
                                 @endforeach
                             </ul>
                         </section>
@@ -122,4 +122,6 @@
         </section>
     @endif
 </article>
+
+@include('partials.connected-stories', ['stories' => $stories, 'headingId' => 'artwork-stories-title'])
 @endsection

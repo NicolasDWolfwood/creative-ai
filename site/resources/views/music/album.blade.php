@@ -17,6 +17,7 @@
             <p>{{ $album->artist ?: $album->album_artist ?: 'Creative-Ai' }}@if ($album->release_year) · {{ $album->release_year }}@endif</p>
             <p class="album-summary">{{ $album->tracks->count() }} {{ str('track')->plural($album->tracks->count()) }}@if ($albumDuration > 0) · {{ gmdate($albumDuration >= 3600 ? 'G:i:s' : 'i:s', $albumDuration) }}@endif</p>
             @if ($album->description)<p class="album-description">{{ $album->description }}</p>@endif
+            @include('partials.public-tags', ['tags' => $musicTags, 'label' => 'Album tags'])
             @if ($album->tracks->isNotEmpty())
                 <button class="button button-primary" type="button" data-playlist-id="album-{{ $album->id }}" aria-label="Play album {{ $album->title }}"><i data-lucide="play"></i>Play album</button>
             @else
@@ -48,4 +49,5 @@
         </ol>
     </section>
 </section>
+@include('partials.connected-stories', ['stories' => $stories, 'headingId' => 'album-stories-title'])
 @endsection

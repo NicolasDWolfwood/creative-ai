@@ -24,12 +24,15 @@
                 @else
                     <span class="post-reading-time">{{ $post->reading_minutes }} min read</span>
                 @endif
+                @include('partials.public-tags', ['tags' => $post->tags, 'label' => 'Journal tags'])
             </div>
         </header>
         <div class="post-body" data-reveal>
             {!! Str::markdown((string) $post->body, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}
         </div>
     </article>
+
+    @include('partials.connected-media', ['connectedMedia' => $connectedMedia ?? collect()])
 
     @if ($morePosts->isNotEmpty())
         <section class="more-posts section-inner">

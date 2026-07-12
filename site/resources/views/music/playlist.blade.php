@@ -28,6 +28,7 @@
             @if ($playlist->description)
                 <p class="album-description">{{ $playlist->description }}</p>
             @endif
+            @include('partials.public-tags', ['tags' => $musicTags, 'label' => 'Playlist tags'])
             @if ($playlist->tracks->isNotEmpty())
                 <button class="button button-primary" type="button" data-playlist-id="playlist-{{ $playlist->id }}" aria-label="Play playlist {{ $playlist->title }}"><i data-lucide="play"></i>Play playlist</button>
             @else
@@ -59,4 +60,5 @@
         </ol>
     </section>
 </article>
+@include('partials.connected-stories', ['stories' => $stories, 'headingId' => 'playlist-stories-title'])
 @endsection

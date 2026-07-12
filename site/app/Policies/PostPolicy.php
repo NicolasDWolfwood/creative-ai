@@ -62,6 +62,11 @@ class PostPolicy
         return $this->isAdministrator($user);
     }
 
+    public function manageConnections(User $user, Post $post): bool
+    {
+        return $this->isAdministrator($user);
+    }
+
     public function markReady(User $user, Post $post): bool
     {
         return $this->isAdministrator($user);

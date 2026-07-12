@@ -169,6 +169,10 @@ Scheduling is query-driven: a valid Scheduled post becomes publicly effective wh
 
 The lifecycle migration keeps the former `published` and `published_at` fields synchronized as a temporary old-image compatibility mirror. Leave the expand-compatible migration applied during an image rollback, and treat Journal publication controls as read-only until the current image is restored. An older image does not know how to update the new workflow state.
 
+Journal stories can also carry shared archive tags and an explicit ordered set of artwork, collections, albums, playlists, and tracks. Administrators manage these on the post's separate **Connections** page, where draft sources remain visible for planning but are labelled private. Public story pages, reciprocal media links, structured data, shared `/tags/{slug}` archives, and sitemap entries all use the canonical publication checks on both sides, so a public story never exposes a draft or future source and private stories never appear on media pages. Removing a connection never deletes its source record or files.
+
+The connected-stories migration is additive: it creates only relation tables and can remain applied during an image rollback. An older image simply ignores those relations. Avoid editing connections while that image is running because it cannot display or maintain them.
+
 ## Music library workflow
 
 The track library supports single-file creation and multi-file audio import. Imports read embedded audio metadata (including title, artist, album, album artist, genre, year, disc/track number, duration, and embedded cover art) and fall back to common filename patterns when tags are absent. Explicitly entered values are never overwritten. Bulk imports default to not being published as standalone tracks and retain an operator-visible metadata review state. Automatically detected albums begin as drafts; forcing files into an already-published album makes those tracks immediately publicly playable through that album.

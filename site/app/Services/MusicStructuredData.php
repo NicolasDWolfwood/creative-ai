@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\Artwork;
 use App\Models\Playlist;
 use App\Models\Track;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -13,6 +14,10 @@ use InvalidArgumentException;
 class MusicStructuredData
 {
     private const CREATOR_NAME = 'John Reijmer';
+
+    public function __construct(
+        private readonly PublicStoryConnections $connections,
+    ) {}
 
     /** @return array<string, mixed> */
     public function forAlbum(Album $album): array
@@ -23,6 +28,7 @@ class MusicStructuredData
             'coverArtwork',
             'tracks' => fn ($query) => $query->publiclyAvailable(),
             'tracks.coverArtwork',
+            'tracks.tags',
             'tracks.playlists' => fn ($query) => $query->published(),
         ]);
 
@@ -46,6 +52,8 @@ class MusicStructuredData
                 'datePublished' => $album->published_at?->toIso8601String(),
                 'numTracks' => $tracks->count(),
                 'track' => ['@id' => $listId],
+                'keywords' => $tracks->flatMap->tags->pluck('name')->unique()->values()->all(),
+                'subjectOf' => $this->postReferences($album),
             ]),
             $this->trackList($listId, $tracks),
         ];
@@ -67,6 +75,7 @@ class MusicStructuredData
         $track->loadMissing([
             'album.coverArtwork',
             'coverArtwork',
+            'tags',
             'playlists' => fn ($query) => $query->published(),
         ]);
 
@@ -75,7 +84,7 @@ class MusicStructuredData
         $playlists = $this->publicPlaylists($track->playlists);
 
         return $this->document([
-            $this->recording($track, $album, $playlists),
+            $this->recording($track, $album, $playlists, $this->connections->postsForMedia($track)),
             $this->audio($track),
             $this->creator(),
         ]);
@@ -91,6 +100,7 @@ class MusicStructuredData
             'tracks' => fn ($query) => $query->publiclyAvailable(),
             'tracks.album.coverArtwork',
             'tracks.coverArtwork',
+            'tracks.tags',
         ]);
 
         /** @var Collection<int, Track> $tracks */
@@ -112,6 +122,8 @@ class MusicStructuredData
                 'datePublished' => $playlist->published_at?->toIso8601String(),
                 'numTracks' => $tracks->count(),
                 'track' => ['@id' => $listId],
+                'keywords' => $tracks->flatMap->tags->pluck('name')->unique()->values()->all(),
+                'subjectOf' => $this->postReferences($playlist),
             ]),
             $this->trackList($listId, $tracks),
         ];
@@ -164,7 +176,7 @@ class MusicStructuredData
      * @param  Collection<int, Playlist>  $playlists
      * @return array<string, mixed>
      */
-    private function recording(Track $track, ?Album $album, Collection $playlists): array
+    private function recording(Track $track, ?Album $album, Collection $playlists, ?Collection $stories = null): array
     {
         $duration = $this->duration($track->duration_seconds);
         $playlistReferences = $playlists
@@ -186,7 +198,23 @@ class MusicStructuredData
             'audio' => ['@id' => $this->audioId($track)],
             'inAlbum' => $album ? $this->albumReference($album) : null,
             'inPlaylist' => $playlistReferences,
+            'keywords' => $track->tags->pluck('name')->values()->all(),
+            'subjectOf' => $stories?->map(fn ($post): array => [
+                '@id' => route('posts.show', $post).'#article',
+            ])->values()->all(),
         ]);
+    }
+
+    /** @return array<int, array<string, string>> */
+    private function postReferences(Model $media): array
+    {
+        return $this->connections
+            ->postsForMedia($media)
+            ->map(fn ($post): array => [
+                '@id' => route('posts.show', $post).'#article',
+            ])
+            ->values()
+            ->all();
     }
 
     /** @return array<string, mixed> */

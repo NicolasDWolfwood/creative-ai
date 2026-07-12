@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Artwork;
 use App\Services\CrossMediaRecommendationService;
 use App\Services\PublicMediaService;
+use App\Services\PublicStoryConnections;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
@@ -15,6 +16,7 @@ class ArtworkController extends Controller
         Artwork $artwork,
         PublicMediaService $media,
         CrossMediaRecommendationService $recommendations,
+        PublicStoryConnections $storyConnections,
     ): View {
         abort_unless($artwork->isPubliclyPublished(), 404);
 
@@ -49,6 +51,7 @@ class ArtworkController extends Controller
         }
 
         $canonical = route('artworks.show', $artwork);
+        $stories = $storyConnections->postsForMedia($artwork);
         $imageUrl = url($artwork->public_image_url);
         $description = Str::of($artwork->description ?: 'A generative artwork from the Creative-Ai archive.')
             ->stripTags()
@@ -80,6 +83,10 @@ class ArtworkController extends Controller
                     'dateCreated' => $artwork->generated_at?->toIso8601String() ?: $artwork->created_at?->toIso8601String(),
                     'datePublished' => $artwork->published_at?->toIso8601String(),
                     'keywords' => $artwork->tags->pluck('name')->implode(', ') ?: null,
+                    'subjectOf' => $stories
+                        ->map(fn ($post): array => ['@id' => route('posts.show', $post).'#article'])
+                        ->values()
+                        ->all() ?: null,
                 ], fn (mixed $value): bool => $value !== null && $value !== ''),
                 $imageObject,
             ],
@@ -87,6 +94,7 @@ class ArtworkController extends Controller
 
         return view('artworks.show', [
             'artwork' => $artwork,
+            'stories' => $stories,
             'previousArtwork' => $this->adjacentArtwork($artwork, before: true),
             'nextArtwork' => $this->adjacentArtwork($artwork, before: false),
             'tracks' => $tracks,

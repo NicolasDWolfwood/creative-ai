@@ -8,6 +8,8 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class Post extends Model
@@ -76,6 +78,18 @@ class Post extends Model
                 $post->public_content_updated_at = $post->getOriginal('public_content_updated_at');
             }
         });
+    }
+
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class, 'post_tag')
+            ->withTimestamps()
+            ->orderBy('name');
+    }
+
+    public function mediaItems(): HasMany
+    {
+        return $this->hasMany(PostMedia::class)->orderBy('position');
     }
 
     public function scopePublished(Builder $query, ?CarbonInterface $at = null): Builder

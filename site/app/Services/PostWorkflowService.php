@@ -15,6 +15,7 @@ class PostWorkflowService
 {
     public function __construct(
         private readonly PostReadiness $readiness,
+        private readonly PostConnectionService $connections,
     ) {}
 
     public function markReady(Post $post): Post
@@ -120,9 +121,14 @@ class PostWorkflowService
 
         return DB::transaction(function () use ($post, $callback): Post {
             $locked = Post::query()->lockForUpdate()->findOrFail($post->getKey());
+            $wasPublic = $locked->isPubliclyPublishedAt();
 
             $callback($locked);
             $locked->saveOrFail();
+
+            if ($wasPublic !== $locked->isPubliclyPublishedAt()) {
+                $this->connections->touchConnectedMedia($locked);
+            }
 
             return $locked->refresh();
         }, 3);

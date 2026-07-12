@@ -20,6 +20,7 @@
         @if ($track->description)
             <p class="track-description">{{ $track->description }}</p>
         @endif
+        @include('partials.public-tags', ['tags' => $musicTags, 'label' => 'Track tags'])
         <button class="button button-primary" type="button" data-playlist-id="track-{{ $track->id }}" aria-label="Play {{ $track->title }}"><i data-lucide="play"></i>Play track</button>
     </header>
 
@@ -54,4 +55,5 @@
         </section>
     @endif
 </article>
+@include('partials.connected-stories', ['stories' => $stories, 'headingId' => 'track-stories-title'])
 @endsection

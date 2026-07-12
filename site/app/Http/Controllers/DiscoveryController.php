@@ -8,6 +8,8 @@ use App\Models\Collection;
 use App\Models\Playlist;
 use App\Models\Post;
 use App\Models\Track;
+use App\Services\PublicStoryConnections;
+use App\Services\SharedTagPageService;
 use Illuminate\Http\Response;
 
 class DiscoveryController extends Controller
@@ -29,8 +31,10 @@ class DiscoveryController extends Controller
         return response($contents)->header('Content-Type', 'text/plain; charset=UTF-8');
     }
 
-    public function sitemap(): Response
-    {
+    public function sitemap(
+        SharedTagPageService $tagPages,
+        PublicStoryConnections $storyConnections,
+    ): Response {
         return response()->view('discovery.sitemap', [
             'artworks' => Artwork::query()
                 ->published()
@@ -56,6 +60,8 @@ class DiscoveryController extends Controller
                 ->orderBy('id')
                 ->get(),
             'posts' => Post::query()->latestPublished()->get(),
+            'tags' => $tagPages->publicTags(),
+            'storyLastModified' => $storyConnections->latestPostUpdatesByMedia(),
         ])->header('Content-Type', 'application/xml');
     }
 

@@ -6,6 +6,7 @@ use App\Enums\PostStatus;
 use App\Filament\Resources\Posts\Pages\CreatePost;
 use App\Filament\Resources\Posts\Pages\EditPost;
 use App\Filament\Resources\Posts\Pages\ListPosts;
+use App\Filament\Resources\Posts\Pages\ManagePostConnections;
 use App\Models\Post;
 use App\Services\PostReadiness;
 use App\Services\PostWorkflowService;
@@ -26,6 +27,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Resources\Pages\Page;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -150,6 +152,16 @@ class PostResource extends Resource
                         $record->effectiveStatusAt() === PostStatus::Published => 'Published',
                         default => null,
                     }),
+                TextColumn::make('tags.name')
+                    ->label('Tags')
+                    ->badge()
+                    ->limitList(3)
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('media_items_count')
+                    ->counts('mediaItems')
+                    ->label('Media')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('featured')->boolean(),
             ])
             ->filters([
@@ -163,6 +175,11 @@ class PostResource extends Resource
                         PostStatus::tryFrom((string) ($data['value'] ?? '')),
                     )),
                 TernaryFilter::make('featured'),
+                SelectFilter::make('tags')
+                    ->relationship('tags', 'name')
+                    ->multiple()
+                    ->searchable()
+                    ->preload(),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -443,6 +460,15 @@ class PostResource extends Resource
             'index' => ListPosts::route('/'),
             'create' => CreatePost::route('/create'),
             'edit' => EditPost::route('/{record}/edit'),
+            'connections' => ManagePostConnections::route('/{record}/connections'),
         ];
+    }
+
+    public static function getRecordSubNavigation(Page $page): array
+    {
+        return $page->generateNavigationItems([
+            EditPost::class,
+            ManagePostConnections::class,
+        ]);
     }
 }

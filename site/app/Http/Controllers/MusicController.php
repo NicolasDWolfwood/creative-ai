@@ -8,6 +8,7 @@ use App\Models\Track;
 use App\Services\CrossMediaRecommendationService;
 use App\Services\MusicStructuredData;
 use App\Services\PublicMediaService;
+use App\Services\PublicStoryConnections;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -77,6 +78,7 @@ class MusicController extends Controller
         Album $album,
         PublicMediaService $media,
         MusicStructuredData $structuredData,
+        PublicStoryConnections $storyConnections,
     ): View {
         abort_unless($album->isPubliclyPublished(), 404);
         $album->load([
@@ -85,9 +87,13 @@ class MusicController extends Controller
         ]);
 
         $canonical = route('music.albums.show', $album);
+        $stories = $storyConnections->postsForMedia($album);
+        $musicTags = $album->tracks->flatMap->tags->unique('id')->sortBy('name')->values();
 
         return view('music.album', [
             'album' => $album,
+            'stories' => $stories,
+            'musicTags' => $musicTags,
             'playerPayload' => $media->libraryPlayerPayload(),
             'seo' => [
                 'title' => $album->title.' | Creative-Ai',
@@ -112,6 +118,7 @@ class MusicController extends Controller
         Playlist $playlist,
         PublicMediaService $media,
         MusicStructuredData $structuredData,
+        PublicStoryConnections $storyConnections,
     ): View {
         abort_unless($playlist->isPubliclyPublished(), 404);
         $playlist->load([
@@ -122,9 +129,13 @@ class MusicController extends Controller
         ]);
 
         $canonical = route('music.playlists.show', $playlist);
+        $stories = $storyConnections->postsForMedia($playlist);
+        $musicTags = $playlist->tracks->flatMap->tags->unique('id')->sortBy('name')->values();
 
         return view('music.playlist', [
             'playlist' => $playlist,
+            'stories' => $stories,
+            'musicTags' => $musicTags,
             'playerPayload' => $media->libraryPlayerPayload(),
             'seo' => [
                 'title' => $playlist->title.' | Creative-Ai',
@@ -149,6 +160,7 @@ class MusicController extends Controller
         PublicMediaService $media,
         CrossMediaRecommendationService $recommendations,
         MusicStructuredData $structuredData,
+        PublicStoryConnections $storyConnections,
     ): View {
         abort_unless($track->isPubliclyAvailable(), 404);
         $track->load([
@@ -164,6 +176,8 @@ class MusicController extends Controller
 
         return view('music.track', [
             'track' => $track,
+            'stories' => $storyConnections->postsForMedia($track),
+            'musicTags' => $track->tags,
             'artworks' => $recommendations->artworksForTrack($track),
             'playlists' => $track->playlists,
             'playerPayload' => [...$media->libraryPlayerPayload(), $playlist],
