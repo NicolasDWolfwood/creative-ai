@@ -16,6 +16,8 @@
     --header-height: 76px;
 }
 
+.music-filters{display:flex;gap:.75rem;margin:1.5rem 0}.music-filters input{flex:1;padding:.9rem;border:1px solid var(--line);background:var(--panel);color:inherit}.track-list{display:grid;gap:.5rem;margin:2rem 0}.track-list article{display:flex;align-items:center;gap:1rem;padding:1rem;border-bottom:1px solid var(--line)}.track-list article div{display:grid;flex:1}.track-list article span{opacity:.65}.music-hero-cover{width:min(22rem,100%);aspect-ratio:1;object-fit:cover;display:block;margin:1.5rem 0}
+
 * {
     box-sizing: border-box;
 }

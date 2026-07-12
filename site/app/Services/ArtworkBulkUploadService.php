@@ -8,11 +8,6 @@ use Illuminate\Support\Str;
 
 class ArtworkBulkUploadService
 {
-    public function __construct(
-        protected AiSettings $settings,
-        protected ArtworkAiQueueService $queue,
-    ) {}
-
     /**
      * @param  array<int, string>  $paths
      * @param  array<string, string>  $originalNames
@@ -39,7 +34,7 @@ class ArtworkBulkUploadService
                 ->limit(120, '')
                 ->toString();
 
-            $artwork = Artwork::query()->create([
+            $artwork = new Artwork([
                 'collection_id' => $collectionIds[0] ?? null,
                 'title' => $title ?: 'Untitled Artwork',
                 'image_path' => $path,
@@ -48,12 +43,10 @@ class ArtworkBulkUploadService
                 'published' => $published,
                 'published_at' => $published ? now() : null,
             ]);
+            $artwork->analyzeAfterVariantGeneration = $analyze;
+            $artwork->save();
 
             $artwork->collections()->sync($collectionIds);
-
-            if ($analyze && ! $this->settings->autoAnalyzeUploads()) {
-                $this->queue->queue($artwork);
-            }
 
             $created->push($artwork);
         }

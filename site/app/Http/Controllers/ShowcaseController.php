@@ -7,6 +7,7 @@ use App\Models\Collection;
 use App\Models\Post;
 use App\Models\SiteSetting;
 use App\Models\Tag;
+use App\Services\CollectionCoverService;
 use App\Services\PublicMediaService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,7 +15,10 @@ use Illuminate\Http\Request;
 
 class ShowcaseController extends Controller
 {
-    public function __construct(protected PublicMediaService $media) {}
+    public function __construct(
+        protected PublicMediaService $media,
+        protected CollectionCoverService $collectionCovers,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -59,11 +63,13 @@ class ShowcaseController extends Controller
             ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
         $collections = Collection::query()
             ->published()
-            ->with(['artworks' => fn ($query) => $query->published()->limit(1)])
+            ->with(['artworks' => fn ($query) => $query->published()->where('featured', true)])
             ->withCount(['artworks' => fn ($query) => $query->published()])
             ->orderByDesc('featured')
             ->orderBy('sort_order')
+            ->orderBy('id')
             ->get();
+        $collectionCovers = $this->collectionCovers->select($collections);
         $tags = Tag::query()
             ->whereHas('artworks', function (Builder $query) use ($selectedCollection): void {
                 $query->published();
@@ -77,6 +83,7 @@ class ShowcaseController extends Controller
             ->limit(36)
             ->get();
         $playlists = $this->media->playlists();
+        $albums = $this->media->albums();
         $posts = Post::query()->published()->orderByDesc('published_at')->limit(3)->get();
         $pageTitle = $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : 'Creative-Ai');
         $description = $selectedCollection?->description ?: ($intro['body'] ?? 'Generative art and original music by John Reijmer.');
@@ -85,14 +92,17 @@ class ShowcaseController extends Controller
             'intro' => $intro,
             'heroArtwork' => $heroArtwork,
             'collections' => $collections,
+            'collectionCovers' => $collectionCovers,
+            'collectionCoverPlaceholder' => asset(CollectionCoverService::PLACEHOLDER_PATH),
             'selectedCollection' => $selectedCollection,
             'selectedTag' => $selectedTag,
             'tags' => $tags,
             'artworks' => $artworks,
             'totalArtworkCount' => Artwork::query()->published()->count(),
             'playlists' => $playlists,
+            'albums' => $albums,
             'posts' => $posts,
-            'playerPayload' => $this->media->playerPayload($playlists),
+            'playerPayload' => $this->media->playerPayload($playlists, $albums),
             'seo' => [
                 'title' => $pageTitle === 'Creative-Ai' ? 'Creative-Ai | Generative Art and Original Music' : $pageTitle.' | Creative-Ai',
                 'description' => str($description)->squish()->limit(200, '')->toString(),

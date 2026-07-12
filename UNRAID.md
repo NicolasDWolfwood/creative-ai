@@ -171,7 +171,7 @@ For Nginx Proxy Manager or Nginx Proxy Manager Plus, create or edit a **Proxy Ho
 
 When the canonical public hostname uses `www`, create a separate **Redirection Host** for the apex domain. Redirect it permanently (`301`) to the canonical HTTPS hostname, preserve the path and query string, and select a certificate that explicitly covers the apex name. A wildcard certificate alone does not cover the apex domain.
 
-Keep proxy request-body and timeout limits aligned with the container's PHP upload limits. The current known limit mismatch is tracked in [PROJECT_STATUS.md](PROJECT_STATUS.md); increasing only the proxy limit does not increase PHP's accepted upload size.
+Set the proxy request-body limit to at least `105 MiB` and allow enough request time for the available upstream bandwidth. The application accepts individual music files up to `100 MiB`; the additional request capacity covers multipart form overhead. Increasing only the proxy limit does not increase PHP's accepted upload size.
 
 The proxy must replace client-supplied forwarded headers and set at least:
 
@@ -198,8 +198,9 @@ After a pull request is merged and its push-triggered `main` workflow succeeds:
 3. Replace only `CREATIVE_AI_IMAGE` in the staging `.env` tab and apply it.
 4. Run Compose Up. It pulls the missing exact digest before creating the containers. A separate Compose Pull is unnecessary; do not use Restart because Restart does not apply changed Compose or environment values.
 5. Confirm migration exited `0`, website is healthy, and worker is running.
-6. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job.
-7. Verify the staging response is still private and non-indexable.
+6. When the release introduces image-variant tracking, or the artwork table shows pending or failed image sizes, open the website container console and run `gosu www-data php artisan creative-ai:artwork-variants:regenerate`. Leave the worker running, wait until the Image status badges settle, and investigate any recorded failure before promotion.
+7. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job.
+8. Verify the staging response is still private and non-indexable.
 
 If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible.
 
@@ -255,7 +256,8 @@ If any check fails, restore the old Proxy Host upstream first. This returns traf
 4. Replace `CREATIVE_AI_IMAGE` with the complete approved staging image reference.
 5. Run Compose Up; Compose pulls the missing approved digest automatically.
 6. Confirm migration exited `0`, web is healthy, and worker is running.
-7. Verify HTTPS, login, media, uploads, indexing, and a queued job.
+7. When the release introduces image-variant tracking, or the artwork table shows pending or failed image sizes, open the website container console and run `gosu www-data php artisan creative-ai:artwork-variants:regenerate`. Leave the worker running, wait until the Image status badges settle, and investigate any recorded failure before continuing.
+8. Verify HTTPS, login, original/display/thumbnail media, uploads, indexing, and a queued job.
 
 This deliberately uses a short maintenance window in exchange for a small and understandable deployment process.
 

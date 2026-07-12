@@ -75,7 +75,11 @@ class AiQueueResource extends Resource
             ->poll('3s')
             ->defaultSort('ai_queued_at')
             ->columns([
-                ImageColumn::make('thumb_path')->disk('public')->square()->label('Preview'),
+                ImageColumn::make('thumb_path')
+                    ->getStateUsing(fn (Artwork $record): string => $record->availableThumbPath())
+                    ->disk('public')
+                    ->square()
+                    ->label('Preview'),
                 TextColumn::make('title')->searchable()->sortable(),
                 TextColumn::make('collection.title')->label('Collection')->sortable(),
                 TextColumn::make('ai_status')

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Artworks\Pages;
 use App\Filament\Resources\Artworks\ArtworkResource;
 use App\Models\Artwork;
 use App\Models\Collection;
+use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkUploadService;
@@ -107,6 +108,8 @@ class ManageArtworks extends ManageRecords
                         ->storeFileNamesIn('original_names')
                         ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                         ->maxSize(25600)
+                        ->rules([new SafeArtworkImageDimensions])
+                        ->helperText('Each JPEG, PNG, or WebP may be up to 25 MiB and 20 megapixels.')
                         ->required()
                         ->columnSpanFull(),
                     Select::make('collection_ids')

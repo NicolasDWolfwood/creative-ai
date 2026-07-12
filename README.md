@@ -35,6 +35,8 @@ docker run --rm php:8.3-cli php -r 'echo "base64:".base64_encode(random_bytes(32
 
 Paste the generated value into `APP_KEY` in `.env`. The tracked example uses `dev.example.test`; either map that hostname to `127.0.0.1` or change `APP_URL` and `TRUSTED_HOSTS` to `localhost`.
 
+The website port binds to `127.0.0.1` by default. When a reverse proxy on another host or container must reach the development stack, set `DEV_HTTP_BIND=0.0.0.0`, keep `DEV_HTTP_PORT` on the intended development port, and point the proxy upstream at the Docker host's LAN address and that port. Set `APP_URL` and `TRUSTED_HOSTS` to the HTTPS development hostname, trust only the proxy address seen by Laravel in `TRUSTED_PROXIES`, and enable `SESSION_SECURE_COOKIE`. Do not expose the development port directly to the internet; keep public access behind the reverse proxy.
+
 Build and start the complete stack:
 
 ```bash
@@ -59,6 +61,8 @@ docker compose up --build --detach --wait
 ```
 
 This deletes all local development data.
+
+Administration uploads accept music tracks up to 100 MiB. The image bakes in matching PHP and Livewire limits; any reverse proxy in front of the container must allow request bodies of at least 105 MiB as well.
 
 ## Editing and testing
 
@@ -133,6 +137,36 @@ The final administrator is protected unless `--allow-no-admin` is supplied delib
 Users, administrator status, content, AI provider selection, models, timeouts, and encrypted provider API keys are stored in PostgreSQL. `APP_KEY` encrypts saved credentials and must remain stable for the life of that environment.
 
 Only bootstrap and infrastructure values stay outside the database: image digest, `APP_KEY`, canonical URL, indexing policy, trusted hosts/proxies, PostgreSQL/Redis connections, storage mount, Docker network, and container address.
+
+## Artwork image variants
+
+New artwork uploads queue display and thumbnail generation on the `default` queue. Until that job completes, public and administrator previews fall back to the original image. Failed jobs are visible in the artwork table and can be retried there.
+
+After deploying the variant-tracking migration to an environment that already contains artwork, queue an idempotent backfill from the website container:
+
+```bash
+gosu www-data php artisan creative-ai:artwork-variants:regenerate
+```
+
+The normal worker consumes those jobs. Run the command with `--sync` only for deliberate foreground maintenance. It exits unsuccessfully when an original file is missing and records that failure on the artwork row; rerunning it leaves completed variants unchanged and recovers queued or processing work after the configurable stale interval.
+
+## Music library workflow
+
+The track library supports single-file creation and multi-file audio import. Imports read embedded audio metadata (including title, artist, album, album artist, genre, year, disc/track number, duration, and embedded cover art) and fall back to common filename patterns when tags are absent. Explicitly entered values are never overwritten. Bulk imports default to unpublished tracks with an operator-visible metadata review state.
+
+Albums are first-class records with intrinsic disc/track ordering, shared release metadata, embedded-cover fallback, and optional artwork-gallery covers. Published albums appear as listening sessions before playlists. Track and album actions can rank published artwork by shared music/artwork tags and show the matching tags and score before applying a cover.
+
+Manual playlists use a drag-sortable track sequence with duplicate prevention. Smart playlists can combine tags, artist, album, duration, release year, cover availability, analysis health, recency, ordering, and result limits. A smart result can be frozen as a manual snapshot. The playlist library mirrors artwork Collections with `Generate/Refresh automatic`, `Create with AI`, and `New playlist`: managed automatic playlists are derived from recurring genres and moods, while manual and custom smart playlists are preserved.
+
+Album identity is normalized from embedded album title and album-artist metadata, so tracks from one release—including compilations with different per-track artists—are grouped into one ordered album during import. The Albums library can also run `Organize from metadata` to consolidate older imports; curated records with descriptions or selected artwork are preserved.
+
+Publishing an album publishes every current track in that album, and tracks subsequently assigned to a published album inherit its public state. Unpublishing the album leaves track publication unchanged so those tracks can remain available through playlists. The public player groups its source selector into explicit Albums and Playlists sections.
+
+Audio uploads queue FFmpeg/FFprobe analysis for codec, bitrate, sample rate, channel count, duration, content hashes, duplicate warnings, and compact waveform data. Library health is visible and retryable from individual, selected, or whole-library actions. Albums expose their embedded cover preview and can explicitly prefer embedded, gallery, automatic, or no cover; embedded covers can be imported into the artwork library as drafts.
+
+The public `/music` listening room provides searchable track, album, and playlist discovery with dedicated album and track pages. Shared tags connect tracks to fitting artwork. The site-wide player continues uninterrupted across public collection, artwork, music, and journal navigation; it also persists the selected track, position, volume, shuffle/repeat settings, and queue across full reloads and displays precomputed waveforms before playback.
+
+The track library mirrors the artwork review workflow with `Analyze pending`, `Apply ready`, `Bulk upload`, and create actions. AI analysis is queued on the `ai` queue and stages tag suggestions for review unless automatic application is explicitly selected. The table also supports selected-track analysis/application, best-match artwork assignment, metadata review, and deletion; artwork assignment preserves existing manual covers unless replacement is explicitly enabled.
 
 ## Releases and Unraid
 

@@ -44,6 +44,7 @@ class AutomaticCollectionTest extends TestCase
 
         Collection::query()->where('is_auto_generated', true)->each(function (Collection $collection) use ($unapprovedPortrait): void {
             $this->assertTrue($collection->is_smart);
+            $this->assertNull($collection->hero_image_path);
             $this->assertTrue((bool) data_get($collection->smart_rules, 'only_ai_applied'));
             $this->assertFalse($collection->artworks()->whereKey($unapprovedPortrait->id)->exists());
             $this->assertSame(

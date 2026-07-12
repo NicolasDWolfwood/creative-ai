@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Filament\Facades\Filament;
 use Filament\Panel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +22,76 @@ class AdminManagementTest extends TestCase
         $this->assertTrue($admin->canAccessPanel($panel));
         $this->assertFalse($user->canAccessPanel($panel));
         $this->assertFalse($admin->canAccessPanel(Panel::make()->id('another-panel')));
+    }
+
+    public function test_only_authorized_administrators_see_the_public_admin_switch(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $user = User::factory()->create();
+        $adminUrl = Filament::getPanel('admin')->getUrl();
+        $adminLink = '<a href="'.$adminUrl.'">Admin</a>';
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertDontSee($adminLink, escape: false);
+
+        $this->actingAs($user)
+            ->get(route('home'))
+            ->assertOk()
+            ->assertDontSee($adminLink, escape: false);
+
+        $response = $this->actingAs($admin)->get(route('home'));
+
+        $response->assertOk()->assertSee($adminLink, escape: false);
+        $this->assertSame(2, substr_count($response->getContent(), $adminLink));
+    }
+
+    public function test_an_authenticated_non_administrator_cannot_open_the_admin_url(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/admin')
+            ->assertForbidden();
+    }
+
+    public function test_admin_user_menu_has_a_switch_back_to_the_public_site(): void
+    {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $viewSite = Filament::getPanel('admin')->getUserMenuItems()['viewSite'];
+
+        $this->assertSame('View site', $viewSite->getLabel());
+        $this->assertSame(route('home'), $viewSite->getUrl());
+    }
+
+    public function test_admin_theme_elevates_the_complete_open_select_stack_without_elevating_the_modal_footer(): void
+    {
+        $stylesheet = file_get_contents(resource_path('css/filament/admin.css'));
+
+        $this->assertIsString($stylesheet);
+        $this->assertMatchesRegularExpression(
+            "/\\.fi-grid-col:has\\(\\.fi-select-input-btn\\[aria-expanded='true'\\]\\),[^}]*position: relative;[^}]*z-index: 60;/s",
+            $stylesheet,
+        );
+        $this->assertMatchesRegularExpression(
+            "/\\.fi-fo-select-wrp:has\\(\\.fi-select-input-btn\\[aria-expanded='true'\\]\\) \\{[^}]*position: relative;[^}]*z-index: 60;/s",
+            $stylesheet,
+        );
+        $this->assertMatchesRegularExpression(
+            "/\\.fi-section:has\\(\\.fi-select-input-btn\\[aria-expanded='true'\\]\\) \\{[^}]*position: relative;[^}]*z-index: 50;/s",
+            $stylesheet,
+        );
+        $this->assertMatchesRegularExpression(
+            "/\\.fi-fo-select-wrp:has\\(\\.fi-select-input-btn\\[aria-expanded='true'\\]\\) \\.fi-dropdown-panel \\{[^}]*z-index: 60;[^}]*background: #11141a !important;[^}]*backdrop-filter: none;/s",
+            $stylesheet,
+        );
+        $this->assertStringNotContainsString(
+            ".fi-modal-content:has(.fi-select-input-btn[aria-expanded='true'])",
+            $stylesheet,
+        );
+        $this->assertStringNotContainsString(
+            ".fi-modal.fi-modal-has-sticky-footer:has(.fi-select-input-btn[aria-expanded='true'])",
+            $stylesheet,
+        );
     }
 
     public function test_create_command_creates_a_verified_administrator(): void

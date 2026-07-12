@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\AiConfiguration;
 use App\Jobs\AnalyzeArtworkWithAi;
+use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Playlist;
@@ -229,7 +230,12 @@ class PlatformExpansionTest extends TestCase
         $this->assertCount(2, $created);
         $this->assertSame(['First Vision', 'Second Vision'], Artwork::query()->orderBy('id')->pluck('title')->all());
         $this->assertSame(2, $collection->artworks()->count());
-        Queue::assertPushed(AnalyzeArtworkWithAi::class, 2);
+        $this->assertCount(2, Queue::pushed(
+            GenerateArtworkVariants::class,
+            fn (GenerateArtworkVariants $job): bool => $job->analyzeAfterGeneration,
+        ));
+        Queue::assertPushed(GenerateArtworkVariants::class, 2);
+        Queue::assertNotPushed(AnalyzeArtworkWithAi::class);
     }
 
     public function test_published_journal_post_has_public_page_feed_and_sitemap(): void

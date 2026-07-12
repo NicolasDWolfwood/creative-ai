@@ -15,7 +15,6 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -26,7 +25,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -48,17 +46,6 @@ class CollectionResource extends Resource
         return $schema->components([
             TextInput::make('title')->required()->maxLength(255),
             TextInput::make('slug')->maxLength(255)->helperText('Leave empty to generate from the title.'),
-            FileUpload::make('hero_image_path')
-                ->label('Hero image')
-                ->disk('public')
-                ->directory('collections/heroes')
-                ->visibility('public')
-                ->image()
-                ->imageEditor()
-                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
-                ->maxSize(25600)
-                ->openable()
-                ->downloadable(),
             Select::make('artworks')
                 ->relationship(
                     'artworks',
@@ -121,7 +108,6 @@ class CollectionResource extends Resource
         return $table
             ->defaultSort('sort_order')
             ->columns([
-                ImageColumn::make('hero_image_path')->disk('public')->square()->label('Hero'),
                 TextColumn::make('title')->searchable()->sortable(),
                 TextColumn::make('artworks_count')->counts('artworks')->label('Artwork')->sortable(),
                 TextColumn::make('is_auto_generated')
