@@ -48,6 +48,7 @@ class Artwork extends Model
         'description',
         'alt_text',
         'prompt',
+        'process_notes',
         'image_path',
         'display_path',
         'thumb_path',

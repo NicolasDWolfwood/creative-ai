@@ -65,7 +65,11 @@
                         <p class="gallery-active-filter">Filtered by <strong>{{ $selectedTag->name }}</strong></p>
                     @endif
                 </div>
-                <p>{{ $artworks->count() }} {{ str('frame')->plural($artworks->count()) }} in this view</p>
+                @if ($paginateArtwork)
+                    <p data-gallery-count data-gallery-total="{{ $archiveArtworkCount }}">{{ $artworks->count() }} of {{ number_format($archiveArtworkCount) }} {{ str('frame')->plural($archiveArtworkCount) }} loaded</p>
+                @else
+                    <p>{{ $artworks->count() }} {{ str('frame')->plural($artworks->count()) }} in this view</p>
+                @endif
             </header>
 
             @if ($collections->isNotEmpty() && request()->routeIs('gallery', 'collections.show'))
@@ -108,16 +112,28 @@
                 </nav>
             @endif
 
-            <div class="art-grid">
+            <div class="art-grid" data-gallery-results>
                 @forelse ($artworks as $artwork)
-                    <button class="art-tile" type="button" data-lightbox data-title="{{ $artwork->title }}" data-description="{{ $artwork->description }}" data-alt="{{ $artwork->image_alt }}" data-full="{{ $artwork->display_url }}">
-                        <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}">
-                        <span><strong>{{ $artwork->title }}</strong><small>{{ $artwork->tags->take(2)->pluck('name')->implode(' · ') }}</small></span>
-                    </button>
+                    <article class="art-tile" data-gallery-artwork-id="{{ $artwork->getKey() }}">
+                        <a class="art-tile-link" href="{{ route('artworks.show', $artwork) }}" wire:navigate>
+                            <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}">
+                            <span><strong>{{ $artwork->title }}</strong><small>{{ $artwork->tags->take(2)->pluck('name')->implode(' · ') }}</small></span>
+                        </a>
+                        <button class="art-quick-view" type="button" data-lightbox data-title="{{ $artwork->title }}" data-description="{{ $artwork->description }}" data-alt="{{ $artwork->image_alt }}" data-full="{{ $artwork->display_url }}" aria-label="Quick view {{ $artwork->title }}">
+                            <i data-lucide="expand"></i>
+                        </button>
+                    </article>
                 @empty
                     <p class="empty-state">No published artwork yet.</p>
                 @endforelse
             </div>
+
+            @if ($paginateArtwork && $artworks->hasMorePages())
+                <nav class="gallery-pagination" data-gallery-pagination aria-label="Artwork archive pages">
+                    <a class="button button-secondary" href="{{ $artworks->nextPageUrl() }}#gallery" data-gallery-load-more>Load more artwork</a>
+                    <p data-gallery-load-status aria-live="polite" aria-atomic="true"></p>
+                </nav>
+            @endif
         </div>
     </section>
 

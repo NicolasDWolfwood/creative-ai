@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Post;
 use Illuminate\Http\Response;
@@ -28,6 +29,12 @@ class DiscoveryController extends Controller
     public function sitemap(): Response
     {
         return response()->view('discovery.sitemap', [
+            'artworks' => Artwork::query()
+                ->published()
+                ->orderByDesc('sort_order')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->get(),
             'collections' => Collection::query()->published()->get(),
             'posts' => Post::query()->published()->get(),
         ])->header('Content-Type', 'application/xml');
