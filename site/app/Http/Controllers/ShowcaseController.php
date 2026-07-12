@@ -102,7 +102,7 @@ class ShowcaseController extends Controller
         $standaloneTracks = $this->media->standaloneTracks();
         $homeAlbums = $albums->take(4);
         $homePlaylists = $playlists->take(max(0, 6 - $homeAlbums->count()));
-        $posts = Post::query()->published()->orderByDesc('published_at')->limit(3)->get();
+        $posts = Post::query()->latestPublished()->limit(3)->get();
         $pageTitle = $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : 'Creative-Ai');
         $description = $selectedCollection?->description ?: ($intro['body'] ?? 'Generative art and original music by John Reijmer.');
 

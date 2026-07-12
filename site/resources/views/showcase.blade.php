@@ -180,9 +180,10 @@
                 </header>
                 <div class="post-grid">
                     @foreach ($posts as $post)
+                        @php($publishedAt = $post->effectivePublishedAt())
                         <article class="post-teaser" data-reveal>
-                            @if ($post->cover_url)<a href="{{ route('posts.show', $post) }}" wire:navigate><img src="{{ $post->cover_url }}" alt="" loading="lazy"></a>@endif
-                            <div><time datetime="{{ $post->published_at?->toDateString() }}">{{ $post->published_at?->format('M j, Y') }}</time><h3><a href="{{ route('posts.show', $post) }}" wire:navigate>{{ $post->title }}</a></h3><p>{{ $post->summary }}</p></div>
+                            @if ($post->cover_url)<a href="{{ route('posts.show', $post) }}" aria-label="Read {{ $post->title }}" wire:navigate><img src="{{ $post->cover_url }}" alt="{{ $post->cover_alt_text }}" loading="lazy"></a>@endif
+                            <div><time datetime="{{ $publishedAt?->toDateString() }}">{{ $publishedAt?->format('M j, Y') }}</time><h3><a href="{{ route('posts.show', $post) }}" wire:navigate>{{ $post->title }}</a></h3><p>{{ $post->summary }}</p></div>
                         </article>
                     @endforeach
                 </div>

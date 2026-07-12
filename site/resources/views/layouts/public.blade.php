@@ -3,6 +3,7 @@
     <head>
         @php
             $meta = $seo ?? [];
+            $isPreview = (bool) ($preview ?? false);
             $metaTitle = $meta['title'] ?? config('app.name', 'Creative-Ai');
             $metaDescription = $meta['description'] ?? 'Generative art and original music by John Reijmer.';
             $canonical = $meta['canonical'] ?? request()->url();
@@ -51,18 +52,24 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <title>{{ $metaTitle }}</title>
         <meta name="description" content="{{ $metaDescription }}">
-        <meta name="robots" content="{{ config('creative_ai.allow_indexing') ? 'index,follow,max-image-preview:large' : 'noindex,nofollow,noarchive' }}">
-        <link rel="canonical" href="{{ $canonical }}">
+        <meta name="robots" content="{{ ! $isPreview && config('creative_ai.allow_indexing') ? 'index,follow,max-image-preview:large' : 'noindex,nofollow,noarchive' }}">
+        @unless ($isPreview)
+            <link rel="canonical" href="{{ $canonical }}">
+        @endunless
         <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32x32.png') }}">
         <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('favicon-16x16.png') }}">
         <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('apple-touch-icon.png') }}">
         <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
-        <link rel="alternate" type="application/rss+xml" title="Creative-Ai Journal" href="{{ route('feed') }}">
+        @unless ($isPreview)
+            <link rel="alternate" type="application/rss+xml" title="Creative-Ai Journal" href="{{ route('feed') }}">
+        @endunless
         <meta property="og:site_name" content="Creative-Ai">
         <meta property="og:type" content="{{ $metaType }}">
         <meta property="og:title" content="{{ $metaTitle }}">
         <meta property="og:description" content="{{ $metaDescription }}">
-        <meta property="og:url" content="{{ $canonical }}">
+        @unless ($isPreview)
+            <meta property="og:url" content="{{ $canonical }}">
+        @endunless
         <meta name="twitter:card" content="summary_large_image">
         <meta name="twitter:title" content="{{ $metaTitle }}">
         <meta name="twitter:description" content="{{ $metaDescription }}">
@@ -72,6 +79,9 @@
         @endif
         @if (! empty($meta['published_at']))
             <meta property="article:published_time" content="{{ $meta['published_at'] }}">
+        @endif
+        @if (! empty($meta['modified_at']))
+            <meta property="article:modified_time" content="{{ $meta['modified_at'] }}">
         @endif
         @if (str_starts_with($metaType, 'music.'))
             @if ($musicAudio)
@@ -96,9 +106,11 @@
                 <meta property="music:song" content="{{ $musicSong }}">
             @endforeach
         @endif
-        <script type="application/ld+json">
-            {{ Illuminate\Support\Js::from($structuredData) }}
-        </script>
+        @unless ($isPreview)
+            <script type="application/ld+json">
+                {{ Illuminate\Support\Js::from($structuredData) }}
+            </script>
+        @endunless
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="@yield('body-class', 'public-page')">

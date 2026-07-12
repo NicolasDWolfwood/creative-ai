@@ -18,6 +18,7 @@ use App\Services\AiSettings;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkUploadService;
+use App\Services\PostWorkflowService;
 use App\Services\SmartCollectionService;
 use App\Services\SmartPlaylistService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -270,9 +271,10 @@ class PlatformExpansionTest extends TestCase
         $post = Post::query()->create([
             'title' => 'A New Creative Baseline',
             'body' => 'A short update from the studio.',
-            'published' => true,
-            'published_at' => now()->subMinute(),
         ]);
+        $post = app(PostWorkflowService::class)->publishNow(
+            app(PostWorkflowService::class)->markReady($post),
+        );
 
         $this->get(route('posts.show', $post))->assertOk()->assertSee($post->title);
         $this->get(route('feed'))->assertOk()->assertSee($post->title);
