@@ -35,11 +35,11 @@ class ManageTracks extends ManageRecords
                 }
                 $count = 0;
                 $query->each(function (Track $track) use (&$count): void {
-                    $track->forceFill(['analysis_status' => 'pending'])->saveQuietly();
+                    $track->markTechnicalAnalysisPending();
                     AnalyzeTrackAudio::dispatch($track->id);
                     $count++;
                 });
-                Notification::make()->success()->title($count.' technical analyses queued')->send();
+                Notification::make()->success()->title($count.' technical analyses queued')->body('Health statuses refresh automatically as the jobs finish.')->send();
             }),
             Action::make('analyzePending')
                 ->label('Analyze pending')
@@ -85,7 +85,7 @@ class ManageTracks extends ManageRecords
                         ->storeFileNamesIn('original_names')
                         ->acceptedFileTypes(config('creative_ai.uploads.track_mime_types'))
                         ->maxSize(config('creative_ai.uploads.max_track_size_kb'))
-                        ->helperText('Embedded tags are preferred; missing values are derived from filenames. Imported tracks remain available for review.')
+                        ->helperText('Embedded tags are preferred; missing values are derived from filenames. Imported tracks remain private for review until their album is published or they are released as standalone tracks.')
                         ->required()
                         ->columnSpanFull(),
                     Select::make('album_id')
@@ -93,7 +93,10 @@ class ManageTracks extends ManageRecords
                         ->options(fn (): array => Album::query()->orderBy('title')->pluck('title', 'id')->all())
                         ->searchable()->preload()
                         ->helperText('Leave empty to group files by their embedded album tags.'),
-                    Toggle::make('published')->label('Publish imported tracks immediately')->default(false),
+                    Toggle::make('standalone_published')
+                        ->label('Release imported tracks as standalone')
+                        ->helperText('Leave off for album releases. Publishing the album makes its tracks playable without listing every track separately.')
+                        ->default(false),
                 ])
                 ->modalWidth('5xl')
                 ->action(function (array $data): void {
@@ -101,7 +104,7 @@ class ManageTracks extends ManageRecords
                         $data['audio_files'] ?? [],
                         $data['original_names'] ?? [],
                         filled($data['album_id'] ?? null) ? (int) $data['album_id'] : null,
-                        (bool) ($data['published'] ?? false),
+                        (bool) ($data['standalone_published'] ?? false),
                     );
                     $albums = $tracks->pluck('album_id')->filter()->unique()->count();
                     Notification::make()->success()->title($tracks->count().' tracks imported')

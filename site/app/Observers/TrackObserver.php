@@ -3,10 +3,10 @@
 namespace App\Observers;
 
 use App\Jobs\AnalyzeTrackAudio;
-use App\Models\Album;
 use App\Models\Track;
 use App\Services\AudioMetadataService;
 use App\Services\SmartPlaylistService;
+use App\Services\TrackPublicationService;
 
 class TrackObserver
 {
@@ -16,13 +16,7 @@ class TrackObserver
             app(AudioMetadataService::class)->apply($track);
         }
 
-        if ($track->album_id && ! $track->published) {
-            $album = Album::query()->select(['id', 'published', 'published_at'])->find($track->album_id);
-            if ($album?->published) {
-                $track->published = true;
-                $track->published_at ??= $album->published_at ?: now();
-            }
-        }
+        app(TrackPublicationService::class)->prepareForSave($track);
     }
 
     public function saved(Track $track): void
@@ -49,7 +43,7 @@ class TrackObserver
 
     protected function queueTechnicalAnalysis(Track $track): void
     {
-        $track->forceFill(['analysis_status' => 'pending', 'health_status' => 'unknown'])->saveQuietly();
+        $track->markTechnicalAnalysisPending();
         AnalyzeTrackAudio::dispatch($track->id)->afterCommit();
     }
 }

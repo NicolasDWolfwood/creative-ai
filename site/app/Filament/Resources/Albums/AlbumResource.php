@@ -5,7 +5,6 @@ namespace App\Filament\Resources\Albums;
 use App\Filament\Resources\Albums\Pages\ManageAlbums;
 use App\Models\Album;
 use App\Services\AlbumCoverService;
-use App\Services\AlbumPublishingService;
 use App\Services\MusicArtworkSuggestionService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -57,7 +56,10 @@ class AlbumResource extends Resource
                     TextInput::make('track_number')->label('Track')->numeric()->required(),
                     TextInput::make('title')->required()->columnSpan(2),
                     TextInput::make('artist')->columnSpan(2),
-                    Toggle::make('published')->inline(false),
+                    Toggle::make('standalone_published')
+                        ->label('Standalone')
+                        ->helperText('Also show this track outside the album.')
+                        ->inline(false),
                 ])
                 ->columns(7)
                 ->orderColumn('track_number')
@@ -67,7 +69,7 @@ class AlbumResource extends Resource
                 ->columnSpanFull(),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
-            Toggle::make('published')->helperText('Publishing an album also publishes every track in its track listing.'),
+            Toggle::make('published')->helperText('Publishing the album makes its complete track listing publicly playable. Tracks stay off the standalone list unless enabled individually.'),
             DateTimePicker::make('published_at'),
         ]);
     }
@@ -91,20 +93,16 @@ class AlbumResource extends Resource
                     app(AlbumCoverService::class)->import($record);
                     Notification::make()->success()->title('Embedded cover imported as a draft artwork')->send();
                 }),
-            Action::make('publishWithTracks')
-                ->label('Publish album & tracks')->icon('heroicon-o-play-circle')->color('success')
-                ->visible(fn (Album $record): bool => ! $record->published || $record->tracks()->where('published', false)->exists())
+            Action::make('publishAlbum')
+                ->label('Publish album')->icon('heroicon-o-play-circle')->color('success')
+                ->visible(fn (Album $record): bool => ! $record->published)
                 ->requiresConfirmation()
-                ->modalDescription('Publishes the album and every track in its track listing. This makes the album available as a player choice.')
+                ->modalDescription('Publishes the album and makes its complete track listing playable. It does not add those tracks to the standalone track list.')
                 ->action(function (Album $record): void {
-                    $count = app(AlbumPublishingService::class)->publish($record);
-                    Notification::make()->success()->title('Album and tracks published')->body($count.' track'.($count === 1 ? '' : 's').' newly published.')->send();
+                    $record->update(['published' => true, 'published_at' => $record->published_at ?: now()]);
+                    Notification::make()->success()->title('Album published')->body($record->tracks()->count().' track'.($record->tracks()->count() === 1 ? '' : 's').' available through this album.')->send();
                 }),
-            EditAction::make()->after(function (Album $record): void {
-                if ($record->published) {
-                    app(AlbumPublishingService::class)->publishTracks($record);
-                }
-            }),
+            EditAction::make(),
             DeleteAction::make(),
         ])]);
     }

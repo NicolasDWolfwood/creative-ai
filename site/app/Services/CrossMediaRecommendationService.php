@@ -21,7 +21,7 @@ class CrossMediaRecommendationService
     {
         $ids = $artwork->tags()->pluck('tags.id');
 
-        return Track::query()->published()->with(['album', 'tags'])->when($ids->isNotEmpty(), fn ($q) => $q->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $ids)))
+        return Track::query()->publiclyAvailable()->with(['album', 'tags'])->when($ids->isNotEmpty(), fn ($q) => $q->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $ids)))
             ->withCount(['tags as match_count' => fn ($q) => $q->whereIn('tags.id', $ids)])->orderByDesc('match_count')->limit($limit)->get();
     }
 }

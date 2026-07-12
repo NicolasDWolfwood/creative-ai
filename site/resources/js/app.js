@@ -96,7 +96,9 @@ class CreativePlayer {
         this.elements.playlistSelect?.addEventListener('change', () => {
             this.playlistIndex = Number(this.elements.playlistSelect.value);
             this.trackIndex = 0;
-            this.loadTrack(true);
+            this.loadTrack(false);
+            const track = this.currentTrack();
+            if (track) this.announce(`Selected ${track.title}. Press play to start.`);
         });
 
         this.audio.addEventListener('timeupdate', () => { this.updateProgress(); this.saveState(); });
@@ -108,8 +110,8 @@ class CreativePlayer {
         document.querySelectorAll('[data-playlist-id]').forEach((button) => {
             button.addEventListener('click', () => this.playPlaylist(button.dataset.playlistId), { signal });
         });
-        document.querySelectorAll('[data-play-track-id]').forEach((button) => button.addEventListener('click', () => this.playTrack(button.dataset.playTrackId), { signal }));
-        document.querySelectorAll('[data-queue-track-id]').forEach((button) => button.addEventListener('click', () => this.enqueue(button.dataset.queueTrackId), { signal }));
+        document.querySelectorAll('[data-play-track-id]').forEach((button) => button.addEventListener('click', () => this.playTrack(button.dataset.playTrackId, button.dataset.trackSourceId), { signal }));
+        document.querySelectorAll('[data-queue-track-id]').forEach((button) => button.addEventListener('click', () => this.enqueue(button.dataset.queueTrackId, button.dataset.trackSourceId), { signal }));
 
         document.querySelector('[data-player-focus]')?.addEventListener('click', () => {
             this.setCollapsed(false);
@@ -242,7 +244,13 @@ class CreativePlayer {
         }
     }
 
-    findTrack(trackId) {
+    findTrack(trackId, preferredPlaylistId = null) {
+        const preferredPlaylistIndex = this.playlists.findIndex((playlist) => String(playlist.id) === String(preferredPlaylistId));
+        if (preferredPlaylistIndex >= 0) {
+            const preferredTrackIndex = this.playlists[preferredPlaylistIndex].tracks.findIndex((track) => String(track.id) === String(trackId));
+            if (preferredTrackIndex >= 0) return { playlistIndex: preferredPlaylistIndex, trackIndex: preferredTrackIndex };
+        }
+
         for (let playlistIndex = 0; playlistIndex < this.playlists.length; playlistIndex++) {
             const trackIndex = this.playlists[playlistIndex].tracks.findIndex((track) => String(track.id) === String(trackId));
             if (trackIndex >= 0) return { playlistIndex, trackIndex };
@@ -250,13 +258,13 @@ class CreativePlayer {
         return null;
     }
 
-    playTrack(trackId) {
-        const found = this.findTrack(trackId); if (!found) return;
+    playTrack(trackId, preferredPlaylistId = null) {
+        const found = this.findTrack(trackId, preferredPlaylistId); if (!found) return;
         this.playlistIndex = found.playlistIndex; this.trackIndex = found.trackIndex; this.loadTrack(true);
     }
 
-    enqueue(trackId) {
-        const found = this.findTrack(trackId);
+    enqueue(trackId, preferredPlaylistId = null) {
+        const found = this.findTrack(trackId, preferredPlaylistId);
         if (!found) return;
         this.queue.push(String(trackId));
         this.saveState();

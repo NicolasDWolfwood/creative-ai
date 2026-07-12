@@ -18,9 +18,9 @@ class AlbumImportService
      * @param  array<string, string>  $originalNames
      * @return Collection<int, Track>
      */
-    public function import(array $paths, array $originalNames = [], ?int $albumId = null, bool $published = false): Collection
+    public function import(array $paths, array $originalNames = [], ?int $albumId = null, bool $standalonePublished = false): Collection
     {
-        return DB::transaction(function () use ($paths, $originalNames, $albumId, $published): Collection {
+        return DB::transaction(function () use ($paths, $originalNames, $albumId, $standalonePublished): Collection {
             $created = collect();
 
             foreach ($paths as $path) {
@@ -40,7 +40,7 @@ class AlbumImportService
                     'track_number' => $data['track_number'] ?? null,
                     'release_year' => $data['release_year'] ?? $album?->release_year,
                     'metadata' => ['audio_import' => $data],
-                    'published' => $published,
+                    'standalone_published' => $standalonePublished,
                 ]);
                 $created->push($track);
             }

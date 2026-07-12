@@ -34,7 +34,9 @@ class AlbumOrganizationService
                     $sourceAlbumIds->push($track->album_id);
                 }
                 if ($track->album_id !== $album->id) {
-                    $track->forceFill(['album_id' => $album->id])->saveQuietly();
+                    $track->album_id = $album->id;
+                    app(TrackPublicationService::class)->syncForAlbum($track, $album);
+                    $track->saveQuietly();
                     $organized++;
                 }
             });
@@ -47,6 +49,10 @@ class AlbumOrganizationService
                 $album->delete();
                 $removed++;
             });
+
+        if ($organized > 0) {
+            app(SmartPlaylistService::class)->syncAutomatic();
+        }
 
         return ['tracks_organized' => $organized, 'albums_used' => $albumIds->unique()->count(), 'empty_imports_removed' => $removed];
     }

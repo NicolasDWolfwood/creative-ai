@@ -7,6 +7,7 @@ use App\Models\Collection;
 use App\Models\Post;
 use App\Models\SiteSetting;
 use App\Models\Tag;
+use App\Models\Track;
 use App\Services\CollectionCoverService;
 use App\Services\PublicMediaService;
 use Illuminate\Contracts\View\View;
@@ -90,6 +91,9 @@ class ShowcaseController extends Controller
             ->get();
         $playlists = $this->media->playlists();
         $albums = $this->media->albums();
+        $standaloneTracks = $this->media->standaloneTracks();
+        $homeAlbums = $albums->take(4);
+        $homePlaylists = $playlists->take(max(0, 6 - $homeAlbums->count()));
         $posts = Post::query()->published()->orderByDesc('published_at')->limit(3)->get();
         $pageTitle = $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : 'Creative-Ai');
         $description = $selectedCollection?->description ?: ($intro['body'] ?? 'Generative art and original music by John Reijmer.');
@@ -105,10 +109,13 @@ class ShowcaseController extends Controller
             'tags' => $tags,
             'artworks' => $artworks,
             'totalArtworkCount' => Artwork::query()->published()->count(),
+            'publicTrackCount' => Track::query()->publiclyAvailable()->count(),
             'playlists' => $playlists,
             'albums' => $albums,
+            'homeAlbums' => $homeAlbums,
+            'homePlaylists' => $homePlaylists,
             'posts' => $posts,
-            'playerPayload' => $this->media->playerPayload($playlists, $albums),
+            'playerPayload' => $this->media->playerPayload($playlists, $albums, $standaloneTracks),
             'seo' => [
                 'title' => $pageTitle === 'Creative-Ai' ? 'Creative-Ai | Generative Art and Original Music' : $pageTitle.' | Creative-Ai',
                 'description' => str($description)->squish()->limit(200, '')->toString(),

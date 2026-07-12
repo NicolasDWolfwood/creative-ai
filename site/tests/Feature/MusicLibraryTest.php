@@ -133,17 +133,30 @@ class MusicLibraryTest extends TestCase
     public function test_album_track_and_manual_playlist_order_are_intrinsic_and_public(): void
     {
         Storage::fake('public');
-        $album = Album::query()->create(['title' => 'Ordered Album', 'published' => true]);
-        $second = Track::query()->create(['album_id' => $album->id, 'title' => 'Second', 'audio_path' => 'tracks/audio/2.mp3', 'track_number' => 2, 'published' => true]);
-        $first = Track::query()->create(['album_id' => $album->id, 'title' => 'First', 'audio_path' => 'tracks/audio/1.mp3', 'track_number' => 1, 'published' => true]);
+        Queue::fake();
+        $album = Album::query()->create(['title' => 'Ordered Album', 'published' => false]);
+        $second = Track::query()->create(['album_id' => $album->id, 'title' => 'Second', 'audio_path' => 'tracks/audio/2.mp3', 'track_number' => 2, 'published' => false]);
+        $first = Track::query()->create(['album_id' => $album->id, 'title' => 'First', 'audio_path' => 'tracks/audio/1.mp3', 'track_number' => 1, 'published' => false]);
+        $draftAlbum = Album::query()->create(['title' => 'Draft Album', 'published' => false]);
+        $draftTrack = Track::query()->create(['album_id' => $draftAlbum->id, 'title' => 'Draft Track', 'audio_path' => 'tracks/audio/draft.mp3', 'track_number' => 1, 'published' => false]);
         $playlist = Playlist::query()->create(['title' => 'Manual order', 'published' => true]);
-        $playlist->entries()->createMany([['track_id' => $second->id, 'position' => 1], ['track_id' => $first->id, 'position' => 2]]);
+        $playlist->entries()->createMany([
+            ['track_id' => $second->id, 'position' => 1],
+            ['track_id' => $first->id, 'position' => 2],
+            ['track_id' => $draftTrack->id, 'position' => 3],
+        ]);
+        $album->update(['published' => true]);
 
+        $this->assertFalse($first->refresh()->standalone_published);
+        $this->assertFalse($second->refresh()->standalone_published);
         $this->assertSame(['First', 'Second'], $album->tracks->pluck('title')->all());
-        $this->assertSame(['Second', 'First'], $playlist->tracks->pluck('title')->all());
-        $payload = app(PublicMediaService::class)->playerPayload(collect([$playlist]), collect([$album]));
+        $this->assertSame(['Second', 'First', 'Draft Track'], $playlist->tracks->pluck('title')->all());
+        $payload = app(PublicMediaService::class)->libraryPlayerPayload();
         $this->assertSame(['album-'.$album->id, 'playlist-'.$playlist->id], array_column($payload, 'id'));
         $this->assertSame(['album', 'playlist'], array_column($payload, 'type'));
+        $sources = collect($payload)->keyBy('id');
+        $this->assertSame(['First', 'Second'], collect($sources['album-'.$album->id]['tracks'])->pluck('title')->all());
+        $this->assertSame(['Second', 'First'], collect($sources['playlist-'.$playlist->id]['tracks'])->pluck('title')->all());
         $playerSource = file_get_contents(resource_path('js/app.js'));
         $this->assertStringContainsString("album: 'Albums', playlist: 'Playlists'", $playerSource);
         $this->assertStringContainsString("document.createElement('optgroup')", $playerSource);

@@ -29,10 +29,11 @@ class MediaController extends Controller
 
     public function trackAudio(Track $track, Request $request, PrivateMediaService $media): BinaryFileResponse
     {
-        abort_unless($track->isPubliclyPublished() || $this->isAdministrator($request), 404);
+        $public = $track->isPubliclyAvailable();
+        abort_unless($public || $this->isAdministrator($request), 404);
         abort_if(blank($track->audio_path), 404);
 
-        return $this->file($media, $track->audio_path, $track->isPubliclyPublished());
+        return $this->file($media, $track->audio_path, $public, revalidatePublic: true);
     }
 
     public function albumEmbeddedCover(Album $album, Request $request, PrivateMediaService $media): BinaryFileResponse
@@ -52,7 +53,7 @@ class MediaController extends Controller
         return $this->file($media, $post->cover_image_path, $published);
     }
 
-    protected function file(PrivateMediaService $media, string $path, bool $public): BinaryFileResponse
+    protected function file(PrivateMediaService $media, string $path, bool $public, bool $revalidatePublic = false): BinaryFileResponse
     {
         $absolutePath = $media->absolutePath($path);
         abort_unless(is_file($absolutePath), 404);
@@ -62,7 +63,15 @@ class MediaController extends Controller
             'X-Content-Type-Options' => 'nosniff',
         ]);
 
-        if ($public) {
+        if ($public && $revalidatePublic) {
+            // Audio access can change when either a track or its album is
+            // unpublished. Require browsers to revalidate before reuse so a
+            // previously cached response cannot bypass the current policy.
+            $response->setPrivate();
+            $response->setMaxAge(0);
+            $response->headers->addCacheControlDirective('no-cache', true);
+            $response->headers->addCacheControlDirective('must-revalidate', true);
+        } elseif ($public) {
             $response->setPublic();
             $response->setMaxAge(86400);
         } else {

@@ -95,7 +95,7 @@ class PlaylistResource extends Resource
                         ->options(['any' => 'Match any selected tag', 'all' => 'Match every selected tag'])
                         ->default('any')
                         ->native(false),
-                    Toggle::make('smart_rules.only_published')->label('Published tracks only')->default(true),
+                    Toggle::make('smart_rules.only_published')->label('Publicly playable tracks only')->default(true),
                     Select::make('smart_rules.artist')->label('Artist')->options(fn (): array => Track::query()->whereNotNull('artist')->distinct()->orderBy('artist')->pluck('artist', 'artist')->all())->searchable(),
                     Select::make('smart_rules.album_ids')->label('Albums')->multiple()->options(fn (): array => Album::query()->orderBy('title')->pluck('title', 'id')->all())->searchable()->preload(),
                     TextInput::make('smart_rules.min_duration')->label('Minimum seconds')->numeric()->minValue(0),

@@ -77,6 +77,7 @@ class DeploymentSafetyTest extends TestCase
         $collection = Collection::query()->create(['title' => 'Future collection', 'slug' => 'future-collection', 'published' => true, 'published_at' => $future]);
         $track = Track::query()->create(['title' => 'Future track', 'slug' => 'future-track', 'audio_path' => 'future.mp3', 'published' => true, 'published_at' => $future]);
         $album = Album::query()->create(['title' => 'Future album', 'slug' => 'future-album', 'published' => true, 'published_at' => $future]);
+        $albumTrack = Track::query()->create(['title' => 'Future album track', 'slug' => 'future-album-track', 'album_id' => $album->id, 'audio_path' => 'future-album-track.mp3', 'published' => false]);
         $playlist = Playlist::query()->create(['title' => 'Future playlist', 'slug' => 'future-playlist', 'published' => true, 'published_at' => $future]);
 
         foreach ([$artwork, $collection, $track, $album, $playlist] as $record) {
@@ -87,6 +88,9 @@ class DeploymentSafetyTest extends TestCase
         $this->get(route('collections.show', $collection))->assertNotFound();
         $this->get(route('music.albums.show', $album))->assertNotFound();
         $this->get(route('music.tracks.show', $track))->assertNotFound();
+        $this->assertFalse($albumTrack->refresh()->standalone_published);
+        $this->assertFalse($albumTrack->isPubliclyAvailable());
+        $this->get(route('music.tracks.show', $albumTrack))->assertNotFound();
     }
 
     public function test_private_media_routes_enforce_publication_and_allow_administrators(): void
@@ -113,6 +117,58 @@ class DeploymentSafetyTest extends TestCase
         $this->get($artwork->public_image_url)
             ->assertOk()
             ->assertHeader('Cache-Control', 'max-age=86400, public');
+    }
+
+    public function test_album_publication_controls_anonymous_audio_access_without_changing_track_publication(): void
+    {
+        Storage::fake('local');
+        Queue::fake();
+        Storage::disk('local')->put('tracks/audio/album-only.mp3', 'album-audio');
+        Storage::disk('local')->put('tracks/audio/scheduled.mp3', 'scheduled-audio');
+
+        $album = Album::query()->create(['title' => 'Listening Session', 'published' => false]);
+        $albumOnly = Track::query()->create([
+            'title' => 'Album Only',
+            'slug' => 'album-only',
+            'album_id' => $album->id,
+            'audio_path' => 'tracks/audio/album-only.mp3',
+            'published' => false,
+        ]);
+
+        $this->get(route('media.tracks.audio', $albumOnly))->assertNotFound();
+
+        $album->update(['published' => true]);
+
+        $this->assertFalse($albumOnly->refresh()->standalone_published);
+        $this->get(route('media.tracks.audio', $albumOnly))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, private');
+
+        $album->update(['published' => false]);
+
+        $this->get(route('media.tracks.audio', $albumOnly))->assertNotFound();
+
+        $albumOnly->update(['standalone_published' => true, 'standalone_published_at' => now()]);
+
+        $this->get(route('media.tracks.audio', $albumOnly))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, private');
+
+        $scheduledAlbum = Album::query()->create([
+            'title' => 'Scheduled Session',
+            'published' => true,
+            'published_at' => now()->addDay(),
+        ]);
+        $scheduled = Track::query()->create([
+            'title' => 'Scheduled Album Track',
+            'slug' => 'scheduled-album-track',
+            'album_id' => $scheduledAlbum->id,
+            'audio_path' => 'tracks/audio/scheduled.mp3',
+            'published' => false,
+        ]);
+
+        $this->assertFalse($scheduled->refresh()->standalone_published);
+        $this->get(route('media.tracks.audio', $scheduled))->assertNotFound();
     }
 
     public function test_signed_private_storage_previews_also_require_an_administrator_session(): void

@@ -34,6 +34,11 @@ jobs:
           extensions: bcmath, exif, gd, intl, mbstring, pdo_sqlite, sqlite3
           coverage: none
 
+      - name: Install audio analysis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:

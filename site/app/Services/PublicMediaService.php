@@ -14,9 +14,10 @@ class PublicMediaService
     {
         return Playlist::query()
             ->published()
+            ->whereHas('tracks', fn ($query) => $query->publiclyAvailable())
             ->with([
                 'coverArtwork',
-                'tracks' => fn ($query) => $query->published()->with('coverArtwork'),
+                'tracks' => fn ($query) => $query->publiclyAvailable()->with(['coverArtwork', 'album.coverArtwork']),
             ])
             ->orderByDesc('featured')
             ->orderBy('sort_order')
@@ -28,17 +29,31 @@ class PublicMediaService
     {
         return Album::query()
             ->published()
-            ->with(['coverArtwork', 'tracks' => fn ($query) => $query->published()->with(['coverArtwork', 'album.coverArtwork'])])
+            ->whereHas('tracks', fn ($query) => $query->publiclyAvailable())
+            ->with(['coverArtwork', 'tracks' => fn ($query) => $query->publiclyAvailable()->with(['coverArtwork', 'album.coverArtwork'])])
             ->orderByDesc('featured')->orderBy('sort_order')->orderByDesc('release_year')->get();
+    }
+
+    /** @return Collection<int, Track> */
+    public function standaloneTracks(): Collection
+    {
+        return Track::query()
+            ->published()
+            ->with(['coverArtwork', 'album.coverArtwork'])
+            ->orderByDesc('featured')
+            ->orderBy('sort_order')
+            ->orderByDesc('standalone_published_at')
+            ->orderBy('title')
+            ->get();
     }
 
     public function libraryPlayerPayload(): array
     {
-        return $this->playerPayload($this->playlists(), $this->albums());
+        return $this->playerPayload($this->playlists(), $this->albums(), $this->standaloneTracks());
     }
 
     /** @param Collection<int, Playlist> $playlists */
-    public function playerPayload(Collection $playlists, ?Collection $albums = null): array
+    public function playerPayload(Collection $playlists, ?Collection $albums = null, ?Collection $standaloneTracks = null): array
     {
         $playlistPayload = $playlists
             ->map(fn (Playlist $playlist) => [
@@ -63,7 +78,20 @@ class PublicMediaService
             'tracks' => $album->tracks->map(fn (Track $track) => [...$this->trackPayload($track), 'cover' => $track->cover_url ?: $album->cover_url])->values(),
         ])->filter(fn (array $album) => count($album['tracks']) > 0)->values();
 
-        return $albumPayload->concat($playlistPayload)->values()->all();
+        $standalonePayload = collect();
+
+        if ($standaloneTracks?->isNotEmpty()) {
+            $standalonePayload->push([
+                'id' => 'standalone-tracks',
+                'type' => 'track',
+                'title' => 'Singles & standalone tracks',
+                'description' => 'Tracks released outside the album shelf.',
+                'cover' => null,
+                'tracks' => $standaloneTracks->map(fn (Track $track) => $this->trackPayload($track))->values(),
+            ]);
+        }
+
+        return $albumPayload->concat($playlistPayload)->concat($standalonePayload)->values()->all();
     }
 
     public function trackPayload(Track $track): array
