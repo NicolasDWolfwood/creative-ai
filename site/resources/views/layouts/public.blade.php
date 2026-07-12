@@ -15,6 +15,10 @@
                 'image' => $meta['image'] ?? null,
                 'author' => ['@type' => 'Person', 'name' => 'John Reijmer'],
             ];
+            $adminPanel = \Filament\Facades\Filament::getPanel('admin');
+            $authenticatedUser = auth()->user();
+            $canAccessAdmin = $authenticatedUser instanceof \Filament\Models\Contracts\FilamentUser
+                && $authenticatedUser->canAccessPanel($adminPanel);
         @endphp
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -51,7 +55,7 @@
     <body class="@yield('body-class', 'public-page')">
         <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
         <header class="site-header" aria-label="Primary navigation">
-            <a class="brand" href="{{ route('home') }}" aria-label="Creative-Ai home">
+            <a class="brand" href="{{ route('home') }}" aria-label="Creative-Ai home" wire:navigate>
                 <span class="brand-mark">CA</span>
                 <span><strong>Creative-Ai</strong><small>John Reijmer</small></span>
             </a>
@@ -59,11 +63,14 @@
                 <i data-lucide="menu"></i>
             </button>
             <nav class="top-nav" data-nav>
-                <a href="{{ route('gallery') }}">Artwork</a>
-                <a href="{{ route('home') }}#collections">Collections</a>
-                <a href="{{ route('home') }}#music">Music</a>
-                <a href="{{ route('posts.index') }}">Journal</a>
-                <a href="{{ route('home') }}#about">About</a>
+                <a href="{{ route('gallery') }}" wire:navigate>Artwork</a>
+                <a href="{{ route('home') }}#collections" wire:navigate>Collections</a>
+                <a href="{{ route('music.index') }}" wire:navigate>Music</a>
+                <a href="{{ route('posts.index') }}" wire:navigate>Journal</a>
+                <a href="{{ route('home') }}#about" wire:navigate>About</a>
+                @if ($canAccessAdmin)
+                    <a href="{{ $adminPanel->getUrl() }}">Admin</a>
+                @endif
             </nav>
         </header>
 
@@ -72,9 +79,11 @@
         <footer class="site-footer">
             <div class="footer-brand"><strong>Creative-Ai</strong><span>A living archive by John Reijmer.</span></div>
             <nav aria-label="Footer navigation">
-                <a href="{{ route('posts.index') }}">Journal</a>
+                <a href="{{ route('posts.index') }}" wire:navigate>Journal</a>
                 <a href="{{ route('feed') }}">RSS</a>
-                <a href="/admin">Studio</a>
+                @if ($canAccessAdmin)
+                    <a href="{{ $adminPanel->getUrl() }}">Admin</a>
+                @endif
             </nav>
             <span>&copy; {{ date('Y') }}</span>
         </footer>
@@ -89,19 +98,21 @@
             <button type="button" class="icon-button lightbox-next" data-lightbox-next aria-label="Next artwork"><i data-lucide="chevron-right"></i></button>
         </div>
 
+        @persist('creative-ai-player')
         <aside class="audio-player collapsed" data-player aria-label="Music player">
+            <audio data-player-audio preload="metadata"></audio>
             <div class="player-now">
                 <div class="player-art" data-player-art></div>
                 <button class="player-summary" type="button" data-player-collapse aria-label="Open music player">
                     <strong data-track-title>Listening room</strong>
-                    <span data-track-artist>Select a playlist</span>
+                    <span data-track-artist>Select an album or playlist</span>
                 </button>
                 <button class="icon-button play-button" type="button" data-play aria-label="Play"><i data-lucide="play"></i></button>
                 <button class="icon-button player-expand" type="button" data-player-collapse aria-label="Expand player"><i data-lucide="chevron-up"></i></button>
             </div>
             <div class="player-body">
                 <div class="player-select-row">
-                    <select data-playlist-select aria-label="Playlist"></select>
+                    <select data-playlist-select aria-label="Album or playlist"></select>
                     <input type="range" class="volume" data-volume min="0" max="1" value="0.85" step="0.01" aria-label="Volume">
                 </div>
                 <canvas class="visualizer" data-visualizer width="680" height="64"></canvas>
@@ -115,6 +126,7 @@
                 </div>
             </div>
         </aside>
+        @endpersist
 
         <script>window.creativeAi = { playlists: @json($playerPayload ?? []) };</script>
     </body>

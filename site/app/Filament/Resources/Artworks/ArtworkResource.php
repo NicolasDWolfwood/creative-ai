@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\Artworks;
 
 use App\Filament\Resources\Artworks\Pages\ManageArtworks;
+use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
 use App\Models\Collection as ArtworkCollection;
+use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use Filament\Actions\Action;
@@ -74,6 +76,8 @@ class ArtworkResource extends Resource
                 ->imageEditor()
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                 ->maxSize(25600)
+                ->rules([new SafeArtworkImageDimensions])
+                ->helperText('JPEG, PNG, or WebP up to 25 MiB and 20 megapixels.')
                 ->storeFileNamesIn('original_filename')
                 ->openable()
                 ->downloadable()
@@ -179,12 +183,29 @@ class ArtworkResource extends Resource
             ->poll('5s')
             ->defaultSort('sort_order', 'desc')
             ->columns([
-                ImageColumn::make('thumb_path')->disk('public')->square()->label('Preview'),
+                ImageColumn::make('thumb_path')
+                    ->getStateUsing(fn (Artwork $record): string => $record->availableThumbPath())
+                    ->disk('public')
+                    ->square()
+                    ->label('Preview'),
                 TextColumn::make('title')
                     ->searchable()
                     ->sortable()
                     ->description(fn (Artwork $record): string => $record->collections->pluck('title')->implode(' · ') ?: 'Uncollected')
                     ->wrap(),
+                TextColumn::make('variant_status')
+                    ->label('Image')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => ucfirst($state ?: Artwork::VARIANT_STATUS_PENDING))
+                    ->color(fn (?string $state): string => match ($state) {
+                        Artwork::VARIANT_STATUS_READY => 'success',
+                        Artwork::VARIANT_STATUS_QUEUED, Artwork::VARIANT_STATUS_PROCESSING => 'warning',
+                        Artwork::VARIANT_STATUS_FAILED => 'danger',
+                        default => 'gray',
+                    })
+                    ->description(fn (Artwork $record): ?string => $record->variant_status === Artwork::VARIANT_STATUS_FAILED
+                        ? str($record->variant_error)->limit(80)->toString()
+                        : null),
                 TextColumn::make('ai_status')
                     ->label('AI')
                     ->badge()
@@ -237,6 +258,16 @@ class ArtworkResource extends Resource
             ])
             ->recordActions([
                 ActionGroup::make([
+                    Action::make('retryImageVariants')
+                        ->label('Retry image sizes')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('warning')
+                        ->visible(fn (Artwork $record): bool => $record->variant_status !== Artwork::VARIANT_STATUS_READY)
+                        ->action(function (Artwork $record): void {
+                            GenerateArtworkVariants::dispatchFor($record);
+
+                            Notification::make()->title('Image sizes queued for regeneration.')->success()->send();
+                        }),
                     Action::make('analyzeWithAi')
                         ->label('Analyze with AI')
                         ->icon('heroicon-o-sparkles')

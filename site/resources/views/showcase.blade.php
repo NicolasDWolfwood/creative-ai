@@ -36,13 +36,14 @@
             <div class="section-inner">
                 <header class="section-heading split-heading" data-reveal>
                     <div><p class="eyebrow">Curated worlds</p><h2 id="collections-title">Collections</h2></div>
-                    <a class="text-link" href="{{ route('gallery') }}">Explore the full archive <i data-lucide="arrow-up-right"></i></a>
+                    <a class="text-link" href="{{ route('gallery') }}" wire:navigate>Explore the full archive <i data-lucide="arrow-up-right"></i></a>
                 </header>
                 <div class="collection-grid">
                     @foreach ($collections as $collection)
-                        @php($cover = $collection->hero_image_url ?: $collection->artworks->first()?->thumb_url)
-                        <a class="collection-tile {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}" data-reveal>
-                            @if ($cover)<img src="{{ $cover }}" alt="" loading="lazy">@endif
+                        @php($coverArtwork = $collectionCovers->get($collection->getKey()))
+                        @php($cover = $coverArtwork?->thumb_url ?: $collectionCoverPlaceholder)
+                        <a class="collection-tile {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}" data-reveal wire:navigate>
+                            <img src="{{ $cover }}" alt="" loading="lazy" @if ($coverArtwork) data-cover-artwork-id="{{ $coverArtwork->getKey() }}" @else data-collection-cover-placeholder @endif>
                             <span><strong>{{ $collection->title }}</strong><small>{{ $collection->artworks_count }} works</small></span>
                         </a>
                     @endforeach
@@ -60,9 +61,9 @@
 
             @if ($tags->isNotEmpty())
                 <nav class="tag-filter-strip" aria-label="Artwork tags" data-reveal>
-                    <a class="tag-filter {{ $selectedTag ? '' : 'active' }}" href="{{ request()->url() }}">All</a>
+                    <a class="tag-filter {{ $selectedTag ? '' : 'active' }}" href="{{ request()->url() }}" wire:navigate>All</a>
                     @foreach ($tags as $tag)
-                        <a class="tag-filter {{ $selectedTag?->is($tag) ? 'active' : '' }}" href="{{ request()->fullUrlWithQuery(['tag' => $tag->slug]) }}">{{ $tag->name }}<span>{{ $tag->artworks_count }}</span></a>
+                        <a class="tag-filter {{ $selectedTag?->is($tag) ? 'active' : '' }}" href="{{ request()->fullUrlWithQuery(['tag' => $tag->slug]) }}" wire:navigate>{{ $tag->name }}<span>{{ $tag->artworks_count }}</span></a>
                     @endforeach
                 </nav>
             @endif
@@ -89,14 +90,21 @@
                 <button class="button button-primary" type="button" data-player-focus><i data-lucide="headphones"></i>Open player</button>
             </header>
             <div class="playlist-list">
+                @foreach ($albums as $album)
+                    <button class="playlist-row" type="button" data-playlist-id="album-{{ $album->id }}" data-reveal>
+                        <span class="playlist-cover" @if ($album->cover_url) style="background-image:url('{{ $album->cover_url }}')" @endif><i data-lucide="disc-3"></i></span>
+                        <span><strong>{{ $album->title }}</strong><small>Album · {{ $album->tracks->count() }} tracks{{ $album->artist ? ' · '.$album->artist : '' }}</small></span>
+                        <i data-lucide="play"></i>
+                    </button>
+                @endforeach
                 @forelse ($playlists as $playlist)
-                    <button class="playlist-row" type="button" data-playlist-id="{{ $playlist->id }}" data-reveal>
+                    <button class="playlist-row" type="button" data-playlist-id="playlist-{{ $playlist->id }}" data-reveal>
                         <span class="playlist-cover" @if ($playlist->cover_url) style="background-image:url('{{ $playlist->cover_url }}')" @endif><i data-lucide="audio-waveform"></i></span>
                         <span><strong>{{ $playlist->title }}</strong><small>{{ $playlist->tracks->count() }} tracks · {{ $playlist->description ?: 'Creative-Ai session' }}</small></span>
                         <i data-lucide="play"></i>
                     </button>
                 @empty
-                    <p class="empty-state">No published playlists yet.</p>
+                    @if ($albums->isEmpty())<p class="empty-state">No published albums or playlists yet.</p>@endif
                 @endforelse
             </div>
         </div>
@@ -107,13 +115,13 @@
             <div class="section-inner">
                 <header class="section-heading split-heading" data-reveal>
                     <div><p class="eyebrow">From the studio</p><h2 id="journal-title">Journal</h2></div>
-                    <a class="text-link" href="{{ route('posts.index') }}">All updates <i data-lucide="arrow-up-right"></i></a>
+                    <a class="text-link" href="{{ route('posts.index') }}" wire:navigate>All updates <i data-lucide="arrow-up-right"></i></a>
                 </header>
                 <div class="post-grid">
                     @foreach ($posts as $post)
                         <article class="post-teaser" data-reveal>
-                            @if ($post->cover_url)<a href="{{ route('posts.show', $post) }}"><img src="{{ $post->cover_url }}" alt="" loading="lazy"></a>@endif
-                            <div><time datetime="{{ $post->published_at?->toDateString() }}">{{ $post->published_at?->format('M j, Y') }}</time><h3><a href="{{ route('posts.show', $post) }}">{{ $post->title }}</a></h3><p>{{ $post->summary }}</p></div>
+                            @if ($post->cover_url)<a href="{{ route('posts.show', $post) }}" wire:navigate><img src="{{ $post->cover_url }}" alt="" loading="lazy"></a>@endif
+                            <div><time datetime="{{ $post->published_at?->toDateString() }}">{{ $post->published_at?->format('M j, Y') }}</time><h3><a href="{{ route('posts.show', $post) }}" wire:navigate>{{ $post->title }}</a></h3><p>{{ $post->summary }}</p></div>
                         </article>
                     @endforeach
                 </div>
@@ -129,7 +137,6 @@
                 <nav class="social-links" aria-label="Social links">
                     <a href="https://x.com/johnreijmer" target="_blank" rel="noreferrer">X <i data-lucide="arrow-up-right"></i></a>
                     <a href="https://instagram.com/johnreijmer" target="_blank" rel="noreferrer">Instagram <i data-lucide="arrow-up-right"></i></a>
-                    <a href="https://www.linkedin.com/in/johnreijmer/" target="_blank" rel="noreferrer">LinkedIn <i data-lucide="arrow-up-right"></i></a>
                     <a href="https://www.paypal.com/paypalme/johnreijmer" target="_blank" rel="noreferrer">Support <i data-lucide="heart"></i></a>
                 </nav>
             </div>

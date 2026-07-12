@@ -211,10 +211,21 @@ html.fi.dark {
     box-shadow: 0 0 0 1px rgba(36, 209, 176, 0.35), 0 0 0 5px rgba(36, 209, 176, 0.08) !important;
 }
 
-.fi-section:has(.fi-select-input-btn[aria-expanded='true']),
-.fi-modal-window:has(.fi-select-input-btn[aria-expanded='true']) {
+.fi-grid-col:has(.fi-select-input-btn[aria-expanded='true']),
+.fi-fo-select-wrp:has(.fi-select-input-btn[aria-expanded='true']) {
     position: relative;
-    z-index: 30;
+    z-index: 60;
+}
+
+.fi-fo-select-wrp:has(.fi-select-input-btn[aria-expanded='true']) .fi-dropdown-panel {
+    z-index: 60;
+    background: #11141a !important;
+    backdrop-filter: none;
+}
+
+.fi-section:has(.fi-select-input-btn[aria-expanded='true']) {
+    position: relative;
+    z-index: 50;
 }
 
 .fi-btn {

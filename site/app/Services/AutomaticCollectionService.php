@@ -63,12 +63,6 @@ class AutomaticCollectionService
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('auto_generation_key');
-            $usedCoverPaths = Collection::query()
-                ->where('is_auto_generated', false)
-                ->whereNotNull('hero_image_path')
-                ->pluck('hero_image_path')
-                ->filter()
-                ->values();
 
             foreach ($proposals as $position => $proposal) {
                 $collection = $existing->pull($proposal['key']) ?: new Collection;
@@ -98,27 +92,12 @@ class AutomaticCollectionService
                     'is_smart' => true,
                     'is_auto_generated' => true,
                     'auto_generation_key' => $proposal['key'],
+                    'hero_image_path' => null,
                     'smart_rules' => $rules,
                     'auto_sync' => true,
                 ])->saveQuietly();
 
                 $matched = $sync ? $this->smartCollections->sync($collection) : $proposal['artwork_count'];
-
-                if ($sync) {
-                    $coverArtwork = $collection->artworks()
-                        ->whereNotNull('thumb_path')
-                        ->when(
-                            $usedCoverPaths->isNotEmpty(),
-                            fn ($query) => $query->whereNotIn('thumb_path', $usedCoverPaths->all()),
-                        )
-                        ->first() ?: $collection->artworks()->whereNotNull('thumb_path')->first();
-                    $coverPath = $coverArtwork?->thumb_path ?: $coverArtwork?->display_path ?: $coverArtwork?->image_path;
-
-                    if ($coverPath) {
-                        $collection->forceFill(['hero_image_path' => $coverPath])->saveQuietly();
-                        $usedCoverPaths->push($coverPath);
-                    }
-                }
 
                 $matches[] = ['title' => $collection->title, 'count' => $matched];
             }

@@ -31,7 +31,7 @@ class ArtworkAiMetadataService
      */
     public function analyze(Artwork $artwork): array
     {
-        $sourcePath = $artwork->display_path ?: $artwork->image_path;
+        $sourcePath = $artwork->availableDisplayPath();
         $analysisImage = $this->imageVariantService->createAnalysisImageData($sourcePath);
         $prompt = $this->prompt($artwork, $analysisImage);
         $schema = $this->schema();

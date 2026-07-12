@@ -28,6 +28,19 @@ class Artwork extends Model
 
     public const AI_STATUS_APPLIED = 'applied';
 
+    public const VARIANT_STATUS_PENDING = 'pending';
+
+    public const VARIANT_STATUS_QUEUED = 'queued';
+
+    public const VARIANT_STATUS_PROCESSING = 'processing';
+
+    public const VARIANT_STATUS_READY = 'ready';
+
+    public const VARIANT_STATUS_FAILED = 'failed';
+
+    /** Upload services can set this before save so the observer captures the intent. */
+    public bool $analyzeAfterVariantGeneration = false;
+
     protected $fillable = [
         'collection_id',
         'title',
@@ -41,6 +54,12 @@ class Artwork extends Model
         'original_filename',
         'width',
         'height',
+        'variant_status',
+        'variant_generation_token',
+        'variant_error',
+        'variant_queued_at',
+        'variant_started_at',
+        'variants_generated_at',
         'sort_order',
         'featured',
         'published',
@@ -65,6 +84,9 @@ class Artwork extends Model
             'published' => 'boolean',
             'generated_at' => 'datetime',
             'published_at' => 'datetime',
+            'variant_queued_at' => 'datetime',
+            'variant_started_at' => 'datetime',
+            'variants_generated_at' => 'datetime',
             'metadata' => 'array',
             'ai_suggestion' => 'array',
             'ai_apply_after_analysis' => 'boolean',
@@ -107,16 +129,71 @@ class Artwork extends Model
 
     public function getDisplayUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->display_path ?: $this->image_path);
+        return Storage::disk('public')->url($this->availableDisplayPath());
     }
 
     public function getThumbUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->thumb_path ?: $this->display_path ?: $this->image_path);
+        return Storage::disk('public')->url($this->availableThumbPath());
+    }
+
+    public function availableDisplayPath(): string
+    {
+        return $this->firstExistingPath([
+            $this->display_path,
+            $this->image_path,
+        ]);
+    }
+
+    public function availableThumbPath(): string
+    {
+        return $this->firstExistingPath([
+            $this->thumb_path,
+            $this->display_path,
+            $this->image_path,
+        ]);
+    }
+
+    public function imageVariantsExist(): bool
+    {
+        if (blank($this->display_path) || blank($this->thumb_path)) {
+            return false;
+        }
+
+        $disk = Storage::disk('public');
+
+        return $disk->exists($this->display_path) && $disk->exists($this->thumb_path);
+    }
+
+    public function hasAvailableImage(): bool
+    {
+        $disk = Storage::disk('public');
+
+        foreach ([$this->thumb_path, $this->display_path, $this->image_path] as $path) {
+            if (filled($path) && $disk->exists($path)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function getImageAltAttribute(): string
     {
         return $this->alt_text ?: $this->title;
+    }
+
+    /** @param array<int, string|null> $paths */
+    protected function firstExistingPath(array $paths): string
+    {
+        $disk = Storage::disk('public');
+
+        foreach ($paths as $path) {
+            if (filled($path) && $disk->exists($path)) {
+                return $path;
+            }
+        }
+
+        return (string) ($this->image_path ?: collect($paths)->first(fn (?string $path): bool => filled($path)));
     }
 }

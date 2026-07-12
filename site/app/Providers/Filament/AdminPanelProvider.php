@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -42,6 +43,13 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Teal,
                 'gray' => Color::Slate,
+            ])
+            ->userMenuItems([
+                Action::make('viewSite')
+                    ->label('View site')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->url(fn (): string => route('home'))
+                    ->sort(-10),
             ])
             ->renderHook(
                 PanelsRenderHook::STYLES_AFTER,

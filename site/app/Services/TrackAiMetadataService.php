@@ -14,9 +14,10 @@ class TrackAiMetadataService
         protected SmartPlaylistService $smartPlaylists,
     ) {}
 
-    public function analyzeAndApply(Track $track): Track
+    /** @return array<string, array<int, string>> */
+    public function analyze(Track $track): array
     {
-        $result = $this->providers->generateStructured(trim(<<<PROMPT
+        return $this->providers->generateStructured(trim(<<<PROMPT
 Create concise music-library metadata from the available track information. Do not claim to have heard audio.
 Title: {$track->title}
 Artist: {$track->artist}
@@ -34,6 +35,22 @@ PROMPT), [
             ],
             'required' => ['genre_tags', 'mood_tags', 'tags'],
         ]);
+    }
+
+    public function analyzeAndApply(Track $track): Track
+    {
+        $track->forceFill(['ai_suggestion' => $this->analyze($track)])->saveQuietly();
+
+        return $this->applySuggestion($track->refresh());
+    }
+
+    public function applySuggestion(Track $track): Track
+    {
+        $result = $track->ai_suggestion ?? [];
+
+        if ($result === []) {
+            return $track;
+        }
 
         $track->tags()->detach();
         $attached = [];
@@ -54,12 +71,29 @@ PROMPT), [
         }
 
         $track->forceFill([
+            'ai_status' => Track::AI_STATUS_APPLIED,
             'ai_model' => $this->settings->modelDescriptor(),
             'ai_analyzed_at' => now(),
+            'ai_error' => null,
         ])->saveQuietly();
 
         $this->smartPlaylists->syncAutomatic();
 
         return $track->refresh();
+    }
+
+    public function applyReadySuggestions(int $limit = 0): int
+    {
+        $query = Track::query()->where('ai_status', Track::AI_STATUS_READY)->whereNotNull('ai_suggestion')->orderBy('id');
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+        $count = 0;
+        $query->get()->each(function (Track $track) use (&$count): void {
+            $this->applySuggestion($track);
+            $count++;
+        });
+
+        return $count;
     }
 }

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Playlist extends Model
 {
@@ -25,6 +26,8 @@ class Playlist extends Model
         'published',
         'published_at',
         'is_smart',
+        'is_auto_generated',
+        'auto_generation_key',
         'smart_rules',
         'auto_sync',
         'last_synced_at',
@@ -37,6 +40,7 @@ class Playlist extends Model
             'published' => 'boolean',
             'published_at' => 'datetime',
             'is_smart' => 'boolean',
+            'is_auto_generated' => 'boolean',
             'smart_rules' => 'array',
             'auto_sync' => 'boolean',
             'last_synced_at' => 'datetime',
@@ -54,6 +58,11 @@ class Playlist extends Model
             ->withPivot('position')
             ->withTimestamps()
             ->orderByPivot('position');
+    }
+
+    public function entries(): HasMany
+    {
+        return $this->hasMany(PlaylistTrack::class)->orderBy('position');
     }
 
     #[Scope]

@@ -34,7 +34,8 @@ class ManageCollections extends ManageRecords
                         ->options([1 => '1 collection', 2 => '2 collections', 3 => '3 collections', 4 => '4 collections', 5 => '5 collections'])
                         ->default(AutomaticCollectionService::DEFAULT_TARGET)
                         ->required()
-                        ->native(false),
+                        ->native(false)
+                        ->position('top'),
                     TextInput::make('minimum_artwork')
                         ->label('Minimum matching artwork')
                         ->numeric()

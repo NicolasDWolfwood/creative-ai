@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11171d"/>
+      <stop offset="1" stop-color="#080b0f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="42%" r="54%">
+      <stop offset="0" stop-color="#65d9bd" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#65d9bd" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M72 0H0V72" fill="none" stroke="#dce1e8" stroke-opacity=".035"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="800" fill="url(#background)"/>
+  <rect width="1200" height="800" fill="url(#grid)"/>
+  <circle cx="600" cy="330" r="300" fill="url(#glow)"/>
+  <g fill="none" stroke="#65d9bd" stroke-opacity=".18">
+    <circle cx="600" cy="330" r="112"/>
+    <circle cx="600" cy="330" r="190"/>
+    <path d="m438 430 162-200 162 200M494 494h212"/>
+  </g>
+</svg>

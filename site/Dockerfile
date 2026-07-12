@@ -19,6 +19,7 @@ RUN apt-get update \
         git \
         gosu \
         curl \
+        ffmpeg \
         libfreetype6-dev \
         libicu-dev \
         libjpeg62-turbo-dev \
@@ -49,6 +50,7 @@ RUN apt-get update \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY site/docker/apache.conf /etc/apache2/sites-available/000-default.conf
+COPY site/docker/uploads.ini $PHP_INI_DIR/conf.d/creative-ai-uploads.ini
 COPY site/composer.json site/composer.lock ./
 
 RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts
