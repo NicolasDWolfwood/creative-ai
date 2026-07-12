@@ -5,6 +5,9 @@
     @foreach ($collections as $collection)
         <url><loc>{{ route('collections.show', $collection) }}</loc><lastmod>{{ $collection->updated_at->toAtomString() }}</lastmod><priority>0.8</priority></url>
     @endforeach
+    @foreach ($artworks as $artwork)
+        <url><loc>{{ route('artworks.show', $artwork) }}</loc><lastmod>{{ $artwork->updated_at->toAtomString() }}</lastmod><priority>0.8</priority></url>
+    @endforeach
     @foreach ($posts as $post)
         <url><loc>{{ route('posts.show', $post) }}</loc><lastmod>{{ $post->updated_at->toAtomString() }}</lastmod><priority>0.7</priority></url>
     @endforeach

@@ -28,18 +28,22 @@ class ShowcaseController extends Controller
 
     public function gallery(Request $request): View
     {
-        return $this->renderShowcase(limit: 240, selectedTagSlug: $request->query('tag'));
+        return $this->renderShowcase(limit: 48, selectedTagSlug: $request->query('tag'), paginateArtwork: true);
     }
 
     public function collection(Collection $collection, Request $request): View
     {
         abort_unless($collection->isPubliclyPublished(), 404);
 
-        return $this->renderShowcase($collection, 240, $request->query('tag'));
+        return $this->renderShowcase($collection, 48, $request->query('tag'), paginateArtwork: true);
     }
 
-    protected function renderShowcase(?Collection $selectedCollection = null, int $limit = 72, ?string $selectedTagSlug = null): View
-    {
+    protected function renderShowcase(
+        ?Collection $selectedCollection = null,
+        int $limit = 72,
+        ?string $selectedTagSlug = null,
+        bool $paginateArtwork = false,
+    ): View {
         $intro = SiteSetting::query()->where('key', 'home_intro')->first()?->value ?: [
             'title' => 'Creative-Ai',
             'body' => 'A living archive of generative artwork, visual experiments, and original sound.',
@@ -49,7 +53,8 @@ class ShowcaseController extends Controller
             ->published()
             ->with(['collections', 'tags'])
             ->orderByDesc('sort_order')
-            ->latest();
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         if ($selectedCollection) {
             $artworksQuery->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
@@ -59,7 +64,10 @@ class ShowcaseController extends Controller
             $artworksQuery->whereHas('tags', fn (Builder $query) => $query->whereKey($selectedTag->getKey()));
         }
 
-        $artworks = $artworksQuery->limit($limit)->get();
+        $archiveArtworkCount = (clone $artworksQuery)->count();
+        $artworks = $paginateArtwork
+            ? $artworksQuery->cursorPaginate($limit)->withQueryString()
+            : $artworksQuery->limit($limit)->get();
         $heroArtwork = $artworks->first()
             ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
         $collections = Collection::query()
@@ -108,6 +116,8 @@ class ShowcaseController extends Controller
             'selectedTag' => $selectedTag,
             'tags' => $tags,
             'artworks' => $artworks,
+            'archiveArtworkCount' => $archiveArtworkCount,
+            'paginateArtwork' => $paginateArtwork,
             'totalArtworkCount' => Artwork::query()->published()->count(),
             'publicTrackCount' => Track::query()->publiclyAvailable()->count(),
             'playlists' => $playlists,

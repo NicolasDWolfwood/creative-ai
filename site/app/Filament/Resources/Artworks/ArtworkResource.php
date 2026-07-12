@@ -115,6 +115,11 @@ class ArtworkResource extends Resource
                 ->maxLength(200)
                 ->columnSpanFull(),
             Textarea::make('prompt')->rows(4)->columnSpanFull(),
+            Textarea::make('process_notes')
+                ->label('Process notes')
+                ->rows(5)
+                ->helperText('Public notes about the tools, iterations, and decisions behind this artwork.')
+                ->columnSpanFull(),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
             Toggle::make('published')->default(true),

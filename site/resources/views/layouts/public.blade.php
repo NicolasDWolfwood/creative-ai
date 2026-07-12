@@ -6,7 +6,7 @@
             $metaTitle = $meta['title'] ?? config('app.name', 'Creative-Ai');
             $metaDescription = $meta['description'] ?? 'Generative art and original music by John Reijmer.';
             $canonical = $meta['canonical'] ?? request()->url();
-            $structuredData = [
+            $defaultStructuredData = [
                 '@context' => 'https://schema.org',
                 '@type' => ($meta['type'] ?? 'website') === 'article' ? 'BlogPosting' : 'WebSite',
                 'name' => $metaTitle,
@@ -15,6 +15,9 @@
                 'image' => $meta['image'] ?? null,
                 'author' => ['@type' => 'Person', 'name' => 'John Reijmer'],
             ];
+            $structuredData = is_array($structured_data ?? null)
+                ? $structured_data
+                : $defaultStructuredData;
             $adminPanel = \Filament\Facades\Filament::getPanel('admin');
             $authenticatedUser = auth()->user();
             $canAccessAdmin = $authenticatedUser instanceof \Filament\Models\Contracts\FilamentUser

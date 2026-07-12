@@ -468,46 +468,41 @@ function setupLightbox(signal) {
     const title = panel.querySelector('[data-lightbox-title]');
     const description = panel.querySelector('[data-lightbox-description]');
 
-    const triggers = [...document.querySelectorAll('[data-lightbox]')];
-    const items = [];
-    const triggerIndexes = triggers.map((trigger) => {
-        const existingIndex = items.findIndex((item) => item.dataset.full === trigger.dataset.full);
-
-        if (existingIndex >= 0) return existingIndex;
-
-        items.push(trigger);
-
-        return items.length - 1;
-    });
+    const items = () => [...document.querySelectorAll('[data-lightbox]')]
+        .filter((trigger, index, triggers) => triggers.findIndex((candidate) => candidate.dataset.full === trigger.dataset.full) === index);
     let activeIndex = 0;
     let opener = null;
     const background = [...document.body.children].filter((element) => element !== panel && element.tagName !== 'SCRIPT');
     const previouslyInert = new Map();
 
     const show = (index) => {
-        if (!items.length) return;
-        activeIndex = (index + items.length) % items.length;
-        const button = items[activeIndex];
+        const availableItems = items();
+        if (!availableItems.length) return;
+        activeIndex = (index + availableItems.length) % availableItems.length;
+        const button = availableItems[activeIndex];
         image.src = button.dataset.full;
         image.alt = button.dataset.alt || button.dataset.title || '';
         title.textContent = button.dataset.title || '';
         description.textContent = button.dataset.description || '';
     };
 
-    triggers.forEach((button, index) => {
-        button.addEventListener('click', () => {
-            opener = button;
-            show(triggerIndexes[index]);
-            panel.classList.add('open');
-            panel.setAttribute('aria-hidden', 'false');
-            document.body.classList.add('lightbox-open');
-            background.forEach((element) => {
-                previouslyInert.set(element, element.inert);
-                element.inert = true;
-            });
-            panel.querySelector('[data-lightbox-close]')?.focus();
-        }, { signal });
-    });
+    document.addEventListener('click', (event) => {
+        const trigger = event.target instanceof Element ? event.target.closest('[data-lightbox]') : null;
+        if (!trigger) return;
+
+        opener = trigger;
+        const availableItems = items();
+        const index = availableItems.findIndex((item) => item === trigger || item.dataset.full === trigger.dataset.full);
+        show(Math.max(0, index));
+        panel.classList.add('open');
+        panel.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('lightbox-open');
+        background.forEach((element) => {
+            previouslyInert.set(element, element.inert);
+            element.inert = true;
+        });
+        panel.querySelector('[data-lightbox-close]')?.focus();
+    }, { signal });
 
     const close = (restoreFocus = true) => {
         if (!panel.classList.contains('open')) return;
@@ -547,6 +542,74 @@ function setupLightbox(signal) {
     }, { signal });
 
     signal.addEventListener('abort', () => close(false), { once: true });
+}
+
+function setupGalleryPagination(signal) {
+    const results = document.querySelector('[data-gallery-results]');
+    const pagination = document.querySelector('[data-gallery-pagination]');
+    const status = pagination?.querySelector('[data-gallery-load-status]');
+    const count = document.querySelector('[data-gallery-count]');
+    let loading = false;
+
+    if (!results || !pagination) return;
+
+    document.addEventListener('click', async (event) => {
+        const link = event.target instanceof Element ? event.target.closest('[data-gallery-load-more]') : null;
+
+        if (!link || !pagination.contains(link)) return;
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        event.preventDefault();
+        if (loading) return;
+
+        loading = true;
+        link.setAttribute('aria-busy', 'true');
+        link.setAttribute('aria-disabled', 'true');
+        if (status) status.textContent = 'Loading more artwork…';
+
+        try {
+            const response = await fetch(link.href, {
+                headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
+                signal,
+            });
+
+            if (!response.ok) throw new Error(`Artwork request failed with ${response.status}`);
+
+            const nextDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const nextResults = nextDocument.querySelector('[data-gallery-results]');
+            const nextItems = nextResults ? [...nextResults.querySelectorAll(':scope > .art-tile')] : [];
+
+            if (!nextItems.length) throw new Error('The next artwork page did not contain any results.');
+
+            const firstNewItem = nextItems[0];
+            results.append(...nextItems);
+            createIcons({ icons });
+
+            const nextLink = nextDocument.querySelector('[data-gallery-load-more]');
+            if (nextLink) {
+                link.href = nextLink.getAttribute('href');
+                link.removeAttribute('aria-busy');
+                link.removeAttribute('aria-disabled');
+            } else {
+                link.remove();
+            }
+
+            const loaded = results.querySelectorAll(':scope > .art-tile').length;
+            const total = Number(count?.dataset.galleryTotal || loaded);
+            if (count) count.textContent = `${loaded} of ${total.toLocaleString()} ${total === 1 ? 'frame' : 'frames'} loaded`;
+            if (status) status.textContent = nextLink
+                ? `${nextItems.length} more artworks loaded.`
+                : `All ${loaded} artworks are loaded.`;
+            firstNewItem.querySelector('.art-tile-link')?.focus({ preventScroll: true });
+        } catch (error) {
+            if (error?.name === 'AbortError') return;
+            link.removeAttribute('aria-busy');
+            link.removeAttribute('aria-disabled');
+            if (status) status.textContent = 'More artwork could not be loaded. Use the link to try again.';
+        } finally {
+            loading = false;
+        }
+    }, { signal });
 }
 
 function setupNavigation(signal) {
@@ -723,6 +786,7 @@ function setupPage({ handleHash = true } = {}) {
     createIcons({ icons });
     setupNavigation(signal);
     setupEnhancedNavigation(signal);
+    setupGalleryPagination(signal);
     setupReveal(signal);
     setupLightbox(signal);
     setupCollectionSwitcher();
