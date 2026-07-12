@@ -39,7 +39,7 @@ class Dashboard extends BaseDashboard
         return [
             [
                 'label' => 'Published artworks',
-                'value' => Artwork::query()->where('published', true)->count(),
+                'value' => Artwork::query()->published()->count(),
                 'href' => ArtworkResource::getUrl(),
                 'accent' => 'teal',
             ],
@@ -70,8 +70,8 @@ class Dashboard extends BaseDashboard
     public function getFeaturedArtworks(): EloquentCollection
     {
         return Artwork::query()
-            ->where('published', true)
-            ->orderByDesc('sort_order')
+            ->published()
+            ->latest()
             ->limit(8)
             ->get();
     }
@@ -82,8 +82,8 @@ class Dashboard extends BaseDashboard
     public function getRecentTracks(): EloquentCollection
     {
         return Track::query()
-            ->where('published', true)
-            ->orderBy('sort_order')
+            ->published()
+            ->latest()
             ->limit(6)
             ->get();
     }

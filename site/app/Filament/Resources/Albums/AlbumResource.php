@@ -46,7 +46,7 @@ class AlbumResource extends Resource
             TextInput::make('slug')->maxLength(255),
             Select::make('cover_artwork_id')->relationship('coverArtwork', 'title')->searchable()->preload(),
             Select::make('cover_preference')->label('Cover source')->options(['auto' => 'Artwork, then embedded', 'artwork' => 'Artwork library only', 'embedded' => 'Embedded cover only', 'none' => 'No cover'])->default('auto')->native(false),
-            FileUpload::make('embedded_cover_path')->label('Embedded cover preview')->disk('public')->image()->disabled()->openable()->downloadable(),
+            FileUpload::make('embedded_cover_path')->label('Embedded cover preview')->disk('local')->visibility('private')->image()->disabled()->openable()->downloadable(),
             TextInput::make('release_year')->numeric()->minValue(1000)->maxValue(9999),
             Textarea::make('description')->rows(3)->columnSpanFull(),
             Repeater::make('tracks')
@@ -57,7 +57,7 @@ class AlbumResource extends Resource
                     TextInput::make('track_number')->label('Track')->numeric()->required(),
                     TextInput::make('title')->required()->columnSpan(2),
                     TextInput::make('artist')->columnSpan(2),
-                    Toggle::make('published'),
+                    Toggle::make('published')->inline(false),
                 ])
                 ->columns(7)
                 ->orderColumn('track_number')

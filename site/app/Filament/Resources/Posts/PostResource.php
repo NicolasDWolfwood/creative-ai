@@ -48,9 +48,9 @@ class PostResource extends Resource
                     TextInput::make('slug')->maxLength(255)->helperText('Leave empty to generate from the title.'),
                     FileUpload::make('cover_image_path')
                         ->label('Cover image')
-                        ->disk('public')
+                        ->disk('local')
                         ->directory('posts/covers')
-                        ->visibility('public')
+                        ->visibility('private')
                         ->image()
                         ->imageEditor()
                         ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
@@ -86,7 +86,7 @@ class PostResource extends Resource
         return $table
             ->defaultSort('published_at', 'desc')
             ->columns([
-                ImageColumn::make('cover_image_path')->disk('public')->square()->label('Cover'),
+                ImageColumn::make('cover_image_path')->getStateUsing(fn (Post $record): ?string => $record->cover_url)->square()->label('Cover'),
                 TextColumn::make('title')->searchable()->sortable()->description(fn (Post $record): string => $record->summary)->wrap(),
                 TextColumn::make('published_at')->date('M j, Y')->sortable()->label('Published'),
                 IconColumn::make('featured')->boolean(),

@@ -51,6 +51,24 @@ class PlatformExpansionTest extends TestCase
         $this->assertSame('secret-cloud-key', app(AiSettings::class)->apiKey('openai'));
     }
 
+    public function test_changing_a_cloud_endpoint_clears_an_unconfirmed_saved_key(): void
+    {
+        $settings = app(AiSettings::class);
+        $settings->save([
+            'provider' => 'openai',
+            'openai_api_key' => 'secret-cloud-key',
+            'openai_base_url' => 'https://api.openai.com/v1',
+        ]);
+
+        $settings->save([
+            'provider' => 'openai',
+            'openai_api_key' => '',
+            'openai_base_url' => 'https://compatible.example.test/v1',
+        ]);
+
+        $this->assertSame('', app(AiSettings::class)->apiKey('openai'));
+    }
+
     public function test_plaintext_or_corrupt_database_secrets_fail_closed(): void
     {
         SiteSetting::query()->create([

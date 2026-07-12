@@ -27,7 +27,7 @@ class PublicMediaService
     public function albums(): Collection
     {
         return Album::query()
-            ->where('published', true)
+            ->published()
             ->with(['coverArtwork', 'tracks' => fn ($query) => $query->published()->with(['coverArtwork', 'album.coverArtwork'])])
             ->orderByDesc('featured')->orderBy('sort_order')->orderByDesc('release_year')->get();
     }

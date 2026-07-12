@@ -35,7 +35,7 @@ class CollectionCoverTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('data-cover-artwork-id="'.$eligible->id.'"', escape: false)
-            ->assertSee(Storage::disk('public')->url($eligible->image_path), escape: false);
+            ->assertSee($eligible->thumb_url, escape: false);
     }
 
     public function test_cover_selection_is_stable_during_a_day_and_rotates_on_the_next_day(): void

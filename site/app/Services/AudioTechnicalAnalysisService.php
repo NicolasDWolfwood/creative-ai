@@ -3,16 +3,17 @@
 namespace App\Services;
 
 use App\Models\Track;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Process\Process;
 
 class AudioTechnicalAnalysisService
 {
+    public function __construct(protected PrivateMediaService $privateMedia) {}
+
     public function analyze(Track $track): void
     {
         $track->forceFill(['analysis_status' => 'processing', 'analysis_error' => null])->saveQuietly();
         try {
-            $path = Storage::disk('public')->path($track->audio_path);
+            $path = $this->privateMedia->absolutePath($track->audio_path);
             if (! is_file($path)) {
                 throw new \RuntimeException('Audio file is missing from storage.');
             }

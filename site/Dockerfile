@@ -1,4 +1,4 @@
-FROM node:22-alpine AS assets
+FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS assets
 
 WORKDIR /build
 
@@ -9,7 +9,7 @@ COPY site/resources ./resources
 COPY site/public ./public
 RUN npm run build
 
-FROM php:8.3-apache AS runtime
+FROM php:8.3-apache@sha256:d180f417e5e45389d18597150a947d1ce89cad2a60be6c25f54ffcfd40ee05f5 AS runtime
 
 ENV APACHE_DOCUMENT_ROOT=/app/public
 WORKDIR /app
@@ -48,7 +48,7 @@ RUN apt-get update \
     && a2enmod headers rewrite \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2@sha256:5946476338742b200bb9ff88f8be56275ddae4b3949c72305cb0dbf10cfcb760 /usr/bin/composer /usr/bin/composer
 COPY site/docker/apache.conf /etc/apache2/sites-available/000-default.conf
 COPY site/docker/uploads.ini $PHP_INI_DIR/conf.d/creative-ai-uploads.ini
 COPY site/composer.json site/composer.lock ./

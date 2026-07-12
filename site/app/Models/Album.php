@@ -3,16 +3,17 @@
 namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
+use App\Models\Concerns\HasPublicationSchedule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 class Album extends Model
 {
     use BuildsSlugs;
     use HasFactory;
+    use HasPublicationSchedule;
 
     protected $fillable = [
         'cover_artwork_id', 'title', 'artist', 'album_artist', 'slug', 'import_key', 'description',
@@ -43,7 +44,7 @@ class Album extends Model
             return $this->coverArtwork->thumb_url;
         }
         if ($this->cover_preference !== 'artwork' && $this->embedded_cover_path) {
-            return Storage::disk('public')->url($this->embedded_cover_path);
+            return route('media.albums.embedded-cover', [$this, 'v' => substr(hash('sha256', $this->embedded_cover_path), 0, 12)]);
         }
 
         return $this->coverArtwork?->thumb_url;

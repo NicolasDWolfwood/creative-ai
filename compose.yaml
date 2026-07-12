@@ -44,6 +44,7 @@ x-app-runtime: &app-runtime
     - app-storage:/app/storage
   security_opt:
     - no-new-privileges:true
+  pids_limit: 256
 
 services:
   postgres:

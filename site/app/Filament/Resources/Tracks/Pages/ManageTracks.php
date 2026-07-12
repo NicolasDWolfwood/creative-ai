@@ -76,9 +76,9 @@ class ManageTracks extends ManageRecords
                 ->schema([
                     FileUpload::make('audio_files')
                         ->label('Audio files')
-                        ->disk('public')
+                        ->disk('local')
                         ->directory('tracks/audio')
-                        ->visibility('public')
+                        ->visibility('private')
                         ->multiple()
                         ->reorderable()
                         ->appendFiles()

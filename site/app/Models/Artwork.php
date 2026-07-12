@@ -3,18 +3,18 @@
 namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use App\Models\Concerns\HasPublicationSchedule;
+use App\Services\PrivateMediaService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Support\Facades\Storage;
 
 class Artwork extends Model
 {
     use BuildsSlugs;
     use HasFactory;
+    use HasPublicationSchedule;
 
     public const AI_STATUS_IDLE = 'idle';
 
@@ -116,25 +116,24 @@ class Artwork extends Model
             ->orderBy('name');
     }
 
-    #[Scope]
-    protected function published(Builder $query): void
-    {
-        $query->where('published', true);
-    }
-
     public function getImageUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->image_path);
+        return route('media.artworks.show', [$this, 'variant' => 'original', 'v' => $this->mediaVersion($this->image_path)]);
+    }
+
+    public function getPublicImageUrlAttribute(): string
+    {
+        return route('artworks.image', ['artwork' => $this, 'v' => $this->mediaVersion($this->image_path)]);
     }
 
     public function getDisplayUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->availableDisplayPath());
+        return route('media.artworks.show', [$this, 'variant' => 'display', 'v' => $this->mediaVersion($this->availableDisplayPath())]);
     }
 
     public function getThumbUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->availableThumbPath());
+        return route('media.artworks.show', [$this, 'variant' => 'thumb', 'v' => $this->mediaVersion($this->availableThumbPath())]);
     }
 
     public function availableDisplayPath(): string
@@ -160,17 +159,22 @@ class Artwork extends Model
             return false;
         }
 
-        $disk = Storage::disk('public');
+        $disk = app(PrivateMediaService::class);
 
-        return $disk->exists($this->display_path) && $disk->exists($this->thumb_path);
+        return $disk->sourceDisk($this->display_path)->exists($this->display_path)
+            && $disk->sourceDisk($this->thumb_path)->exists($this->thumb_path);
     }
 
     public function hasAvailableImage(): bool
     {
-        $disk = Storage::disk('public');
-
         foreach ([$this->thumb_path, $this->display_path, $this->image_path] as $path) {
-            if (filled($path) && $disk->exists($path)) {
+            if (blank($path)) {
+                continue;
+            }
+
+            $disk = app(PrivateMediaService::class)->sourceDisk((string) $path);
+
+            if ($disk->exists($path)) {
                 return true;
             }
         }
@@ -186,14 +190,23 @@ class Artwork extends Model
     /** @param array<int, string|null> $paths */
     protected function firstExistingPath(array $paths): string
     {
-        $disk = Storage::disk('public');
-
         foreach ($paths as $path) {
-            if (filled($path) && $disk->exists($path)) {
+            if (blank($path)) {
+                continue;
+            }
+
+            $disk = app(PrivateMediaService::class)->sourceDisk((string) $path);
+
+            if ($disk->exists($path)) {
                 return $path;
             }
         }
 
         return (string) ($this->image_path ?: collect($paths)->first(fn (?string $path): bool => filled($path)));
+    }
+
+    protected function mediaVersion(?string $path): string
+    {
+        return substr(hash('sha256', (string) $path), 0, 12);
     }
 }

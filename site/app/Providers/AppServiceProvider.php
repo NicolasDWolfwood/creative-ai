@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Middleware\EnsureAdministrator;
 use App\Models\Album;
 use App\Models\Artwork;
 use App\Models\Collection;
@@ -12,6 +13,8 @@ use App\Observers\ArtworkObserver;
 use App\Observers\CollectionObserver;
 use App\Observers\PlaylistObserver;
 use App\Observers\TrackObserver;
+use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -35,6 +38,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Route::matched(function (RouteMatched $event): void {
+            if ($event->route->getName() === 'storage.local') {
+                $event->route->middleware(['web', EnsureAdministrator::class]);
+            }
+        });
+
         Album::observe(AlbumObserver::class);
         Artwork::observe(ArtworkObserver::class);
         Collection::observe(CollectionObserver::class);

@@ -3,8 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use App\Models\Concerns\HasPublicationSchedule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -14,6 +13,7 @@ class Collection extends Model
 {
     use BuildsSlugs;
     use HasFactory;
+    use HasPublicationSchedule;
 
     protected $fillable = [
         'title',
@@ -52,12 +52,6 @@ class Collection extends Model
             ->withTimestamps()
             ->orderByDesc('sort_order')
             ->latest('artworks.created_at');
-    }
-
-    #[Scope]
-    protected function published(Builder $query): void
-    {
-        $query->where('published', true);
     }
 
     public function getHeroImageUrlAttribute(): ?string

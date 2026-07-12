@@ -6,8 +6,8 @@ use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
 use App\Services\ArtworkMediaCleanupService;
 use App\Services\ImageVariantService;
+use App\Services\PrivateMediaService;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class RegenerateArtworkVariants extends Command
@@ -45,7 +45,7 @@ class RegenerateArtworkVariants extends Command
             &$skipped,
         ): void {
             foreach ($artworks as $artwork) {
-                if (! Storage::disk('public')->exists($artwork->image_path)) {
+                if (! app(PrivateMediaService::class)->sourceDisk($artwork->image_path)->exists($artwork->image_path)) {
                     $this->markMissingOriginal($artwork);
                     $failed++;
 

@@ -3,8 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use App\Models\Concerns\HasPublicationSchedule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +14,7 @@ class Playlist extends Model
 {
     use BuildsSlugs;
     use HasFactory;
+    use HasPublicationSchedule;
 
     protected $fillable = [
         'cover_artwork_id',
@@ -63,12 +63,6 @@ class Playlist extends Model
     public function entries(): HasMany
     {
         return $this->hasMany(PlaylistTrack::class)->orderBy('position');
-    }
-
-    #[Scope]
-    protected function published(Builder $query): void
-    {
-        $query->where('published', true);
     }
 
     public function getCoverUrlAttribute(): ?string

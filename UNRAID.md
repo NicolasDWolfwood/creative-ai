@@ -131,6 +131,7 @@ Do not create or expose production until the initial staging stack passes the sa
 3. Load the staging page through HTTPS and confirm its CSS and JavaScript assets return `200` without mixed-content warnings.
 4. Confirm the proxy access rule blocks non-LAN/VPN clients and the response contains the staging no-index policy.
 5. Create the first administrator and verify `/admin` login.
+   Complete the required authenticator-app MFA setup and store the recovery codes securely.
 6. Upload an image, publish it, and verify the original, display variant, and thumbnail return `200`.
 7. Run one queued action and confirm the worker consumes it.
 8. Run Compose Down followed by Compose Up and confirm the administrator, uploaded record, media, and settings persist.
@@ -199,8 +200,9 @@ After a pull request is merged and its push-triggered `main` workflow succeeds:
 4. Run Compose Up. It pulls the missing exact digest before creating the containers. A separate Compose Pull is unnecessary; do not use Restart because Restart does not apply changed Compose or environment values.
 5. Confirm migration exited `0`, website is healthy, and worker is running.
 6. When the release introduces image-variant tracking, or the artwork table shows pending or failed image sizes, open the website container console and run `gosu www-data php artisan creative-ai:artwork-variants:regenerate`. Leave the worker running, wait until the Image status badges settle, and investigate any recorded failure before promotion.
-7. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job.
-8. Verify the staging response is still private and non-indexable.
+7. When the release introduces private media storage, back up storage, run `gosu www-data php artisan creative-ai:media:privatize --dry-run`, then run `gosu www-data php artisan creative-ai:media:privatize`. Investigate any reported collision or missing file before promotion.
+8. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job. In the artwork editor, use the copy button beside **Slug** to copy the publication-aware original-image URL; open that URL in a private window and confirm a draft returns `404`. Do not use Filament's temporary signed `/storage/...` preview URL for the publication check.
+9. Verify the staging response is still private and non-indexable.
 
 If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible.
 
@@ -257,7 +259,8 @@ If any check fails, restore the old Proxy Host upstream first. This returns traf
 5. Run Compose Up; Compose pulls the missing approved digest automatically.
 6. Confirm migration exited `0`, web is healthy, and worker is running.
 7. When the release introduces image-variant tracking, or the artwork table shows pending or failed image sizes, open the website container console and run `gosu www-data php artisan creative-ai:artwork-variants:regenerate`. Leave the worker running, wait until the Image status badges settle, and investigate any recorded failure before continuing.
-8. Verify HTTPS, login, original/display/thumbnail media, uploads, indexing, and a queued job.
+8. When the release introduces private media storage, back up storage, run `gosu www-data php artisan creative-ai:media:privatize --dry-run`, then run `gosu www-data php artisan creative-ai:media:privatize`. Stop on any reported collision or missing file.
+9. Verify HTTPS, MFA login, original/display/thumbnail media, uploads, draft-media denial, indexing, and a queued job.
 
 This deliberately uses a short maintenance window in exchange for a small and understandable deployment process.
 

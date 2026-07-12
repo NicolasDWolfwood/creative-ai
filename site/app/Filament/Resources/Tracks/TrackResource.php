@@ -61,12 +61,14 @@ class TrackResource extends Resource
             Select::make('album_id')->relationship('album', 'title')->searchable()->preload(),
             FileUpload::make('audio_path')
                 ->label('Audio')
-                ->disk('public')
+                ->disk('local')
                 ->directory('tracks/audio')
-                ->visibility('public')
+                ->visibility('private')
                 ->acceptedFileTypes(config('creative_ai.uploads.track_mime_types'))
                 ->maxSize(config('creative_ai.uploads.max_track_size_kb'))
                 ->storeFileNamesIn('original_filename')
+                ->extraAttributes(['class' => 'ca-track-audio-upload'])
+                ->helperText(fn (?Track $record): ?string => filled($record?->original_filename) ? 'Original upload: '.$record->original_filename : null)
                 ->downloadable()
                 ->required(),
             Textarea::make('description')->rows(3)->columnSpanFull(),

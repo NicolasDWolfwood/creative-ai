@@ -9,7 +9,10 @@ use Illuminate\Support\Str;
 
 class AudioMetadataService
 {
-    public function __construct(protected AlbumMatchingService $albums) {}
+    public function __construct(
+        protected AlbumMatchingService $albums,
+        protected PrivateMediaService $privateMedia,
+    ) {}
 
     /** @return array<string, mixed> */
     public function extract(string $path, ?string $originalFilename = null): array
@@ -18,7 +21,7 @@ class AudioMetadataService
         $metadata = $fallback;
 
         try {
-            $analysis = (new \getID3)->analyze(Storage::disk('public')->path($path));
+            $analysis = (new \getID3)->analyze($this->privateMedia->absolutePath($path));
             \getid3_lib::CopyTagsToComments($analysis);
             $comments = $analysis['comments'] ?? [];
             $value = fn (string $key): ?string => filled($comments[$key][0] ?? null)
@@ -49,7 +52,7 @@ class AudioMetadataService
                     'image/png' => 'png', 'image/webp' => 'webp', default => 'jpg'
                 };
                 $coverPath = 'albums/embedded/'.hash('sha256', $picture['data']).'.'.$extension;
-                Storage::disk('public')->put($coverPath, $picture['data']);
+                Storage::disk('local')->put($coverPath, $picture['data']);
                 $metadata['embedded_cover_path'] = $coverPath;
             }
         } catch (\Throwable $exception) {

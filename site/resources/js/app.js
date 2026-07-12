@@ -1,4 +1,47 @@
-import { createIcons, icons } from 'lucide';
+import {
+    ArrowUpRight,
+    AudioLines,
+    AudioWaveform,
+    ChevronLeft,
+    ChevronRight,
+    ChevronUp,
+    createIcons,
+    Disc3,
+    Headphones,
+    Heart,
+    LayoutGrid,
+    Menu,
+    MoveDown,
+    Pause,
+    Play,
+    Repeat,
+    Shuffle,
+    SkipBack,
+    SkipForward,
+    X,
+} from 'lucide';
+
+const icons = {
+    ArrowUpRight,
+    AudioLines,
+    AudioWaveform,
+    ChevronLeft,
+    ChevronRight,
+    ChevronUp,
+    Disc3,
+    Headphones,
+    Heart,
+    LayoutGrid,
+    Menu,
+    MoveDown,
+    Pause,
+    Play,
+    Repeat,
+    Shuffle,
+    SkipBack,
+    SkipForward,
+    X,
+};
 
 class CreativePlayer {
     constructor(payload) {
@@ -37,6 +80,7 @@ class CreativePlayer {
             duration: document.querySelector('[data-duration]'),
             collapses: document.querySelectorAll('[data-player-collapse]'),
             canvas: document.querySelector('[data-visualizer]'),
+            status: document.querySelector('[data-player-status]'),
         };
     }
 
@@ -48,7 +92,7 @@ class CreativePlayer {
         this.elements.repeat?.addEventListener('click', () => this.toggleRepeat());
         this.elements.seek?.addEventListener('input', () => this.seek());
         this.elements.volume?.addEventListener('input', () => this.setVolume());
-        this.elements.collapses.forEach((button) => button.addEventListener('click', () => this.elements.player.classList.toggle('collapsed')));
+        this.elements.collapses.forEach((button) => button.addEventListener('click', () => this.setCollapsed(!this.elements.player.classList.contains('collapsed'))));
         this.elements.playlistSelect?.addEventListener('change', () => {
             this.playlistIndex = Number(this.elements.playlistSelect.value);
             this.trackIndex = 0;
@@ -68,7 +112,7 @@ class CreativePlayer {
         document.querySelectorAll('[data-queue-track-id]').forEach((button) => button.addEventListener('click', () => this.enqueue(button.dataset.queueTrackId), { signal }));
 
         document.querySelector('[data-player-focus]')?.addEventListener('click', () => {
-            this.elements.player?.classList.remove('collapsed');
+            this.setCollapsed(false);
             this.elements.play?.focus();
         }, { signal });
 
@@ -76,7 +120,13 @@ class CreativePlayer {
     }
 
     restoreState() {
-        const state = JSON.parse(localStorage.getItem('creative-ai-player') || '{}');
+        let state = {};
+
+        try {
+            state = JSON.parse(localStorage.getItem('creative-ai-player') || '{}');
+        } catch {
+            localStorage.removeItem('creative-ai-player');
+        }
         this.playlistIndex = Number.isInteger(state.playlistIndex) ? state.playlistIndex : 0;
         this.trackIndex = Number.isInteger(state.trackIndex) ? state.trackIndex : 0;
         this.audio.volume = typeof state.volume === 'number' ? state.volume : 0.85;
@@ -89,6 +139,9 @@ class CreativePlayer {
         this.restoredTrackId = state.trackId;
         this.elements.shuffle?.classList.toggle('active', this.isShuffle);
         this.elements.repeat?.classList.toggle('active', this.isRepeat);
+        this.elements.shuffle?.setAttribute('aria-pressed', String(this.isShuffle));
+        this.elements.repeat?.setAttribute('aria-pressed', String(this.isRepeat));
+        this.setCollapsed(this.elements.player?.classList.contains('collapsed') ?? true);
     }
 
     saveState() {
@@ -184,6 +237,7 @@ class CreativePlayer {
         this.drawWaveform(track.waveform || []);
 
         if (autoplay) {
+            this.announce(`Now playing ${track.title}${track.artist ? ` by ${track.artist}` : ''}.`);
             this.play();
         }
     }
@@ -202,7 +256,12 @@ class CreativePlayer {
     }
 
     enqueue(trackId) {
-        if (this.findTrack(trackId)) { this.queue.push(String(trackId)); this.saveState(); }
+        const found = this.findTrack(trackId);
+        if (!found) return;
+        this.queue.push(String(trackId));
+        this.saveState();
+        const track = this.playlists[found.playlistIndex]?.tracks?.[found.trackIndex];
+        this.announce(`${track?.title || 'Track'} added to queue. ${this.queue.length} queued.`);
     }
 
     drawWaveform(points) {
@@ -289,12 +348,16 @@ class CreativePlayer {
     toggleShuffle() {
         this.isShuffle = !this.isShuffle;
         this.elements.shuffle?.classList.toggle('active', this.isShuffle);
+        this.elements.shuffle?.setAttribute('aria-pressed', String(this.isShuffle));
+        this.announce(`Shuffle ${this.isShuffle ? 'on' : 'off'}.`);
         this.saveState();
     }
 
     toggleRepeat() {
         this.isRepeat = !this.isRepeat;
         this.elements.repeat?.classList.toggle('active', this.isRepeat);
+        this.elements.repeat?.setAttribute('aria-pressed', String(this.isRepeat));
+        this.announce(`Repeat ${this.isRepeat ? 'on' : 'off'}.`);
         this.saveState();
     }
 
@@ -317,7 +380,20 @@ class CreativePlayer {
 
     updatePlayIcon(isPlaying) {
         this.elements.play.innerHTML = isPlaying ? '<i data-lucide="pause"></i>' : '<i data-lucide="play"></i>';
+        this.elements.play.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
         createIcons({ icons });
+    }
+
+    setCollapsed(collapsed) {
+        this.elements.player?.classList.toggle('collapsed', collapsed);
+        this.elements.collapses.forEach((button) => {
+            button.setAttribute('aria-expanded', String(!collapsed));
+            button.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} music player`);
+        });
+    }
+
+    announce(message) {
+        if (this.elements.status) this.elements.status.textContent = message;
     }
 
     formatTime(seconds) {
@@ -396,6 +472,9 @@ function setupLightbox(signal) {
         return items.length - 1;
     });
     let activeIndex = 0;
+    let opener = null;
+    const background = [...document.body.children].filter((element) => element !== panel && element.tagName !== 'SCRIPT');
+    const previouslyInert = new Map();
 
     const show = (index) => {
         if (!items.length) return;
@@ -409,19 +488,29 @@ function setupLightbox(signal) {
 
     triggers.forEach((button, index) => {
         button.addEventListener('click', () => {
+            opener = button;
             show(triggerIndexes[index]);
             panel.classList.add('open');
             panel.setAttribute('aria-hidden', 'false');
             document.body.classList.add('lightbox-open');
+            background.forEach((element) => {
+                previouslyInert.set(element, element.inert);
+                element.inert = true;
+            });
             panel.querySelector('[data-lightbox-close]')?.focus();
         }, { signal });
     });
 
-    const close = () => {
+    const close = (restoreFocus = true) => {
+        if (!panel.classList.contains('open')) return;
         panel.classList.remove('open');
         panel.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('lightbox-open');
+        background.forEach((element) => { element.inert = previouslyInert.get(element) ?? false; });
+        previouslyInert.clear();
         image.src = '';
+        if (restoreFocus && opener?.isConnected) opener.focus();
+        opener = null;
     };
 
     panel.querySelector('[data-lightbox-close]')?.addEventListener('click', close, { signal });
@@ -431,12 +520,25 @@ function setupLightbox(signal) {
         if (event.target === panel) close();
     }, { signal });
     document.addEventListener('keydown', (event) => {
+        if (!panel.classList.contains('open')) return;
         if (event.key === 'Escape') close();
-        if (panel.classList.contains('open') && event.key === 'ArrowLeft') show(activeIndex - 1);
-        if (panel.classList.contains('open') && event.key === 'ArrowRight') show(activeIndex + 1);
+        if (event.key === 'ArrowLeft') show(activeIndex - 1);
+        if (event.key === 'ArrowRight') show(activeIndex + 1);
+        if (event.key === 'Tab') {
+            const focusable = [...panel.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+            const first = focusable[0];
+            const last = focusable.at(-1);
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first?.focus();
+            }
+        }
     }, { signal });
 
-    signal.addEventListener('abort', close, { once: true });
+    signal.addEventListener('abort', () => close(false), { once: true });
 }
 
 function setupNavigation(signal) {
@@ -451,15 +553,27 @@ function setupNavigation(signal) {
         document.querySelector('[data-scroll-progress]')?.style.setProperty('width', `${progress}%`);
     };
 
-    toggle?.addEventListener('click', () => {
-        const open = nav?.classList.toggle('open') || false;
+    const setOpen = (open, restoreFocus = false) => {
+        nav?.classList.toggle('open', open);
         toggle.setAttribute('aria-expanded', String(open));
-    }, { signal });
+        toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+        if (restoreFocus) toggle.focus();
+    };
+
+    toggle?.addEventListener('click', () => setOpen(!nav?.classList.contains('open')), { signal });
 
     nav?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => {
-        nav.classList.remove('open');
-        toggle?.setAttribute('aria-expanded', 'false');
+        setOpen(false);
     }, { signal }));
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && nav?.classList.contains('open')) setOpen(false, true);
+    }, { signal });
+
+    document.addEventListener('click', (event) => {
+        if (!nav?.classList.contains('open') || header?.contains(event.target)) return;
+        setOpen(false);
+    }, { signal });
 
     window.addEventListener('scroll', updateScroll, { passive: true, signal });
     updateScroll();
@@ -510,10 +624,90 @@ function setupReveal(signal) {
     signal.addEventListener('abort', () => observer.disconnect(), { once: true });
 }
 
+function centerCurrentItem(track, activeItem) {
+    if (!track || !activeItem) return;
+
+    requestAnimationFrame(() => {
+        if (!track.isConnected || !activeItem.isConnected) return;
+
+        const trackBounds = track.getBoundingClientRect();
+        const activeBounds = activeItem.getBoundingClientRect();
+        const activeCenter = (activeBounds.left - trackBounds.left) + track.scrollLeft + (activeBounds.width / 2);
+        const centeredPosition = activeCenter - (track.clientWidth / 2);
+        track.scrollLeft = Math.max(0, centeredPosition);
+    });
+}
+
+function setupCollectionSwitcher() {
+    const track = document.querySelector('[data-collection-switcher-track]');
+    const activeItem = track?.querySelector('[data-collection-switcher-item][aria-current="page"]');
+
+    centerCurrentItem(track, activeItem);
+}
+
+function setupTagFilters() {
+    const track = document.querySelector('[data-tag-filter-strip]');
+    const activeItem = track?.querySelector('.tag-filter[aria-current="page"]');
+
+    centerCurrentItem(track, activeItem);
+}
+
+function setupHashTarget() {
+    if (!window.location.hash) return;
+
+    let targetId;
+
+    try {
+        targetId = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+        return;
+    }
+
+    const target = document.getElementById(targetId);
+
+    if (!target) return;
+
+    requestAnimationFrame(() => {
+        if (!target.isConnected) return;
+
+        target.scrollIntoView({ behavior: 'instant', block: 'start' });
+
+        target.querySelector('[data-gallery-focus-target]')?.focus({ preventScroll: true });
+    });
+}
+
+const historyFocusTargets = new Map();
+
+function rememberNavigationFocus() {
+    const focusedLink = document.activeElement instanceof Element
+        ? document.activeElement.closest('a[href]')
+        : null;
+
+    if (!focusedLink) return;
+
+    historyFocusTargets.set(window.location.href, {
+        href: focusedLink.href,
+        key: focusedLink.dataset.navigationFocusKey || null,
+    });
+}
+
+function restoreHistoryFocus() {
+    const source = historyFocusTargets.get(window.location.href);
+
+    if (!source) return;
+
+    const links = Array.from(document.querySelectorAll('a[href]'));
+    const sourceLink = (source.key && links.find((link) => link.dataset.navigationFocusKey === source.key))
+        || links.find((link) => link.href === source.href);
+
+    requestAnimationFrame(() => sourceLink?.focus({ preventScroll: true }));
+}
+
 let player;
 let pageController;
+let restoringHistory = false;
 
-function setupPage() {
+function setupPage({ handleHash = true } = {}) {
     pageController?.abort();
     pageController = new AbortController();
     const { signal } = pageController;
@@ -523,6 +717,8 @@ function setupPage() {
     setupEnhancedNavigation(signal);
     setupReveal(signal);
     setupLightbox(signal);
+    setupCollectionSwitcher();
+    setupTagFilters();
 
     if (player) {
         player.updateLibrary(window.creativeAi || {});
@@ -532,11 +728,20 @@ function setupPage() {
 
     player.bindPageControls(signal);
 
-    if (window.location.hash) {
-        requestAnimationFrame(() => document.getElementById(decodeURIComponent(window.location.hash.slice(1)))?.scrollIntoView());
-    }
+    if (handleHash) setupHashTarget();
 }
 
 document.addEventListener('DOMContentLoaded', setupPage, { once: true });
+document.addEventListener('livewire:navigate', (event) => {
+    restoringHistory = Boolean(event.detail?.history);
+
+    if (!restoringHistory) rememberNavigationFocus();
+});
 document.addEventListener('livewire:navigating', () => pageController?.abort());
-document.addEventListener('livewire:navigated', setupPage);
+document.addEventListener('livewire:navigated', () => {
+    setupPage({ handleHash: !restoringHistory });
+
+    if (restoringHistory) restoreHistoryFocus();
+
+    restoringHistory = false;
+});
