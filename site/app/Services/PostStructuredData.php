@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Post;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -10,13 +11,19 @@ class PostStructuredData
 {
     private const CREATOR_NAME = 'John Reijmer';
 
+    public function __construct(
+        private readonly PublicStoryConnections $connections,
+    ) {}
+
     /** @return array<string, mixed> */
-    public function forPost(Post $post): array
+    public function forPost(Post $post, ?EloquentCollection $connectedMedia = null): array
     {
         if (! $post->isPubliclyPublishedAt()) {
             throw new InvalidArgumentException('Structured data can only be generated for a public post.');
         }
 
+        $post->loadMissing('tags');
+        $connectedMedia ??= $this->connections->mediaForPost($post);
         $canonical = route('posts.show', $post);
         $publishedAt = $post->effectivePublishedAt();
         $modifiedAt = $post->effectivePublicContentUpdatedAt();
@@ -46,6 +53,16 @@ class PostStructuredData
                 'dateModified' => $modifiedAt?->toIso8601String(),
                 'inLanguage' => str_replace('_', '-', app()->getLocale()),
                 'wordCount' => str_word_count(strip_tags((string) $post->body)),
+                'keywords' => $post->tags->pluck('name')->values()->all(),
+                'about' => $connectedMedia
+                    ->map(fn ($connection): array => $this->mediaReference(
+                        $connection->type()?->value,
+                        $connection->mediaTitle(),
+                        $connection->mediaUrl(),
+                    ))
+                    ->filter()
+                    ->values()
+                    ->all(),
             ]),
         ];
 
@@ -74,6 +91,34 @@ class PostStructuredData
     private function creatorId(): string
     {
         return route('home').'#creator';
+    }
+
+    /** @return array<string, string> */
+    private function mediaReference(?string $type, string $title, ?string $url): array
+    {
+        if (! $type || ! $url) {
+            return [];
+        }
+
+        [$schemaType, $fragment] = match ($type) {
+            'artwork' => ['VisualArtwork', 'artwork'],
+            'collection' => ['CollectionPage', 'collection'],
+            'album' => ['MusicAlbum', 'album'],
+            'playlist' => ['MusicPlaylist', 'playlist'],
+            'track' => ['MusicRecording', 'recording'],
+            default => [null, null],
+        };
+
+        if (! $schemaType || ! $fragment) {
+            return [];
+        }
+
+        return [
+            '@type' => $schemaType,
+            '@id' => $url.'#'.$fragment,
+            'name' => $title,
+            'url' => $url,
+        ];
     }
 
     /**

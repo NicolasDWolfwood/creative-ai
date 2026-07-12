@@ -10,6 +10,7 @@ use App\Models\Tag;
 use App\Models\Track;
 use App\Services\CollectionCoverService;
 use App\Services\PublicMediaService;
+use App\Services\PublicStoryConnections;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class ShowcaseController extends Controller
     public function __construct(
         protected PublicMediaService $media,
         protected CollectionCoverService $collectionCovers,
+        protected PublicStoryConnections $storyConnections,
     ) {}
 
     public function index(Request $request): View
@@ -48,7 +50,12 @@ class ShowcaseController extends Controller
             'title' => 'Creative-Ai',
             'body' => 'A living archive of generative artwork, visual experiments, and original sound.',
         ];
-        $selectedTag = $selectedTagSlug ? Tag::query()->where('slug', $selectedTagSlug)->first() : null;
+        $selectedTag = $selectedTagSlug
+            ? Tag::query()
+                ->where('slug', $selectedTagSlug)
+                ->whereHas('artworks', fn (Builder $query) => $query->published())
+                ->first()
+            : null;
         $artworksQuery = Artwork::query()
             ->published()
             ->with(['collections', 'tags'])
@@ -105,6 +112,50 @@ class ShowcaseController extends Controller
         $posts = Post::query()->latestPublished()->limit(3)->get();
         $pageTitle = $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : 'Creative-Ai');
         $description = $selectedCollection?->description ?: ($intro['body'] ?? 'Generative art and original music by John Reijmer.');
+        $collectionStories = $selectedCollection
+            ? $this->storyConnections->postsForMedia($selectedCollection)
+            : collect();
+        $structuredData = null;
+
+        if ($selectedCollection) {
+            $collectionItems = collect($artworks->items());
+            $canonical = route('collections.show', $selectedCollection);
+            $itemListId = request()->fullUrl().'#items';
+            $structuredData = [
+                '@context' => 'https://schema.org',
+                '@graph' => [
+                    [
+                        '@type' => 'CollectionPage',
+                        '@id' => $canonical.'#collection',
+                        'name' => $selectedCollection->title,
+                        'description' => str($description)->squish()->limit(200, '')->toString(),
+                        'url' => $canonical,
+                        'mainEntity' => ['@id' => $itemListId],
+                        'subjectOf' => $collectionStories
+                            ->map(fn (Post $post): array => ['@id' => route('posts.show', $post).'#article'])
+                            ->values()
+                            ->all(),
+                    ],
+                    [
+                        '@type' => 'ItemList',
+                        '@id' => $itemListId,
+                        'numberOfItems' => $collectionItems->count(),
+                        'itemListElement' => $collectionItems
+                            ->map(fn (Artwork $artwork, int $index): array => [
+                                '@type' => 'ListItem',
+                                'position' => $index + 1,
+                                'item' => [
+                                    '@type' => 'VisualArtwork',
+                                    '@id' => route('artworks.show', $artwork).'#artwork',
+                                    'name' => $artwork->title,
+                                    'url' => route('artworks.show', $artwork),
+                                ],
+                            ])
+                            ->all(),
+                    ],
+                ],
+            ];
+        }
 
         return view('showcase', [
             'intro' => $intro,
@@ -125,6 +176,7 @@ class ShowcaseController extends Controller
             'homeAlbums' => $homeAlbums,
             'homePlaylists' => $homePlaylists,
             'posts' => $posts,
+            'collectionStories' => $collectionStories,
             'playerPayload' => $this->media->playerPayload($playlists, $albums, $standaloneTracks),
             'seo' => [
                 'title' => $pageTitle === 'Creative-Ai' ? 'Creative-Ai | Generative Art and Original Music' : $pageTitle.' | Creative-Ai',
@@ -133,6 +185,7 @@ class ShowcaseController extends Controller
                 'canonical' => $selectedCollection ? route('collections.show', $selectedCollection) : request()->url(),
                 'type' => 'website',
             ],
+            'structured_data' => $structuredData,
         ]);
     }
 }

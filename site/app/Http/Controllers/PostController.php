@@ -6,6 +6,7 @@ use App\Models\Artwork;
 use App\Models\Post;
 use App\Services\PostStructuredData;
 use App\Services\PublicMediaService;
+use App\Services\PublicStoryConnections;
 use Illuminate\Contracts\View\View;
 
 class PostController extends Controller
@@ -13,6 +14,7 @@ class PostController extends Controller
     public function __construct(
         protected PublicMediaService $media,
         protected PostStructuredData $structuredData,
+        protected PublicStoryConnections $connections,
     ) {}
 
     public function index(): View
@@ -37,10 +39,13 @@ class PostController extends Controller
     {
         abort_unless($post->isPubliclyPublishedAt(), 404);
 
+        $post->load('tags');
         $publishedAt = $post->effectivePublishedAt();
+        $connectedMedia = $this->connections->mediaForPost($post);
 
         return view('posts.show', [
             'post' => $post,
+            'connectedMedia' => $connectedMedia,
             'morePosts' => Post::query()->whereKeyNot($post->getKey())->latestPublished()->limit(3)->get(),
             'playerPayload' => $this->media->libraryPlayerPayload(),
             'preview' => false,
@@ -53,7 +58,7 @@ class PostController extends Controller
                 'published_at' => $publishedAt?->toIso8601String(),
                 'modified_at' => $post->effectivePublicContentUpdatedAt()?->toIso8601String(),
             ],
-            'structured_data' => $this->structuredData->forPost($post),
+            'structured_data' => $this->structuredData->forPost($post, $connectedMedia),
         ]);
     }
 }

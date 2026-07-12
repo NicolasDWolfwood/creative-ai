@@ -40,4 +40,10 @@ class Tag extends Model
             ->withPivot('category')
             ->withTimestamps();
     }
+
+    public function posts(): BelongsToMany
+    {
+        return $this->belongsToMany(Post::class, 'post_tag')
+            ->withTimestamps();
+    }
 }

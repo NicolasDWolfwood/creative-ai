@@ -35,6 +35,11 @@ class Album extends Model
         return $this->hasMany(Track::class)->orderBy('disc_number')->orderBy('track_number')->orderBy('id');
     }
 
+    public function journalMediaItems(): HasMany
+    {
+        return $this->hasMany(PostMedia::class);
+    }
+
     public function getCoverUrlAttribute(): ?string
     {
         if ($this->cover_preference === 'none') {

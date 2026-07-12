@@ -65,6 +65,11 @@ class Playlist extends Model
         return $this->hasMany(PlaylistTrack::class)->orderBy('position');
     }
 
+    public function journalMediaItems(): HasMany
+    {
+        return $this->hasMany(PostMedia::class);
+    }
+
     public function getCoverUrlAttribute(): ?string
     {
         return $this->coverArtwork?->isPubliclyPublished()
