@@ -27,37 +27,41 @@
             <div class="creative-admin-panel creative-admin-panel-wide">
                 <div class="creative-admin-panel-heading">
                     <div>
-                        <p class="creative-admin-eyebrow">Latest visuals</p>
-                        <h3>Gallery pulse</h3>
+                        <p class="creative-admin-eyebrow">Recently published</p>
+                        <h3>Latest visuals</h3>
                     </div>
                     <a href="{{ \App\Filament\Resources\Artworks\ArtworkResource::getUrl() }}">Open gallery</a>
                 </div>
 
                 <div class="creative-admin-art-strip">
-                    @foreach ($this->getFeaturedArtworks() as $artwork)
+                    @forelse ($this->getFeaturedArtworks() as $artwork)
                         <a href="{{ \App\Filament\Resources\Artworks\ArtworkResource::getUrl() }}" aria-label="{{ $artwork->title }}">
                             <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->title }}" loading="lazy">
                         </a>
-                    @endforeach
+                    @empty
+                        <p class="creative-admin-empty">No artwork has been published yet.</p>
+                    @endforelse
                 </div>
             </div>
 
             <div class="creative-admin-panel">
                 <div class="creative-admin-panel-heading">
                     <div>
-                        <p class="creative-admin-eyebrow">Audio</p>
-                        <h3>Player queue</h3>
+                        <p class="creative-admin-eyebrow">Recently published</p>
+                        <h3>Latest tracks</h3>
                     </div>
                     <a href="{{ \App\Filament\Resources\Playlists\PlaylistResource::getUrl() }}">Playlists</a>
                 </div>
 
                 <div class="creative-admin-track-list">
-                    @foreach ($this->getRecentTracks() as $track)
+                    @forelse ($this->getRecentTracks() as $track)
                         <a href="{{ \App\Filament\Resources\Tracks\TrackResource::getUrl() }}">
                             <span>{{ $track->title }}</span>
                             <small>{{ $track->artist ?: 'Creative-Ai' }}</small>
                         </a>
-                    @endforeach
+                    @empty
+                        <p class="creative-admin-empty">No tracks have been published yet.</p>
+                    @endforelse
                 </div>
             </div>
         </section>

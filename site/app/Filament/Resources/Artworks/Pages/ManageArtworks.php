@@ -98,9 +98,9 @@ class ManageArtworks extends ManageRecords
                 ->schema([
                     FileUpload::make('images')
                         ->label('Artwork files')
-                        ->disk('public')
+                        ->disk('local')
                         ->directory('artworks/originals')
-                        ->visibility('public')
+                        ->visibility('private')
                         ->image()
                         ->multiple()
                         ->reorderable()

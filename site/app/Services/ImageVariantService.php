@@ -10,6 +10,7 @@ class ImageVariantService
 {
     public function __construct(
         protected AiSettings $aiSettings,
+        protected PrivateMediaService $privateMedia,
     ) {}
 
     /**
@@ -17,13 +18,14 @@ class ImageVariantService
      */
     public function createVariants(string $sourcePath, int $artworkId, string $generationToken): array
     {
-        $disk = Storage::disk('public');
+        $sourceDisk = $this->privateMedia->sourceDisk($sourcePath);
+        $disk = Storage::disk('local');
 
-        if (! $disk->exists($sourcePath)) {
-            throw new RuntimeException("Image not found on public disk: {$sourcePath}");
+        if (! $sourceDisk->exists($sourcePath)) {
+            throw new RuntimeException("Image not found in media storage: {$sourcePath}");
         }
 
-        $absoluteSource = $disk->path($sourcePath);
+        $absoluteSource = $sourceDisk->path($sourcePath);
         [$width, $height, $type] = getimagesize($absoluteSource) ?: [null, null, null];
 
         if (! $width || ! $height || ! $type) {
@@ -95,10 +97,10 @@ class ImageVariantService
      */
     public function createAnalysisImageData(string $sourcePath): array
     {
-        $disk = Storage::disk('public');
+        $disk = $this->privateMedia->sourceDisk($sourcePath);
 
         if (! $disk->exists($sourcePath)) {
-            throw new RuntimeException("Image not found on public disk: {$sourcePath}");
+            throw new RuntimeException("Image not found in media storage: {$sourcePath}");
         }
 
         $absoluteSource = $disk->path($sourcePath);

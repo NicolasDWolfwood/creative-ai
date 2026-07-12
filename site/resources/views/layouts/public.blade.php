@@ -48,25 +48,26 @@
             <meta property="article:published_time" content="{{ $meta['published_at'] }}">
         @endif
         <script type="application/ld+json">
-            @json($structuredData, JSON_UNESCAPED_SLASHES)
+            {{ Illuminate\Support\Js::from($structuredData) }}
         </script>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="@yield('body-class', 'public-page')">
+        <a class="skip-link" href="#main-content">Skip to content</a>
         <div class="scroll-progress" data-scroll-progress aria-hidden="true"></div>
         <header class="site-header" aria-label="Primary navigation">
             <a class="brand" href="{{ route('home') }}" aria-label="Creative-Ai home" wire:navigate>
                 <span class="brand-mark">CA</span>
                 <span><strong>Creative-Ai</strong><small>John Reijmer</small></span>
             </a>
-            <button class="nav-toggle icon-button" type="button" data-nav-toggle aria-label="Open navigation" aria-expanded="false">
+            <button class="nav-toggle icon-button" type="button" data-nav-toggle aria-label="Open navigation" aria-expanded="false" aria-controls="primary-navigation">
                 <i data-lucide="menu"></i>
             </button>
-            <nav class="top-nav" data-nav>
-                <a href="{{ route('gallery') }}" wire:navigate>Artwork</a>
+            <nav class="top-nav" id="primary-navigation" data-nav>
+                <a href="{{ route('gallery') }}" @if (request()->routeIs('gallery', 'collections.show')) aria-current="page" @endif wire:navigate>Artwork</a>
                 <a href="{{ route('home') }}#collections" wire:navigate>Collections</a>
-                <a href="{{ route('music.index') }}" wire:navigate>Music</a>
-                <a href="{{ route('posts.index') }}" wire:navigate>Journal</a>
+                <a href="{{ route('music.index') }}" @if (request()->routeIs('music.*')) aria-current="page" @endif wire:navigate>Music</a>
+                <a href="{{ route('posts.index') }}" @if (request()->routeIs('posts.*')) aria-current="page" @endif wire:navigate>Journal</a>
                 <a href="{{ route('home') }}#about" wire:navigate>About</a>
                 @if ($canAccessAdmin)
                     <a href="{{ $adminPanel->getUrl() }}">Admin</a>
@@ -74,7 +75,7 @@
             </nav>
         </header>
 
-        <main>@yield('content')</main>
+        <main id="main-content" tabindex="-1">@yield('content')</main>
 
         <footer class="site-footer">
             <div class="footer-brand"><strong>Creative-Ai</strong><span>A living archive by John Reijmer.</span></div>
@@ -88,12 +89,12 @@
             <span>&copy; {{ date('Y') }}</span>
         </footer>
 
-        <div class="lightbox" data-lightbox-panel aria-hidden="true" role="dialog" aria-modal="true" aria-label="Artwork viewer">
+        <div class="lightbox" data-lightbox-panel aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" aria-describedby="lightbox-description">
             <button type="button" class="icon-button lightbox-close" data-lightbox-close aria-label="Close artwork"><i data-lucide="x"></i></button>
             <button type="button" class="icon-button lightbox-prev" data-lightbox-prev aria-label="Previous artwork"><i data-lucide="chevron-left"></i></button>
             <figure>
                 <img src="" alt="" data-lightbox-image>
-                <figcaption><strong data-lightbox-title></strong><span data-lightbox-description></span></figcaption>
+                <figcaption><strong id="lightbox-title" data-lightbox-title></strong><span id="lightbox-description" data-lightbox-description></span></figcaption>
             </figure>
             <button type="button" class="icon-button lightbox-next" data-lightbox-next aria-label="Next artwork"><i data-lucide="chevron-right"></i></button>
         </div>
@@ -103,27 +104,28 @@
             <audio data-player-audio preload="metadata"></audio>
             <div class="player-now">
                 <div class="player-art" data-player-art></div>
-                <button class="player-summary" type="button" data-player-collapse aria-label="Open music player">
+                <button class="player-summary" type="button" data-player-collapse aria-label="Expand music player" aria-expanded="false">
                     <strong data-track-title>Listening room</strong>
                     <span data-track-artist>Select an album or playlist</span>
                 </button>
                 <button class="icon-button play-button" type="button" data-play aria-label="Play"><i data-lucide="play"></i></button>
-                <button class="icon-button player-expand" type="button" data-player-collapse aria-label="Expand player"><i data-lucide="chevron-up"></i></button>
+                <button class="icon-button player-expand" type="button" data-player-collapse aria-label="Expand music player" aria-expanded="false"><i data-lucide="chevron-up"></i></button>
             </div>
             <div class="player-body">
                 <div class="player-select-row">
                     <select data-playlist-select aria-label="Album or playlist"></select>
                     <input type="range" class="volume" data-volume min="0" max="1" value="0.85" step="0.01" aria-label="Volume">
                 </div>
-                <canvas class="visualizer" data-visualizer width="680" height="64"></canvas>
+                <canvas class="visualizer" data-visualizer width="680" height="64" aria-hidden="true"></canvas>
                 <div class="time-row"><span data-current-time>0:00</span><span data-duration>0:00</span></div>
                 <input type="range" class="seek" data-seek min="0" max="100" value="0" step="0.1" aria-label="Seek">
                 <div class="player-controls">
                     <button class="icon-button" type="button" data-prev aria-label="Previous track"><i data-lucide="skip-back"></i></button>
                     <button class="icon-button" type="button" data-next aria-label="Next track"><i data-lucide="skip-forward"></i></button>
-                    <button class="icon-button" type="button" data-shuffle aria-label="Shuffle"><i data-lucide="shuffle"></i></button>
-                    <button class="icon-button" type="button" data-repeat aria-label="Repeat"><i data-lucide="repeat"></i></button>
+                    <button class="icon-button" type="button" data-shuffle aria-label="Shuffle" aria-pressed="false"><i data-lucide="shuffle"></i></button>
+                    <button class="icon-button" type="button" data-repeat aria-label="Repeat" aria-pressed="false"><i data-lucide="repeat"></i></button>
                 </div>
+                <p class="player-status" data-player-status aria-live="polite" aria-atomic="true"></p>
             </div>
         </aside>
         @endpersist

@@ -92,7 +92,7 @@ class AiConfiguration extends Page
                             ->icon('heroicon-o-photo')
                             ->schema([
                                 Section::make('Analysis image')
-                                    ->description('Original uploads stay private. A stripped, resized JPEG is sent to the selected provider.')
+                                    ->description('A stripped, resized JPEG is sent to the selected provider. Original uploads remain in public media storage, so draft file URLs must not be shared.')
                                     ->columns(2)
                                     ->schema([
                                         TextInput::make('image_max_width')
@@ -244,7 +244,9 @@ class AiConfiguration extends Page
                     ->helperText('Encrypted before storage. Leave blank to preserve the configured key.')
                     ->maxLength(1000)
                     ->columnSpanFull(),
-                TextInput::make($provider.'_base_url')->label('API base URL')->placeholder($placeholder)->url()->required()->maxLength(255)->columnSpanFull(),
+                TextInput::make($provider.'_base_url')->label('API base URL')->placeholder($placeholder)->url()->required()->maxLength(255)
+                    ->helperText('Changing this endpoint clears the saved API key unless you enter the key again, preventing silent credential forwarding.')
+                    ->columnSpanFull(),
                 Select::make($provider.'_model')->label('Model')->options(fn (): array => $this->getModelOptions($provider))->searchable()->native(false)->required(),
                 TextInput::make($provider.'_request_timeout')->label('Request timeout')->suffix('seconds')->numeric()->minValue(30)->maxValue(600)->required(),
             ]);

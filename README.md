@@ -118,6 +118,8 @@ Create the first administrator interactively:
 docker compose exec --user www-data creative-ai php artisan creative-ai:admin:create admin@example.test
 ```
 
+The administrator panel requires authenticator-app MFA. On the first login, complete the TOTP setup and store the one-time recovery codes in the same protected password manager used for the administrator credential.
+
 For recovery, an explicit generated password can be printed once:
 
 ```bash
@@ -147,6 +149,15 @@ After deploying the variant-tracking migration to an environment that already co
 ```bash
 gosu www-data php artisan creative-ai:artwork-variants:regenerate
 ```
+
+Artwork originals, generated variants, track audio, embedded album covers, and journal covers are stored privately. Public media is streamed through publication-aware application routes; administrators can preview drafts while anonymous visitors receive `404` responses. After first deploying this storage change to an environment with existing media, back up storage and run the idempotent migration command from the website container:
+
+```bash
+gosu www-data php artisan creative-ai:media:privatize --dry-run
+gosu www-data php artisan creative-ai:media:privatize
+```
+
+The command copies each referenced file, verifies its SHA-256 hash, and only then removes the old public copy. A conflicting private/public pair is left untouched and reported as a failure.
 
 The normal worker consumes those jobs. Run the command with `--sync` only for deliberate foreground maintenance. It exits unsuccessfully when an original file is missing and records that failure on the artwork row; rerunning it leaves completed variants unchanged and recovers queued or processing work after the configurable stale interval.
 

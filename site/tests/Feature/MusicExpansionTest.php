@@ -83,7 +83,7 @@ class MusicExpansionTest extends TestCase
         Storage::fake('public');
         Storage::disk('public')->put('covers/embedded.jpg', 'image');
         $album = Album::create(['title' => 'Choice', 'embedded_cover_path' => 'covers/embedded.jpg', 'cover_preference' => 'embedded']);
-        $this->assertStringContainsString('covers/embedded.jpg', $album->cover_url);
+        $this->assertStringStartsWith(route('media.albums.embedded-cover', $album), $album->cover_url);
         $album->update(['cover_preference' => 'none']);
         $this->assertNull($album->fresh()->cover_url);
     }

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title description">
+  <title id="title">Creative-Ai studio background</title>
+  <desc id="description">Abstract teal and amber light forms on a dark field.</desc>
+  <defs>
+    <radialGradient id="teal" cx="28%" cy="42%" r="58%">
+      <stop offset="0" stop-color="#24d1b0" stop-opacity=".58"/>
+      <stop offset="1" stop-color="#24d1b0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="amber" cx="76%" cy="36%" r="52%">
+      <stop offset="0" stop-color="#f3b84e" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#f3b84e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#07080b"/>
+      <stop offset=".52" stop-color="#111923"/>
+      <stop offset="1" stop-color="#090b10"/>
+    </linearGradient>
+    <pattern id="grid" width="88" height="88" patternUnits="userSpaceOnUse">
+      <path d="M88 0H0V88" fill="none" stroke="#fff" stroke-opacity=".055"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#base)"/>
+  <rect width="1600" height="1000" fill="url(#teal)"/>
+  <rect width="1600" height="1000" fill="url(#amber)"/>
+  <path d="M-80 820C280 540 510 760 820 450s510-170 880-480" fill="none" stroke="#65d9bd" stroke-opacity=".22" stroke-width="3"/>
+  <path d="M-40 910C360 620 590 840 900 530s500-170 780-420" fill="none" stroke="#f3b84e" stroke-opacity=".17" stroke-width="2"/>
+  <rect width="1600" height="1000" fill="url(#grid)"/>
+</svg>

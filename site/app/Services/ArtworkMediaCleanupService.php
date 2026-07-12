@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Artwork;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class ArtworkMediaCleanupService
@@ -18,13 +17,12 @@ class ArtworkMediaCleanupService
     /** @param array<int, string|null> $paths */
     public function deleteUnreferenced(array $paths): void
     {
-        $disk = Storage::disk('public');
-
         foreach (array_unique(array_filter($paths, 'is_string')) as $path) {
             if (! $this->isManagedPath($path) || $this->isReferenced($path)) {
                 continue;
             }
 
+            $disk = app(PrivateMediaService::class)->sourceDisk($path);
             $deleted = $disk->delete($path);
 
             if (! $deleted && $disk->exists($path)) {

@@ -32,7 +32,7 @@ class ShowcaseController extends Controller
 
     public function collection(Collection $collection, Request $request): View
     {
-        abort_unless($collection->published, 404);
+        abort_unless($collection->isPubliclyPublished(), 404);
 
         return $this->renderShowcase($collection, 240, $request->query('tag'));
     }
@@ -78,7 +78,13 @@ class ShowcaseController extends Controller
                     $query->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
                 }
             })
-            ->withCount(['artworks' => fn ($query) => $query->published()])
+            ->withCount(['artworks' => function (Builder $query) use ($selectedCollection): void {
+                $query->published();
+
+                if ($selectedCollection) {
+                    $query->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
+                }
+            }])
             ->orderByDesc('artworks_count')
             ->limit(36)
             ->get();

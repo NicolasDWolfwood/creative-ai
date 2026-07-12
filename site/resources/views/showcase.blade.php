@@ -36,13 +36,13 @@
             <div class="section-inner">
                 <header class="section-heading split-heading" data-reveal>
                     <div><p class="eyebrow">Curated worlds</p><h2 id="collections-title">Collections</h2></div>
-                    <a class="text-link" href="{{ route('gallery') }}" wire:navigate>Explore the full archive <i data-lucide="arrow-up-right"></i></a>
+                    <a class="text-link" href="{{ route('gallery') }}#gallery" data-navigation-focus-key="collections-archive-link" wire:navigate>Explore the full archive <i data-lucide="arrow-up-right"></i></a>
                 </header>
                 <div class="collection-grid">
                     @foreach ($collections as $collection)
                         @php($coverArtwork = $collectionCovers->get($collection->getKey()))
                         @php($cover = $coverArtwork?->thumb_url ?: $collectionCoverPlaceholder)
-                        <a class="collection-tile {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}" data-reveal wire:navigate>
+                        <a class="collection-tile {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}#gallery" @if ($selectedCollection?->is($collection)) aria-current="page" @endif data-navigation-focus-key="collection-tile-{{ $collection->getKey() }}" data-reveal wire:navigate>
                             <img src="{{ $cover }}" alt="" loading="lazy" @if ($coverArtwork) data-cover-artwork-id="{{ $coverArtwork->getKey() }}" @else data-collection-cover-placeholder @endif>
                             <span><strong>{{ $collection->title }}</strong><small>{{ $collection->artworks_count }} works</small></span>
                         </a>
@@ -52,25 +52,65 @@
         </section>
     @endif
 
-    <section class="gallery-section" id="gallery" aria-labelledby="gallery-title">
+    <section class="gallery-section" id="gallery" aria-labelledby="gallery-title" data-gallery-target>
         <div class="section-inner section-inner-wide">
-            <header class="section-heading split-heading" data-reveal>
-                <div><p class="eyebrow">Visual archive</p><h2 id="gallery-title">{{ $selectedTag ? ucfirst($selectedTag->name) : ($selectedCollection?->title ?? 'Recent work') }}</h2></div>
-                <p>{{ $artworks->count() }} frames in this view</p>
+            <header class="section-heading split-heading">
+                <div class="gallery-heading-copy">
+                    <p class="eyebrow">{{ $selectedCollection ? 'Selected collection' : 'Visual archive' }}</p>
+                    <h2 id="gallery-title" data-gallery-focus-target tabindex="-1">{{ $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : (request()->routeIs('gallery') ? 'All artwork' : 'Recent work')) }}</h2>
+                    @if ($selectedCollection?->description)
+                        <p>{{ $selectedCollection->description }}</p>
+                    @endif
+                    @if ($selectedCollection && $selectedTag)
+                        <p class="gallery-active-filter">Filtered by <strong>{{ $selectedTag->name }}</strong></p>
+                    @endif
+                </div>
+                <p>{{ $artworks->count() }} {{ str('frame')->plural($artworks->count()) }} in this view</p>
             </header>
 
+            @if ($collections->isNotEmpty() && request()->routeIs('gallery', 'collections.show'))
+                @php($allArtworkSelected = ! $selectedCollection)
+                @php($allArtworkUrl = route('gallery', $allArtworkSelected && $selectedTag ? ['tag' => $selectedTag->slug] : []))
+                <nav class="collection-switcher" aria-label="Browse artwork collections" data-collection-switcher>
+                    <div class="collection-switcher-heading">
+                        <span>Browse collections</span>
+                        <small>Choose another world</small>
+                    </div>
+                    <div class="collection-switcher-track" data-collection-switcher-track>
+                        <a class="collection-switcher-link {{ $allArtworkSelected ? 'active' : '' }}" href="{{ $allArtworkUrl }}#gallery" @if ($allArtworkSelected) aria-current="page" @endif data-collection-switcher-item data-navigation-focus-key="collection-switcher-all" wire:navigate>
+                            <span class="collection-switcher-thumbnail collection-switcher-all" aria-hidden="true"><i data-lucide="layout-grid"></i></span>
+                            <span>
+                                <span class="collection-switcher-title"><strong>All artwork</strong>@if ($allArtworkSelected)<span class="collection-switcher-current" aria-hidden="true">Current</span>@endif</span>
+                                <small>{{ number_format($totalArtworkCount) }} published works</small>
+                            </span>
+                        </a>
+                        @foreach ($collections as $collection)
+                            @php($coverArtwork = $collectionCovers->get($collection->getKey()))
+                            @php($cover = $coverArtwork?->thumb_url ?: $collectionCoverPlaceholder)
+                            <a class="collection-switcher-link {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}#gallery" @if ($selectedCollection?->is($collection)) aria-current="page" @endif data-collection-switcher-item data-navigation-focus-key="collection-switcher-{{ $collection->getKey() }}" wire:navigate>
+                                <img class="collection-switcher-thumbnail" src="{{ $cover }}" alt="" loading="lazy">
+                                <span>
+                                    <span class="collection-switcher-title"><strong>{{ $collection->title }}</strong>@if ($selectedCollection?->is($collection))<span class="collection-switcher-current" aria-hidden="true">Current</span>@endif</span>
+                                    <small>{{ $collection->artworks_count }} works</small>
+                                </span>
+                            </a>
+                        @endforeach
+                    </div>
+                </nav>
+            @endif
+
             @if ($tags->isNotEmpty())
-                <nav class="tag-filter-strip" aria-label="Artwork tags" data-reveal>
-                    <a class="tag-filter {{ $selectedTag ? '' : 'active' }}" href="{{ request()->url() }}" wire:navigate>All</a>
+                <nav class="tag-filter-strip" aria-label="Artwork tags" data-tag-filter-strip>
+                    <a class="tag-filter {{ $selectedTag ? '' : 'active' }}" href="{{ request()->url() }}#gallery" @unless ($selectedTag) aria-current="page" @endunless data-navigation-focus-key="tag-filter-all" wire:navigate>All tags</a>
                     @foreach ($tags as $tag)
-                        <a class="tag-filter {{ $selectedTag?->is($tag) ? 'active' : '' }}" href="{{ request()->fullUrlWithQuery(['tag' => $tag->slug]) }}" wire:navigate>{{ $tag->name }}<span>{{ $tag->artworks_count }}</span></a>
+                        <a class="tag-filter {{ $selectedTag?->is($tag) ? 'active' : '' }}" href="{{ request()->fullUrlWithQuery(['tag' => $tag->slug]) }}#gallery" @if ($selectedTag?->is($tag)) aria-current="page" @endif data-navigation-focus-key="tag-filter-{{ $tag->getKey() }}" wire:navigate>{{ $tag->name }}<span>{{ $tag->artworks_count }}</span></a>
                     @endforeach
                 </nav>
             @endif
 
             <div class="art-grid">
                 @forelse ($artworks as $artwork)
-                    <button class="art-tile" type="button" data-lightbox data-title="{{ $artwork->title }}" data-description="{{ $artwork->description }}" data-alt="{{ $artwork->image_alt }}" data-full="{{ $artwork->display_url }}" data-reveal>
+                    <button class="art-tile" type="button" data-lightbox data-title="{{ $artwork->title }}" data-description="{{ $artwork->description }}" data-alt="{{ $artwork->image_alt }}" data-full="{{ $artwork->display_url }}">
                         <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}">
                         <span><strong>{{ $artwork->title }}</strong><small>{{ $artwork->tags->take(2)->pluck('name')->implode(' · ') }}</small></span>
                     </button>

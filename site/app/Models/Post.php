@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Post extends Model
@@ -50,7 +49,7 @@ class Post extends Model
     public function getCoverUrlAttribute(): ?string
     {
         return $this->cover_image_path
-            ? Storage::disk('public')->url($this->cover_image_path)
+            ? route('media.posts.cover', [$this, 'v' => substr(hash('sha256', $this->cover_image_path), 0, 12)])
             : null;
     }
 

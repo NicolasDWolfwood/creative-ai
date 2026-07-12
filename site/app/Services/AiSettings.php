@@ -65,14 +65,18 @@ class AiSettings
     public function save(array $values): array
     {
         $stored = $this->stored();
-        $settings = $this->sanitize(array_replace($this->all(), $values));
+        $existing = $this->all();
+        $settings = $this->sanitize(array_replace($existing, $values));
 
-        foreach (self::SECRET_FIELDS as $field) {
+        foreach (self::SECRET_FIELDS as $provider => $field) {
             $submitted = trim((string) ($values[$field] ?? ''));
+            $baseUrlField = $provider.'_base_url';
+            $endpointChanged = array_key_exists($baseUrlField, $values)
+                && rtrim((string) $values[$baseUrlField], '/') !== rtrim((string) ($existing[$baseUrlField] ?? ''), '/');
 
             if (filled($submitted)) {
                 $settings[$field] = 'encrypted:'.Crypt::encryptString($submitted);
-            } elseif (is_string($stored[$field] ?? null) && str_starts_with($stored[$field], 'encrypted:')) {
+            } elseif (! $endpointChanged && is_string($stored[$field] ?? null) && str_starts_with($stored[$field], 'encrypted:')) {
                 $settings[$field] = $stored[$field];
             } else {
                 unset($settings[$field]);
@@ -273,7 +277,12 @@ class AiSettings
         $url = rtrim(trim($url), '/');
         $scheme = parse_url($url, PHP_URL_SCHEME);
 
-        if (! filter_var($url, FILTER_VALIDATE_URL) || ! in_array($scheme, ['http', 'https'], true)) {
+        $parts = parse_url($url);
+
+        if (! filter_var($url, FILTER_VALIDATE_URL)
+            || ! in_array($scheme, ['http', 'https'], true)
+            || ! empty($parts['user'])
+            || ! empty($parts['pass'])) {
             throw new RuntimeException($label.' must be a valid HTTP or HTTPS URL.');
         }
 

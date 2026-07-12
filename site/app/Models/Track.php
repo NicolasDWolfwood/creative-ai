@@ -3,18 +3,17 @@
 namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
-use Illuminate\Database\Eloquent\Attributes\Scope;
-use Illuminate\Database\Eloquent\Builder;
+use App\Models\Concerns\HasPublicationSchedule;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Support\Facades\Storage;
 
 class Track extends Model
 {
     use BuildsSlugs;
     use HasFactory;
+    use HasPublicationSchedule;
 
     public const AI_STATUS_IDLE = 'idle';
 
@@ -98,15 +97,9 @@ class Track extends Model
             ->orderBy('name');
     }
 
-    #[Scope]
-    protected function published(Builder $query): void
-    {
-        $query->where('published', true);
-    }
-
     public function getAudioUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->audio_path);
+        return route('media.tracks.audio', [$this, 'v' => substr(hash('sha256', (string) $this->audio_path), 0, 12)]);
     }
 
     public function getCoverUrlAttribute(): ?string

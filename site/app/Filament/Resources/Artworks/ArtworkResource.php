@@ -37,6 +37,7 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Js;
 
 class ArtworkResource extends Resource
 {
@@ -54,7 +55,32 @@ class ArtworkResource extends Resource
     {
         return $schema->components([
             TextInput::make('title')->required()->maxLength(255),
-            TextInput::make('slug')->maxLength(255)->helperText('Leave empty to generate from the title.'),
+            TextInput::make('slug')
+                ->maxLength(255)
+                ->helperText('Leave empty to generate from the title. Save changes before copying the publication-aware original-image URL.')
+                ->suffixAction(
+                    Action::make('copyPublicImageUrl')
+                        ->label('Copy public image URL')
+                        ->icon('heroicon-o-clipboard-document')
+                        ->tooltip('Copy public image URL')
+                        ->visible(fn (?Artwork $record): bool => filled($record?->slug) && filled($record?->image_path))
+                        ->alpineClickHandler(function (?Artwork $record): ?string {
+                            if (! $record) {
+                                return null;
+                            }
+
+                            $url = Js::from($record->public_image_url);
+                            $message = Js::from('Public image URL copied');
+
+                            return <<<JS
+                                window.navigator.clipboard.writeText({$url})
+                                \$tooltip({$message}, {
+                                    theme: \$store.theme,
+                                    timeout: 2000,
+                                })
+                                JS;
+                        }),
+                ),
             Select::make('collections')
                 ->label('Collections')
                 ->relationship(
@@ -69,9 +95,9 @@ class ArtworkResource extends Resource
                 ->preload(),
             FileUpload::make('image_path')
                 ->label('Image')
-                ->disk('public')
+                ->disk('local')
                 ->directory('artworks/originals')
-                ->visibility('public')
+                ->visibility('private')
                 ->image()
                 ->imageEditor()
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
@@ -184,8 +210,7 @@ class ArtworkResource extends Resource
             ->defaultSort('sort_order', 'desc')
             ->columns([
                 ImageColumn::make('thumb_path')
-                    ->getStateUsing(fn (Artwork $record): string => $record->availableThumbPath())
-                    ->disk('public')
+                    ->getStateUsing(fn (Artwork $record): string => $record->thumb_url)
                     ->square()
                     ->label('Preview'),
                 TextColumn::make('title')

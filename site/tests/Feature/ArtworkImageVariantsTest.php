@@ -26,6 +26,7 @@ class ArtworkImageVariantsTest extends TestCase
         parent::setUp();
 
         $this->artisan('migrate:fresh');
+        Storage::fake('local');
     }
 
     public function test_create_queues_aspect_preserving_variants_and_falls_back_to_original_until_ready(): void
@@ -44,7 +45,7 @@ class ArtworkImageVariantsTest extends TestCase
         $this->assertNull($artwork->display_path);
         $this->assertNull($artwork->thumb_path);
         $this->assertTrue($artwork->hasAvailableImage());
-        $this->assertSame(Storage::disk('public')->url($sourcePath), $artwork->thumb_url);
+        $this->assertStringContainsString(route('media.artworks.show', [$artwork, 'variant' => 'thumb']), $artwork->thumb_url);
 
         $job = $this->queuedGenerationFor($sourcePath);
         $this->runGeneration($job);
@@ -52,9 +53,9 @@ class ArtworkImageVariantsTest extends TestCase
 
         $this->assertSame(Artwork::VARIANT_STATUS_READY, $artwork->variant_status);
         $this->assertNotNull($artwork->variants_generated_at);
-        Storage::disk('public')->assertExists([$artwork->display_path, $artwork->thumb_path]);
-        $this->assertSame([1200, 800], array_slice(getimagesize(Storage::disk('public')->path($artwork->display_path)), 0, 2));
-        $this->assertSame([720, 480], array_slice(getimagesize(Storage::disk('public')->path($artwork->thumb_path)), 0, 2));
+        Storage::disk('local')->assertExists([$artwork->display_path, $artwork->thumb_path]);
+        $this->assertSame([1200, 800], array_slice(getimagesize(Storage::disk('local')->path($artwork->display_path)), 0, 2));
+        $this->assertSame([720, 480], array_slice(getimagesize(Storage::disk('local')->path($artwork->thumb_path)), 0, 2));
         $this->assertSame(1200, $artwork->width);
         $this->assertSame(800, $artwork->height);
     }
@@ -78,7 +79,7 @@ class ArtworkImageVariantsTest extends TestCase
 
         $this->assertNull($artwork->display_path);
         $this->assertNull($artwork->thumb_path);
-        $this->assertSame(Storage::disk('public')->url($newSource), $artwork->thumb_url);
+        $this->assertStringContainsString(route('media.artworks.show', [$artwork, 'variant' => 'thumb']), $artwork->thumb_url);
 
         $this->runGeneration($oldJob);
         $this->assertSame(Artwork::VARIANT_STATUS_QUEUED, $artwork->refresh()->variant_status);
@@ -90,8 +91,8 @@ class ArtworkImageVariantsTest extends TestCase
 
         $this->assertSame(Artwork::VARIANT_STATUS_READY, $artwork->variant_status);
         $this->assertNotSame($oldDisplay, $artwork->display_path);
-        Storage::disk('public')->assertMissing([$oldSource, $oldDisplay, $oldThumb]);
-        Storage::disk('public')->assertExists([$newSource, $artwork->display_path, $artwork->thumb_path]);
+        Storage::disk('local')->assertMissing([$oldSource, $oldDisplay, $oldThumb]);
+        Storage::disk('local')->assertExists([$newSource, $artwork->display_path, $artwork->thumb_path]);
     }
 
     public function test_failed_generation_records_error_and_uses_original_fallback(): void
@@ -99,7 +100,7 @@ class ArtworkImageVariantsTest extends TestCase
         Storage::fake('public');
         Queue::fake();
         $sourcePath = 'artworks/originals/corrupt.jpg';
-        Storage::disk('public')->put($sourcePath, 'not an image');
+        Storage::disk('local')->put($sourcePath, 'not an image');
         $artwork = $this->createWithoutObservers($sourcePath, [
             'variant_status' => Artwork::VARIANT_STATUS_QUEUED,
         ]);
@@ -117,7 +118,7 @@ class ArtworkImageVariantsTest extends TestCase
         $this->assertSame(Artwork::VARIANT_STATUS_FAILED, $artwork->variant_status);
         $this->assertSame($job->generationToken, $artwork->variant_generation_token);
         $this->assertStringContainsString('inspect image', $artwork->variant_error);
-        $this->assertSame(Storage::disk('public')->url($sourcePath), $artwork->thumb_url);
+        $this->assertStringContainsString(route('media.artworks.show', [$artwork, 'variant' => 'thumb']), $artwork->thumb_url);
         Queue::assertNotPushed(AnalyzeArtworkWithAi::class);
     }
 
@@ -128,7 +129,7 @@ class ArtworkImageVariantsTest extends TestCase
         $sourcePath = 'artworks/originals/oversized.png';
         $header = pack('NNCCCCC', 50_000, 50_000, 8, 2, 0, 0, 0);
         $chunk = 'IHDR'.$header;
-        Storage::disk('public')->put(
+        Storage::disk('local')->put(
             $sourcePath,
             "\x89PNG\r\n\x1a\n".pack('N', strlen($header)).$chunk.pack('N', crc32($chunk)),
         );
@@ -189,7 +190,7 @@ class ArtworkImageVariantsTest extends TestCase
         $this->assertInstanceOf(DeleteArtworkMedia::class, $deleteJob);
         $deleteJob->handle(app(ArtworkMediaCleanupService::class));
 
-        Storage::disk('public')->assertMissing($paths);
+        Storage::disk('local')->assertMissing($paths);
     }
 
     public function test_cleanup_failure_throws_so_the_queue_can_retry(): void
@@ -197,8 +198,8 @@ class ArtworkImageVariantsTest extends TestCase
         $path = 'artworks/thumbs/cannot-delete.jpg';
         $disk = Mockery::mock(FilesystemAdapter::class);
         $disk->shouldReceive('delete')->once()->with($path)->andReturn(false);
-        $disk->shouldReceive('exists')->once()->with($path)->andReturn(true);
-        Storage::shouldReceive('disk')->once()->with('public')->andReturn($disk);
+        $disk->shouldReceive('exists')->twice()->with($path)->andReturn(true);
+        Storage::shouldReceive('disk')->once()->with('local')->andReturn($disk);
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Unable to delete unreferenced artwork media');
@@ -351,7 +352,7 @@ class ArtworkImageVariantsTest extends TestCase
     protected function storeImage(string $filename, int $width, int $height): string
     {
         $path = 'artworks/originals/'.$filename;
-        Storage::disk('public')->put($path, UploadedFile::fake()->image($filename, $width, $height)->getContent());
+        Storage::disk('local')->put($path, UploadedFile::fake()->image($filename, $width, $height)->getContent());
 
         return $path;
     }

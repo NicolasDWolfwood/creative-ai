@@ -40,6 +40,7 @@ x-app-runtime: &app-runtime
     - "${CREATIVE_AI_STORAGE:?Set the persistent storage path}:/app/storage"
   security_opt:
     - no-new-privileges:true
+  pids_limit: 256
   logging:
     driver: json-file
     options:

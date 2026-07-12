@@ -24,6 +24,15 @@ class AdminManagementTest extends TestCase
         $this->assertFalse($admin->canAccessPanel(Panel::make()->id('another-panel')));
     }
 
+    public function test_admin_panel_requires_recoverable_app_mfa(): void
+    {
+        $panel = Filament::getPanel('admin');
+
+        $this->assertTrue($panel->isMultiFactorAuthenticationRequired());
+        $this->assertCount(1, $panel->getMultiFactorAuthenticationProviders());
+        $this->assertTrue($panel->hasProfile());
+    }
+
     public function test_only_authorized_administrators_see_the_public_admin_switch(): void
     {
         $admin = User::factory()->admin()->create();
