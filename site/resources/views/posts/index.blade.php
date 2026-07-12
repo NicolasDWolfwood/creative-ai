@@ -11,15 +11,16 @@
     <section class="journal-index section-inner" aria-label="Journal posts">
         <div class="post-index-grid">
             @forelse ($posts as $post)
+                @php($publishedAt = $post->effectivePublishedAt())
                 <article class="post-index-item" data-reveal>
-                    <a class="post-index-image" href="{{ route('posts.show', $post) }}" wire:navigate>
-                        @if ($post->cover_url)<img src="{{ $post->cover_url }}" alt="" loading="lazy">@else<span>CA</span>@endif
+                    <a class="post-index-image" href="{{ route('posts.show', $post) }}" aria-label="Read {{ $post->title }}" wire:navigate>
+                        @if ($post->cover_url)<img src="{{ $post->cover_url }}" alt="{{ $post->cover_alt_text }}" loading="lazy">@else<span aria-hidden="true">CA</span>@endif
                     </a>
                     <div>
-                        <time datetime="{{ $post->published_at?->toDateString() }}">{{ $post->published_at?->format('F j, Y') }} · {{ $post->reading_minutes }} min</time>
+                        <time datetime="{{ $publishedAt?->toDateString() }}">{{ $publishedAt?->format('F j, Y') }} · {{ $post->reading_minutes }} min</time>
                         <h2><a href="{{ route('posts.show', $post) }}" wire:navigate>{{ $post->title }}</a></h2>
                         <p>{{ $post->summary }}</p>
-                        <a class="text-link" href="{{ route('posts.show', $post) }}" wire:navigate>Read entry <i data-lucide="arrow-up-right"></i></a>
+                        <a class="text-link" href="{{ route('posts.show', $post) }}" aria-label="Read {{ $post->title }}" wire:navigate>Read entry <i data-lucide="arrow-up-right"></i></a>
                     </div>
                 </article>
             @empty

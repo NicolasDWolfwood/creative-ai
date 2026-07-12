@@ -161,6 +161,14 @@ The command copies each referenced file, verifies its SHA-256 hash, and only the
 
 The normal worker consumes those jobs. Run the command with `--sync` only for deliberate foreground maintenance. It exits unsuccessfully when an original file is missing and records that failure on the artwork row; rerunning it leaves completed variants unchanged and recovers queued or processing work after the configurable stale interval.
 
+## Journal editorial workflow
+
+Journal posts move through explicit **Draft**, **Ready**, **Scheduled**, and **Published** states. Drafts can hold incomplete writing plus a private editorial brief and private notes. The readiness check reports publication blockers and quality warnings, and the administrator preview renders the last saved article without making it public, canonical, cacheable, or indexable.
+
+Scheduling is query-driven: a valid Scheduled post becomes publicly effective when its stored UTC publication time arrives, without a scheduler process or a state-changing page request. The same model predicate controls Journal pages, homepage cards, private cover delivery, RSS, sitemap entries, and post structured data. Publishing and unpublishing are explicit atomic actions; editing ordinary content never changes publication state.
+
+The lifecycle migration keeps the former `published` and `published_at` fields synchronized as a temporary old-image compatibility mirror. Leave the expand-compatible migration applied during an image rollback, and treat Journal publication controls as read-only until the current image is restored. An older image does not know how to update the new workflow state.
+
 ## Music library workflow
 
 The track library supports single-file creation and multi-file audio import. Imports read embedded audio metadata (including title, artist, album, album artist, genre, year, disc/track number, duration, and embedded cover art) and fall back to common filename patterns when tags are absent. Explicitly entered values are never overwritten. Bulk imports default to not being published as standalone tracks and retain an operator-visible metadata review state. Automatically detected albums begin as drafts; forcing files into an already-published album makes those tracks immediately publicly playable through that album.

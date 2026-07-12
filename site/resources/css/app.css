@@ -1903,13 +1903,43 @@ h3 {
     background: var(--page);
 }
 
+.post-preview-banner {
+    position: sticky;
+    z-index: 20;
+    top: var(--header-height);
+    padding-top: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--gold) 65%, transparent);
+    background: #2b2110;
+    color: #fff3d2;
+}
+
+.post-preview-banner .eyebrow,
+.post-preview-banner p {
+    margin: 0;
+}
+
+.post-preview-banner strong {
+    display: block;
+    margin: 6px 0;
+}
+
 .post-header {
     position: relative;
     display: flex;
     min-height: 74svh;
     align-items: flex-end;
+    overflow: hidden;
     padding: 150px max(6vw, 32px) 72px;
-    background: #11151a var(--post-image) center / cover no-repeat;
+    background: #11151a;
+}
+
+.post-header-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .post-header > div:last-child {
@@ -1928,6 +1958,13 @@ h3 {
     color: #d7dce3;
     font-size: 1.08rem;
     line-height: 1.7;
+}
+
+.post-reading-time {
+    color: var(--gold);
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 .post-body {

@@ -135,7 +135,8 @@ Do not create or expose production until the initial staging stack passes the sa
 6. Upload an image, publish it, and verify the original, display variant, and thumbnail return `200`.
 7. Run one queued action and confirm the worker consumes it.
 8. Import a test album with an embedded cover while leaving the album and member tracks unpublished. Run **Analyze audio health**, confirm the track table updates without a manual reload, and verify the inherited cover does not produce a false missing-cover warning. Publish the album while leaving **Publish as standalone track** off, then verify its album page, member track page, and audio return `200`, the member is absent from the standalone list, and a track-title search finds the album. Unpublish the album and verify those anonymous album, track, and audio requests return `404`.
-9. Run Compose Down followed by Compose Up and confirm the administrator, uploaded records/media/settings, album-only standalone state, and album playback behavior persist.
+9. Create an incomplete Journal draft with a private brief and notes. Confirm it can be saved and previewed by the administrator, remains `404` anonymously, and does not expose the private fields. Complete the readiness blockers, schedule it in UTC, verify it remains private before the due time and appears on the Journal page, RSS, and sitemap after that time without a scheduler job. Unpublish it and confirm the page and cover immediately return `404` anonymously.
+10. Run Compose Down followed by Compose Up and confirm the administrator, uploaded records/media/settings, Journal workflow state, album-only standalone state, and album playback behavior persist.
 
 Record the complete image reference that passed this gate. Missing media variants, queue failures, or lost data are release failures unless explicitly accepted and recorded in [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
@@ -205,10 +206,11 @@ After a pull request is merged and its push-triggered `main` workflow succeeds:
 8. Sign out of the administrator panel and verify a fresh login requires the current password and TOTP code.
 9. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job. In the artwork editor, use the copy button beside **Slug** to copy the publication-aware original-image URL; open that URL in a private window and confirm a draft returns `404`. Do not use Filament's temporary signed `/storage/...` preview URL for the publication check.
 10. Confirm an album member is playable from its published album while **Publish as standalone track** remains off, does not appear in the default standalone list, and is found through an album-track search. Request its track page and audio URL, unpublish the test album, and confirm the same anonymous requests now return `404`. In the track library, keep album grouping enabled with a saved page size smaller than one album and confirm every album heading remains visible. Run **Analyze audio health** for a draft album with an embedded cover or a selected artwork that will be published with the release, watch the health states update without reloading the page, and confirm its tracks do not receive a false **Cover artwork is missing** warning. Review and explicitly re-enable any exceptional album members that should also appear as singles.
-11. Make a harmless draft edit, run Compose Down followed by Compose Up, and confirm the edit, normalized standalone state, album playback, administrator access, and saved settings persist. Confirm migration again exits `0` and both long-running services return healthy.
-12. Verify the staging response is still private and non-indexable.
+11. Preview a Journal draft and confirm the response is private, no-store, noindex, and free of private brief/notes. Schedule a completed post in UTC, verify anonymous page/cover/feed/sitemap visibility changes only when due, then unpublish it and verify access is revoked everywhere.
+12. Make a harmless draft edit, run Compose Down followed by Compose Up, and confirm the edit, Journal workflow state, normalized standalone state, album playback, administrator access, and saved settings persist. Confirm migration again exits `0` and both long-running services return healthy.
+13. Verify the staging response is still private and non-indexable.
 
-If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible. The inherited-album release uses an expand-compatible standalone-publication migration and keeps the legacy fields synchronized for this read-only rollback path; avoid music publication edits while an older image is temporarily restored.
+If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible. The inherited-album and Journal lifecycle releases keep legacy publication fields as compatibility mirrors for this read-only rollback path; avoid music or Journal publication edits while an older image is temporarily restored.
 
 ## 7. Create production after staging is proven
 
@@ -302,7 +304,7 @@ For a backward-compatible code rollback:
 2. Restore the previous complete image reference in `.env`.
 3. Compose Up.
 
-For the inherited-album release, retain the expand-compatible standalone-publication migration and do not run `migrate:rollback`. Treat music administration as read-only while the older image is running, then restore the current image before making publication or album-membership changes.
+For the inherited-album and Journal lifecycle releases, retain the expand-compatible migrations and do not run `migrate:rollback`. Treat music and Journal publication administration as read-only while the older image is running, then restore the current image before making publication, scheduling, or album-membership changes.
 
 For an incompatible schema or data change, restore the matching database, storage, `.env`/`APP_KEY`, and image digest together. All normal migrations should therefore use an expand/contract approach and remain backward-compatible through at least one release.
 

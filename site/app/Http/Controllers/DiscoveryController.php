@@ -55,14 +55,21 @@ class DiscoveryController extends Controller
                 ->publiclyAvailable()
                 ->orderBy('id')
                 ->get(),
-            'posts' => Post::query()->published()->get(),
+            'posts' => Post::query()->latestPublished()->get(),
         ])->header('Content-Type', 'application/xml');
     }
 
     public function feed(): Response
     {
+        $posts = Post::query()->latestPublished()->limit(20)->get();
+
         return response()->view('discovery.feed', [
-            'posts' => Post::query()->published()->orderByDesc('published_at')->limit(20)->get(),
-        ])->header('Content-Type', 'application/rss+xml');
+            'posts' => $posts,
+            'lastBuildDate' => $posts
+                ->map(fn (Post $post) => $post->effectivePublicContentUpdatedAt())
+                ->filter()
+                ->sortByDesc(fn ($date) => $date->getTimestamp())
+                ->first(),
+        ])->header('Content-Type', 'application/rss+xml; charset=UTF-8');
     }
 }

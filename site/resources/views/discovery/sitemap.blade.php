@@ -19,6 +19,6 @@
         <url><loc>{{ route('music.tracks.show', $track) }}</loc><lastmod>{{ $track->updated_at->toAtomString() }}</lastmod><priority>0.7</priority></url>
     @endforeach
     @foreach ($posts as $post)
-        <url><loc>{{ route('posts.show', $post) }}</loc><lastmod>{{ $post->updated_at->toAtomString() }}</lastmod><priority>0.7</priority></url>
+        <url><loc>{{ route('posts.show', $post) }}</loc><lastmod>{{ $post->effectivePublicContentUpdatedAt()->toAtomString() }}</lastmod><priority>0.7</priority></url>
     @endforeach
 </urlset>

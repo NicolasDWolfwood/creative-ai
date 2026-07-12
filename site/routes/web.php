@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminPostPreviewController;
 use App\Http\Controllers\ArtworkController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\HealthController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MusicController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\ShowcaseController;
+use App\Http\Middleware\EnsureAdministrator;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [ShowcaseController::class, 'index'])->name('home');
@@ -24,6 +26,10 @@ Route::get('/media/posts/{post}/cover', [MediaController::class, 'postCover'])->
 Route::get('/collections/{collection:slug}', [ShowcaseController::class, 'collection'])->name('collections.show');
 Route::get('/journal', [PostController::class, 'index'])->name('posts.index');
 Route::get('/journal/{post:slug}', [PostController::class, 'show'])->name('posts.show');
+Route::get('/admin/journal/{post}/preview', AdminPostPreviewController::class)
+    ->whereNumber('post')
+    ->middleware(EnsureAdministrator::class)
+    ->name('admin.posts.preview');
 Route::get('/robots.txt', [DiscoveryController::class, 'robots'])->name('robots');
 Route::get('/sitemap.xml', [DiscoveryController::class, 'sitemap'])->name('sitemap');
 Route::get('/feed.xml', [DiscoveryController::class, 'feed'])->name('feed');

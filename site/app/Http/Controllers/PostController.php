@@ -4,16 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Artwork;
 use App\Models\Post;
+use App\Services\PostStructuredData;
 use App\Services\PublicMediaService;
 use Illuminate\Contracts\View\View;
 
 class PostController extends Controller
 {
-    public function __construct(protected PublicMediaService $media) {}
+    public function __construct(
+        protected PublicMediaService $media,
+        protected PostStructuredData $structuredData,
+    ) {}
 
     public function index(): View
     {
-        $posts = Post::query()->published()->orderByDesc('published_at')->paginate(12);
+        $posts = Post::query()->latestPublished()->paginate(12);
         $heroArtwork = Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
 
         return view('posts.index', [
@@ -31,20 +35,25 @@ class PostController extends Controller
 
     public function show(Post $post): View
     {
-        abort_unless($post->published && (! $post->published_at || $post->published_at->isPast()), 404);
+        abort_unless($post->isPubliclyPublishedAt(), 404);
+
+        $publishedAt = $post->effectivePublishedAt();
 
         return view('posts.show', [
             'post' => $post,
-            'morePosts' => Post::query()->published()->whereKeyNot($post->getKey())->orderByDesc('published_at')->limit(3)->get(),
+            'morePosts' => Post::query()->whereKeyNot($post->getKey())->latestPublished()->limit(3)->get(),
             'playerPayload' => $this->media->libraryPlayerPayload(),
+            'preview' => false,
             'seo' => [
                 'title' => ($post->seo_title ?: $post->title).' | Creative-Ai',
                 'description' => $post->seo_description ?: $post->summary,
                 'image' => $post->cover_url ? url($post->cover_url) : null,
                 'canonical' => route('posts.show', $post),
                 'type' => 'article',
-                'published_at' => $post->published_at?->toIso8601String(),
+                'published_at' => $publishedAt?->toIso8601String(),
+                'modified_at' => $post->effectivePublicContentUpdatedAt()?->toIso8601String(),
             ],
+            'structured_data' => $this->structuredData->forPost($post),
         ]);
     }
 }
