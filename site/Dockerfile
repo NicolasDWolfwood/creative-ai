@@ -60,6 +60,7 @@ COPY --from=assets /build/public/build ./public/build
 COPY site/docker/entrypoint.sh /usr/local/bin/creative-ai-entrypoint
 
 RUN mkdir -p \
+        storage/app/private \
         storage/app/public \
         storage/framework/cache \
         storage/framework/sessions \
