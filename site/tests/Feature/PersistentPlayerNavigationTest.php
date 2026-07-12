@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Album;
 use App\Models\Collection;
+use App\Models\Playlist;
+use App\Models\Track;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class PersistentPlayerNavigationTest extends TestCase
@@ -56,6 +60,8 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString("setAttribute('aria-pressed'", $source);
         $this->assertStringContainsString("setAttribute('aria-label', isPlaying ? 'Pause' : 'Play')", $source);
         $this->assertStringContainsString("localStorage.removeItem('creative-ai-player')", $source);
+        $this->assertStringContainsString('this.loadTrack(false);', $source);
+        $this->assertStringContainsString('preferredPlaylistId', $source);
     }
 
     public function test_music_search_has_an_accessible_name_feedback_and_empty_states(): void
@@ -66,6 +72,65 @@ class PersistentPlayerNavigationTest extends TestCase
             ->assertSee('<label for="music-search">Search albums, tracks, or artists</label>', false)
             ->assertSee('class="search-summary" role="status"', false)
             ->assertSee('No published albums match this search.')
-            ->assertSee('No published tracks match this search.');
+            ->assertSee('No standalone tracks match this search.');
+    }
+
+    public function test_music_library_keeps_album_tracks_out_of_the_standalone_list_and_searches_their_album(): void
+    {
+        Queue::fake();
+        $album = Album::create(['title' => 'A Quiet Record', 'published' => false]);
+        $albumOnly = Track::create([
+            'title' => 'Hidden Constellation',
+            'artist' => 'Studio',
+            'album_id' => $album->id,
+            'audio_path' => 'tracks/hidden-constellation.mp3',
+            'published' => false,
+        ]);
+        $standalone = Track::create([
+            'title' => 'Independent Signal',
+            'artist' => 'Studio',
+            'audio_path' => 'tracks/independent-signal.mp3',
+            'published' => true,
+        ]);
+        $album->update(['published' => true]);
+
+        $this->get(route('music.index'))
+            ->assertOk()
+            ->assertSee('<h2 id="tracks-title">Singles &amp; standalone tracks</h2>', false)
+            ->assertViewHas('tracks', fn ($tracks): bool => $tracks->contains($standalone) && ! $tracks->contains($albumOnly));
+
+        $this->get(route('music.index', ['q' => 'Hidden Constellation']))
+            ->assertOk()
+            ->assertViewHas('albums', fn ($albums): bool => $albums->contains($album))
+            ->assertViewHas('tracks', fn ($tracks): bool => ! $tracks->contains($albumOnly));
+    }
+
+    public function test_homepage_limits_visible_listening_choices_without_truncating_the_player_library(): void
+    {
+        Queue::fake();
+        $tracks = collect();
+
+        foreach (range(1, 5) as $sequence) {
+            $album = Album::create(['title' => 'Album '.$sequence, 'published' => false]);
+            $tracks->push(Track::create([
+                'title' => 'Album track '.$sequence,
+                'album_id' => $album->id,
+                'audio_path' => 'tracks/album-'.$sequence.'.mp3',
+                'published' => false,
+            ]));
+            $album->update(['published' => true]);
+        }
+
+        foreach (range(1, 3) as $sequence) {
+            $playlist = Playlist::create(['title' => 'Session '.$sequence, 'published' => true]);
+            $playlist->tracks()->attach($tracks->first(), ['position' => 1]);
+        }
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertViewHas('homeAlbums', fn ($albums): bool => $albums->count() === 4)
+            ->assertViewHas('homePlaylists', fn ($playlists): bool => $playlists->count() === 2)
+            ->assertViewHas('playerPayload', fn (array $payload): bool => count($payload) === 8)
+            ->assertSee('Browse the full music library');
     }
 }

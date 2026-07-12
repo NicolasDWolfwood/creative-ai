@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Playlist;
+use App\Models\Tag;
 use App\Models\Track;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -98,7 +99,7 @@ class AutomaticPlaylistService
         $minimumTracks = max(1, min(500, $minimumTracks));
         $tags = $this->availableTagStats();
         if ($tags->isEmpty()) {
-            throw new RuntimeException('No tags from published tracks are available yet.');
+            throw new RuntimeException('No tags from publicly playable tracks are available yet.');
         }
 
         $catalog = $tags->take(120)->map(fn (array $tag): string => $tag['slug'].' | '.$tag['name'].' | '.$tag['track_count'].' tracks')->implode("\n");
@@ -109,9 +110,9 @@ Create one useful music playlist from existing track tags.
 
 Creative direction: {$direction}
 Existing playlist titles to avoid duplicating: {$existing}
-Minimum matching published tracks required: {$minimumTracks}
+Minimum matching publicly playable tracks required: {$minimumTracks}
 
-Available tags are listed as slug | label | published track count:
+Available tags are listed as slug | label | publicly playable track count:
 {$catalog}
 
 Choose up to eight tag slugs from the catalog and use match-any semantics. Do not invent tags. Return a concise title, a one-sentence listener-facing description, and a short explanation.
@@ -138,7 +139,7 @@ PROMPT);
         $tagIds = $selectedTags->pluck('id')->map(fn (mixed $id): int => (int) $id)->all();
         $matched = $this->countMatches($tagIds);
         if ($matched < $minimumTracks) {
-            throw new RuntimeException("The suggested playlist only matched {$matched} published tracks; {$minimumTracks} are required.");
+            throw new RuntimeException("The suggested playlist only matched {$matched} publicly playable tracks; {$minimumTracks} are required.");
         }
 
         $title = Str::of((string) ($result['title'] ?? 'AI Playlist'))->squish()->limit(100, '')->toString() ?: 'AI Playlist';
@@ -209,17 +210,18 @@ PROMPT);
     /** @return Collection<int,array{id:int,name:string,slug:string,track_count:int}> */
     protected function availableTagStats(): Collection
     {
-        return DB::table('tags')->join('track_tag', 'tags.id', '=', 'track_tag.tag_id')->join('tracks', 'tracks.id', '=', 'track_tag.track_id')
-            ->where('tracks.published', true)
-            ->select(['tags.id', 'tags.name', 'tags.slug'])->selectRaw('COUNT(DISTINCT tracks.id) AS track_count')
-            ->groupBy('tags.id', 'tags.name', 'tags.slug')->orderByDesc('track_count')->get()
-            ->map(fn (object $tag): array => ['id' => (int) $tag->id, 'name' => (string) $tag->name, 'slug' => (string) $tag->slug, 'track_count' => (int) $tag->track_count]);
+        return Tag::query()
+            ->whereHas('tracks', fn ($query) => $query->publiclyAvailable())
+            ->withCount(['tracks as track_count' => fn ($query) => $query->publiclyAvailable()])
+            ->orderByDesc('track_count')
+            ->get(['id', 'name', 'slug'])
+            ->map(fn (Tag $tag): array => ['id' => (int) $tag->id, 'name' => $tag->name, 'slug' => $tag->slug, 'track_count' => (int) $tag->track_count]);
     }
 
     /** @param array<int,int> $tagIds */
     protected function countMatches(array $tagIds): int
     {
-        return Track::query()->where('published', true)->whereHas('tags', fn ($query) => $query->whereKey($tagIds))->count();
+        return Track::query()->publiclyAvailable()->whereHas('tags', fn ($query) => $query->whereKey($tagIds))->count();
     }
 
     protected function tagMatches(string $tag, string $keyword): bool

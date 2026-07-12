@@ -3,7 +3,8 @@
 namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
-use App\Models\Concerns\HasPublicationSchedule;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,7 +14,6 @@ class Track extends Model
 {
     use BuildsSlugs;
     use HasFactory;
-    use HasPublicationSchedule;
 
     public const AI_STATUS_IDLE = 'idle';
 
@@ -43,7 +43,9 @@ class Track extends Model
         'sort_order',
         'featured',
         'published',
+        'standalone_published',
         'published_at',
+        'standalone_published_at',
         'metadata',
         'metadata_reviewed_at',
         'ai_model',
@@ -60,7 +62,9 @@ class Track extends Model
         return [
             'featured' => 'boolean',
             'published' => 'boolean',
+            'standalone_published' => 'boolean',
             'published_at' => 'datetime',
+            'standalone_published_at' => 'datetime',
             'metadata' => 'array',
             'metadata_reviewed_at' => 'datetime',
             'ai_analyzed_at' => 'datetime',
@@ -97,6 +101,42 @@ class Track extends Model
             ->orderBy('name');
     }
 
+    /**
+     * Track publication means an intentional standalone release. The legacy
+     * published columns are maintained separately as a rollback mirror.
+     */
+    #[Scope]
+    protected function published(Builder $query): void
+    {
+        $query
+            ->where('standalone_published', true)
+            ->where(function (Builder $query): void {
+                $query->whereNull('standalone_published_at')->orWhere('standalone_published_at', '<=', now());
+            });
+    }
+
+    public function isPubliclyPublished(): bool
+    {
+        return (bool) $this->standalone_published
+            && (! $this->standalone_published_at || $this->standalone_published_at->isPast());
+    }
+
+    #[Scope]
+    protected function publiclyAvailable(Builder $query): void
+    {
+        $query->where(function (Builder $query): void {
+            $query
+                ->published()
+                ->orWhereHas('album', fn (Builder $query) => $query->published());
+        });
+    }
+
+    public function isPubliclyAvailable(): bool
+    {
+        return $this->isPubliclyPublished()
+            || ($this->album_id !== null && $this->album()->published()->exists());
+    }
+
     public function getAudioUrlAttribute(): string
     {
         return route('media.tracks.audio', [$this, 'v' => substr(hash('sha256', (string) $this->audio_path), 0, 12)]);
@@ -104,7 +144,32 @@ class Track extends Model
 
     public function getCoverUrlAttribute(): ?string
     {
-        return $this->coverArtwork?->thumb_url ?: $this->album?->cover_url;
+        if ($cover = $this->coverArtwork?->thumb_url) {
+            return $cover;
+        }
+
+        return $this->album?->isPubliclyPublished()
+            ? $this->album->cover_url
+            : null;
+    }
+
+    public function coverChoiceIsConfigured(): bool
+    {
+        if ($this->cover_artwork_id !== null) {
+            return true;
+        }
+
+        return $this->album?->coverChoiceIsConfigured() ?? false;
+    }
+
+    public function markTechnicalAnalysisPending(): void
+    {
+        $this->forceFill([
+            'analysis_status' => 'pending',
+            'analysis_error' => null,
+            'health_status' => 'unknown',
+            'health_issues' => null,
+        ])->saveQuietly();
     }
 
     public function healthExplanation(): string

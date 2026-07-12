@@ -57,7 +57,7 @@ class AudioTechnicalAnalysisService
         if (blank($track->artist)) {
             $issues[] = 'Artist is missing';
         }
-        if (! $track->cover_url) {
+        if (! $track->coverChoiceIsConfigured()) {
             $issues[] = 'Cover artwork is missing';
         }
         if (! in_array($audio['codec_name'] ?? null, ['mp3', 'aac', 'vorbis', 'opus', 'flac', 'pcm_s16le', 'pcm_s24le'], true)) {

@@ -34,14 +34,14 @@ class ManagePlaylists extends ManageRecords
                         ->required()
                         ->native(false),
                     TextInput::make('minimum_tracks')
-                        ->label('Minimum matching published tracks')
+                        ->label('Minimum matching publicly playable tracks')
                         ->numeric()->minValue(1)->maxValue(500)
                         ->default(AutomaticPlaylistService::DEFAULT_MINIMUM_TRACKS)
                         ->required(),
                     Toggle::make('published')->label('Publish generated playlists')->default(true),
                 ])
                 ->requiresConfirmation()
-                ->modalDescription('Builds a managed set from recurring genres and moods on published tracks. Manual and custom smart playlists are never changed.')
+                ->modalDescription('Builds a managed set from recurring genres and moods on publicly playable tracks. Manual and custom smart playlists are never changed.')
                 ->action(function (array $data): void {
                     $result = app(AutomaticPlaylistService::class)->maintain(
                         target: (int) $data['target_count'],
@@ -62,7 +62,7 @@ class ManagePlaylists extends ManageRecords
                     Textarea::make('guidance')->label('Mood, genre, or listening direction')
                         ->helperText('Optional. For example: calm focus, cinematic tension, or energetic electronic music.')
                         ->rows(3)->maxLength(500),
-                    TextInput::make('minimum_tracks')->label('Minimum matching published tracks')
+                    TextInput::make('minimum_tracks')->label('Minimum matching publicly playable tracks')
                         ->numeric()->minValue(1)->maxValue(500)
                         ->default(AutomaticPlaylistService::DEFAULT_MINIMUM_TRACKS)->required(),
                     Toggle::make('published')->label('Publish immediately')->default(true),

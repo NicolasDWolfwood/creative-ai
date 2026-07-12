@@ -27,7 +27,7 @@
     <section class="archive-signal" aria-label="Archive overview">
         <div><strong>{{ number_format($totalArtworkCount) }}</strong><span>published works</span></div>
         <div><strong>{{ number_format($collections->count()) }}</strong><span>visual collections</span></div>
-        <div><strong>{{ number_format($playlists->sum(fn ($playlist) => $playlist->tracks->count())) }}</strong><span>original tracks</span></div>
+        <div><strong>{{ number_format($publicTrackCount) }}</strong><span>available tracks</span></div>
         <p>Made through curiosity, iteration, and a willingness to follow unexpected results.</p>
     </section>
 
@@ -128,23 +128,24 @@
                 <h2 id="music-title">Soundtracks for imagined places</h2>
                 <p>Original pieces and generated sound experiments grouped into listening sessions.</p>
                 <button class="button button-primary" type="button" data-player-focus><i data-lucide="headphones"></i>Open player</button>
+                <a class="text-link" href="{{ route('music.index') }}" wire:navigate>Browse the full music library <i data-lucide="arrow-up-right"></i></a>
             </header>
             <div class="playlist-list">
-                @foreach ($albums as $album)
-                    <button class="playlist-row" type="button" data-playlist-id="album-{{ $album->id }}" data-reveal>
+                @foreach ($homeAlbums as $album)
+                    <button class="playlist-row" type="button" data-playlist-id="album-{{ $album->id }}" aria-label="Play album {{ $album->title }}" data-reveal>
                         <span class="playlist-cover" @if ($album->cover_url) style="background-image:url('{{ $album->cover_url }}')" @endif><i data-lucide="disc-3"></i></span>
                         <span><strong>{{ $album->title }}</strong><small>Album · {{ $album->tracks->count() }} tracks{{ $album->artist ? ' · '.$album->artist : '' }}</small></span>
                         <i data-lucide="play"></i>
                     </button>
                 @endforeach
-                @forelse ($playlists as $playlist)
-                    <button class="playlist-row" type="button" data-playlist-id="playlist-{{ $playlist->id }}" data-reveal>
+                @forelse ($homePlaylists as $playlist)
+                    <button class="playlist-row" type="button" data-playlist-id="playlist-{{ $playlist->id }}" aria-label="Play playlist {{ $playlist->title }}" data-reveal>
                         <span class="playlist-cover" @if ($playlist->cover_url) style="background-image:url('{{ $playlist->cover_url }}')" @endif><i data-lucide="audio-waveform"></i></span>
                         <span><strong>{{ $playlist->title }}</strong><small>{{ $playlist->tracks->count() }} tracks · {{ $playlist->description ?: 'Creative-Ai session' }}</small></span>
                         <i data-lucide="play"></i>
                     </button>
                 @empty
-                    @if ($albums->isEmpty())<p class="empty-state">No published albums or playlists yet.</p>@endif
+                    @if ($homeAlbums->isEmpty())<p class="empty-state">No published albums or playlists yet.</p>@endif
                 @endforelse
             </div>
         </div>

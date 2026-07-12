@@ -131,10 +131,11 @@ Do not create or expose production until the initial staging stack passes the sa
 3. Load the staging page through HTTPS and confirm its CSS and JavaScript assets return `200` without mixed-content warnings.
 4. Confirm the proxy access rule blocks non-LAN/VPN clients and the response contains the staging no-index policy.
 5. Create the first administrator and verify `/admin` login.
-   Complete the required authenticator-app MFA setup and store the recovery codes securely.
+   Complete the required authenticator-app MFA setup, store the recovery codes securely, then sign out and verify a fresh login requires a current TOTP code.
 6. Upload an image, publish it, and verify the original, display variant, and thumbnail return `200`.
 7. Run one queued action and confirm the worker consumes it.
-8. Run Compose Down followed by Compose Up and confirm the administrator, uploaded record, media, and settings persist.
+8. Import a test album with an embedded cover while leaving the album and member tracks unpublished. Run **Analyze audio health**, confirm the track table updates without a manual reload, and verify the inherited cover does not produce a false missing-cover warning. Publish the album while leaving **Publish as standalone track** off, then verify its album page, member track page, and audio return `200`, the member is absent from the standalone list, and a track-title search finds the album. Unpublish the album and verify those anonymous album, track, and audio requests return `404`.
+9. Run Compose Down followed by Compose Up and confirm the administrator, uploaded records/media/settings, album-only standalone state, and album playback behavior persist.
 
 Record the complete image reference that passed this gate. Missing media variants, queue failures, or lost data are release failures unless explicitly accepted and recorded in [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
@@ -201,10 +202,13 @@ After a pull request is merged and its push-triggered `main` workflow succeeds:
 5. Confirm migration exited `0`, website is healthy, and worker is running.
 6. When the release introduces image-variant tracking, or the artwork table shows pending or failed image sizes, open the website container console and run `gosu www-data php artisan creative-ai:artwork-variants:regenerate`. Leave the worker running, wait until the Image status badges settle, and investigate any recorded failure before promotion.
 7. When the release introduces private media storage, back up storage, run `gosu www-data php artisan creative-ai:media:privatize --dry-run`, then run `gosu www-data php artisan creative-ai:media:privatize`. Investigate any reported collision or missing file before promotion.
-8. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job. In the artwork editor, use the copy button beside **Slug** to copy the publication-aware original-image URL; open that URL in a private window and confirm a draft returns `404`. Do not use Filament's temporary signed `/storage/...` preview URL for the publication check.
-9. Verify the staging response is still private and non-indexable.
+8. Sign out of the administrator panel and verify a fresh login requires the current password and TOTP code.
+9. Test public pages, administrator actions, uploads, original/display/thumbnail media, media playback, and one queued job. In the artwork editor, use the copy button beside **Slug** to copy the publication-aware original-image URL; open that URL in a private window and confirm a draft returns `404`. Do not use Filament's temporary signed `/storage/...` preview URL for the publication check.
+10. Confirm an album member is playable from its published album while **Publish as standalone track** remains off, does not appear in the default standalone list, and is found through an album-track search. Request its track page and audio URL, unpublish the test album, and confirm the same anonymous requests now return `404`. In the track library, keep album grouping enabled with a saved page size smaller than one album and confirm every album heading remains visible. Run **Analyze audio health** for a draft album with an embedded cover or a selected artwork that will be published with the release, watch the health states update without reloading the page, and confirm its tracks do not receive a false **Cover artwork is missing** warning. Review and explicitly re-enable any exceptional album members that should also appear as singles.
+11. Make a harmless draft edit, run Compose Down followed by Compose Up, and confirm the edit, normalized standalone state, album playback, administrator access, and saved settings persist. Confirm migration again exits `0` and both long-running services return healthy.
+12. Verify the staging response is still private and non-indexable.
 
-If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible.
+If testing fails, do not promote the digest. Put the previously known good digest back into staging and repeat Down and Up. Code rollback is safe only while database migrations remain backward-compatible. The inherited-album release uses an expand-compatible standalone-publication migration and keeps the legacy fields synchronized for this read-only rollback path; avoid music publication edits while an older image is temporarily restored.
 
 ## 7. Create production after staging is proven
 
@@ -260,7 +264,7 @@ If any check fails, restore the old Proxy Host upstream first. This returns traf
 6. Confirm migration exited `0`, web is healthy, and worker is running.
 7. When the release introduces image-variant tracking, or the artwork table shows pending or failed image sizes, open the website container console and run `gosu www-data php artisan creative-ai:artwork-variants:regenerate`. Leave the worker running, wait until the Image status badges settle, and investigate any recorded failure before continuing.
 8. When the release introduces private media storage, back up storage, run `gosu www-data php artisan creative-ai:media:privatize --dry-run`, then run `gosu www-data php artisan creative-ai:media:privatize`. Stop on any reported collision or missing file.
-9. Verify HTTPS, MFA login, original/display/thumbnail media, uploads, draft-media denial, indexing, and a queued job.
+9. Verify HTTPS, MFA login, original/display/thumbnail media, uploads, draft-media denial, indexing, and a queued job. When production contains music, also verify album-only playback, standalone-list exclusion, and denial after unpublishing a test album.
 
 This deliberately uses a short maintenance window in exchange for a small and understandable deployment process.
 
@@ -297,6 +301,8 @@ For a backward-compatible code rollback:
 1. Compose Down.
 2. Restore the previous complete image reference in `.env`.
 3. Compose Up.
+
+For the inherited-album release, retain the expand-compatible standalone-publication migration and do not run `migrate:rollback`. Treat music administration as read-only while the older image is running, then restore the current image before making publication or album-membership changes.
 
 For an incompatible schema or data change, restore the matching database, storage, `.env`/`APP_KEY`, and image digest together. All normal migrations should therefore use an expand/contract approach and remain backward-compatible through at least one release.
 

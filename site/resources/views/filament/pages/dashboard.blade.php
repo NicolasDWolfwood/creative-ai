@@ -60,7 +60,7 @@
                             <small>{{ $track->artist ?: 'Creative-Ai' }}</small>
                         </a>
                     @empty
-                        <p class="creative-admin-empty">No tracks have been published yet.</p>
+                        <p class="creative-admin-empty">No standalone tracks have been published yet.</p>
                     @endforelse
                 </div>
             </div>

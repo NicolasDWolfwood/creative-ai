@@ -3,9 +3,7 @@
 namespace App\Filament\Resources\Albums\Pages;
 
 use App\Filament\Resources\Albums\AlbumResource;
-use App\Models\Album;
 use App\Services\AlbumOrganizationService;
-use App\Services\AlbumPublishingService;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
@@ -30,11 +28,7 @@ class ManageAlbums extends ManageRecords
                         ->body($result['tracks_organized'].' tracks moved; '.$result['empty_imports_removed'].' empty import records removed.')
                         ->send();
                 }),
-            CreateAction::make()->label('New album')->after(function (Album $record): void {
-                if ($record->published) {
-                    app(AlbumPublishingService::class)->publishTracks($record);
-                }
-            }),
+            CreateAction::make()->label('New album'),
         ];
     }
 }

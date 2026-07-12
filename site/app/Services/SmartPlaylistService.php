@@ -19,7 +19,7 @@ class SmartPlaylistService
         $query = Track::query();
 
         if ((bool) ($rules['only_published'] ?? true)) {
-            $query->where('published', true);
+            $query->publiclyAvailable();
         }
 
         if ($tagIds->isNotEmpty()) {

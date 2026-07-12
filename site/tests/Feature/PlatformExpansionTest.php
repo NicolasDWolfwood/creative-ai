@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Filament\Pages\AiConfiguration;
 use App\Jobs\AnalyzeArtworkWithAi;
 use App\Jobs\GenerateArtworkVariants;
+use App\Models\Album;
 use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Playlist;
@@ -193,25 +194,33 @@ class PlatformExpansionTest extends TestCase
         $this->assertFalse($collection->artworks()->whereKey($other->id)->exists());
     }
 
-    public function test_smart_playlist_syncs_tracks_and_positions_by_tag_rules(): void
+    public function test_smart_playlist_only_published_rule_includes_effectively_available_album_tracks(): void
     {
+        Queue::fake();
         $tag = Tag::query()->create(['name' => 'ambient', 'slug' => 'ambient']);
-        $first = $this->track(['title' => 'First', 'sort_order' => 1]);
-        $second = $this->track(['title' => 'Second', 'sort_order' => 2]);
-        $first->tags()->attach($tag, ['category' => 'genre']);
+        $album = Album::query()->create(['title' => 'Public Album', 'published' => false]);
+        $draftAlbum = Album::query()->create(['title' => 'Draft Album', 'published' => false]);
+        $standalone = $this->track(['title' => 'Standalone', 'sort_order' => 1]);
+        $albumOnly = $this->track(['title' => 'Album Only', 'album_id' => $album->id, 'sort_order' => 2, 'published' => false]);
+        $draftAlbumTrack = $this->track(['title' => 'Draft Album Track', 'album_id' => $draftAlbum->id, 'sort_order' => 3, 'published' => false]);
+        $standalone->tags()->attach($tag, ['category' => 'genre']);
+        $albumOnly->tags()->attach($tag, ['category' => 'genre']);
+        $draftAlbumTrack->tags()->attach($tag, ['category' => 'genre']);
         $playlist = Playlist::query()->create([
             'title' => 'Quiet Systems',
             'is_smart' => true,
             'auto_sync' => false,
             'smart_rules' => ['tag_ids' => [$tag->id], 'match' => 'any', 'only_published' => true],
         ]);
+        $album->update(['published' => true]);
 
         $count = app(SmartPlaylistService::class)->sync($playlist);
 
-        $this->assertSame(1, $count);
-        $this->assertSame([$first->id], $playlist->tracks()->pluck('tracks.id')->all());
+        $this->assertFalse($albumOnly->refresh()->standalone_published);
+        $this->assertSame(2, $count);
+        $this->assertSame([$standalone->id, $albumOnly->id], $playlist->tracks()->pluck('tracks.id')->all());
         $this->assertSame(1, $playlist->tracks()->first()->pivot->position);
-        $this->assertFalse($playlist->tracks()->whereKey($second->id)->exists());
+        $this->assertFalse($playlist->tracks()->whereKey($draftAlbumTrack->id)->exists());
     }
 
     public function test_pending_analysis_queues_only_unanalyzed_eligible_artwork(): void

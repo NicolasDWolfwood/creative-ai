@@ -49,4 +49,19 @@ class Album extends Model
 
         return $this->coverArtwork?->thumb_url;
     }
+
+    /**
+     * Audio-library health is evaluated before an album is published, so it
+     * must inspect the configured cover choice rather than a public URL.
+     * Choosing no cover is an intentional opt-out, not missing metadata.
+     */
+    public function coverChoiceIsConfigured(): bool
+    {
+        return match ($this->cover_preference ?: 'auto') {
+            'none' => true,
+            'artwork' => $this->cover_artwork_id !== null,
+            'embedded' => filled($this->embedded_cover_path),
+            default => $this->cover_artwork_id !== null || filled($this->embedded_cover_path),
+        };
+    }
 }

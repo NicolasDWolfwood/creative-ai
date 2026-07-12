@@ -86,6 +86,91 @@
     color: var(--muted);
 }
 
+.music-library-section {
+    display: grid;
+    gap: 24px;
+}
+
+.music-library-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 32px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+}
+
+.music-library-heading h2,
+.music-library-heading p {
+    margin: 0;
+}
+
+.music-library-heading > p {
+    max-width: 520px;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.music-release-grid {
+    gap: 18px;
+}
+
+.music-release-card {
+    display: grid;
+    min-width: 0;
+    grid-template-rows: auto 1fr auto;
+    gap: 14px;
+}
+
+.music-release-cover {
+    display: grid;
+    overflow: hidden;
+    aspect-ratio: 1;
+    place-items: center;
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    background: var(--panel-bright);
+}
+
+.music-release-cover img {
+    height: 100%;
+    margin: 0;
+}
+
+.music-release-cover > span {
+    color: var(--mint);
+}
+
+.music-release-cover > span svg {
+    width: 54px;
+    height: 54px;
+}
+
+.music-release-copy p {
+    margin: 0 0 7px;
+    color: var(--muted);
+}
+
+.music-release-copy small {
+    display: block;
+    color: var(--muted);
+}
+
+.music-release-copy .music-search-match {
+    margin-top: 10px;
+    color: var(--gold);
+}
+
+.music-release-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.music-release-actions .button {
+    flex: 1 1 auto;
+}
+
 .track-list {
     display: grid;
     gap: 0.5rem;
@@ -115,6 +200,92 @@
     aspect-ratio: 1;
     margin: 1.5rem 0;
     object-fit: cover;
+}
+
+.album-page {
+    display: grid;
+    gap: 52px;
+}
+
+.album-back-link {
+    width: max-content;
+}
+
+.album-hero {
+    display: grid;
+    grid-template-columns: minmax(260px, 380px) minmax(0, 1fr);
+    gap: clamp(36px, 6vw, 88px);
+    align-items: center;
+}
+
+.album-hero .music-hero-cover {
+    width: 100%;
+    margin: 0;
+}
+
+.music-cover-placeholder {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--mint);
+}
+
+.music-cover-placeholder svg {
+    width: 76px;
+    height: 76px;
+}
+
+.album-hero-copy h1 {
+    margin: 8px 0 14px;
+}
+
+.album-hero-copy > p,
+.album-summary {
+    color: var(--muted);
+}
+
+.album-hero-copy .album-description {
+    max-width: 720px;
+    margin: 22px 0;
+    color: var(--ink);
+    line-height: 1.7;
+}
+
+.album-track-section {
+    display: grid;
+    gap: 12px;
+}
+
+.album-track-list {
+    margin-top: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.album-track-list li {
+    display: grid;
+    grid-template-columns: 34px 42px minmax(0, 1fr) auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.album-track-list li > div {
+    display: grid;
+}
+
+.album-track-list li > div span,
+.album-track-number,
+.album-track-duration {
+    color: var(--muted);
+}
+
+.album-track-number,
+.album-track-duration {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.8rem;
 }
 
 * {
@@ -1523,6 +1694,38 @@ h3 {
     .music-filters > div {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .music-library-heading {
+        display: grid;
+        align-items: start;
+        gap: 12px;
+    }
+
+    .music-release-actions .button {
+        width: 100%;
+    }
+
+    .album-page {
+        gap: 38px;
+    }
+
+    .album-hero {
+        grid-template-columns: 1fr;
+        gap: 28px;
+    }
+
+    .album-hero .music-hero-cover {
+        max-width: 380px;
+    }
+
+    .album-track-list li {
+        grid-template-columns: 28px 40px minmax(0, 1fr) auto;
+    }
+
+    .album-track-list li .button {
+        width: 100%;
+        grid-column: 2 / -1;
     }
 
     .track-list article {

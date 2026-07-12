@@ -30,7 +30,10 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\HtmlString;
 
@@ -87,8 +90,11 @@ class TrackResource extends Resource
             TextInput::make('release_year')->numeric()->minValue(1000)->maxValue(9999),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
-            Toggle::make('published')->default(true),
-            DateTimePicker::make('published_at'),
+            Toggle::make('standalone_published')
+                ->label('Publish as standalone track')
+                ->helperText('Album tracks are already playable when their album is published. Enable this only to list the track separately as a single.')
+                ->default(false),
+            DateTimePicker::make('standalone_published_at')->label('Standalone publish date'),
             Section::make('Audio health and technical analysis')
                 ->description('Read-only results from Analyze audio health. Run the analysis again after resolving an issue.')
                 ->visible(fn (?Track $record): bool => $record !== null)
@@ -128,7 +134,20 @@ class TrackResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultSort('sort_order')
+            ->defaultSort(fn (Builder $query): Builder => $query
+                ->orderBy('disc_number')
+                ->orderBy('track_number')
+                ->orderBy('sort_order'))
+            ->groups([
+                Group::make('album.title')
+                    ->label('Album')
+                    ->getTitleFromRecordUsing(fn (Track $record): string => $record->album?->title ?? 'Singles / no album')
+                    ->collapsible(),
+            ])
+            ->defaultGroup('album.title')
+            ->collapsedGroupsByDefault()
+            ->paginated(fn (ManageTracks $livewire): bool => $livewire->getTableGrouping() === null)
+            ->poll('5s')
             ->columns([
                 TextColumn::make('title')->searchable()->sortable(),
                 TextColumn::make('artist')->searchable()->sortable(),
@@ -149,8 +168,30 @@ class TrackResource extends Resource
                 TextColumn::make('duration_seconds')->label('Duration')->sortable()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sort_order')->sortable()->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('featured')->boolean(),
-                IconColumn::make('published')->boolean(),
+                TextColumn::make('standalone_published')
+                    ->label('Availability')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state, Track $record): string => match (true) {
+                        $record->isPubliclyPublished() => 'Standalone',
+                        $record->album?->isPubliclyPublished() => 'Via album',
+                        $state => 'Standalone scheduled',
+                        (bool) $record->album?->published => 'Album scheduled',
+                        default => 'Draft',
+                    })
+                    ->color(fn (bool $state, Track $record): string => match (true) {
+                        $record->isPubliclyPublished() => 'success',
+                        $record->album?->isPubliclyPublished() => 'info',
+                        $state || (bool) $record->album?->published => 'warning',
+                        default => 'gray',
+                    }),
                 IconColumn::make('metadata_reviewed_at')->label('Reviewed')->boolean(),
+            ])
+            ->filters([
+                SelectFilter::make('album_id')
+                    ->label('Album')
+                    ->relationship('album', 'title')
+                    ->searchable()
+                    ->preload(),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -192,9 +233,9 @@ class TrackResource extends Resource
                         ->visible(fn (Track $record): bool => $record->metadata_reviewed_at === null)
                         ->action(fn (Track $record) => $record->update(['metadata_reviewed_at' => now()])),
                     Action::make('analyzeAudio')->label('Analyze audio health')->icon('heroicon-o-signal')->action(function (Track $record): void {
-                        $record->forceFill(['analysis_status' => 'pending'])->saveQuietly();
+                        $record->markTechnicalAnalysisPending();
                         AnalyzeTrackAudio::dispatch($record->id);
-                        Notification::make()->success()->title('Technical analysis queued')->send();
+                        Notification::make()->success()->title('Technical analysis queued')->body('Health status refreshes automatically when the job finishes.')->send();
                     }),
                     EditAction::make()->after(fn () => app(SmartPlaylistService::class)->syncAutomatic()),
                     DeleteAction::make(),
@@ -204,10 +245,10 @@ class TrackResource extends Resource
                 BulkActionGroup::make([
                     BulkAction::make('analyzeAudio')->label('Analyze audio health')->icon('heroicon-o-signal')->action(function (Collection $records): void {
                         $records->each(function (Track $track): void {
-                            $track->forceFill(['analysis_status' => 'pending'])->saveQuietly();
+                            $track->markTechnicalAnalysisPending();
                             AnalyzeTrackAudio::dispatch($track->id);
                         });
-                        Notification::make()->success()->title($records->count().' technical analyses queued')->send();
+                        Notification::make()->success()->title($records->count().' technical analyses queued')->body('Health statuses refresh automatically as the jobs finish.')->send();
                     })->deselectRecordsAfterCompletion(),
                     BulkAction::make('generateSelectedTags')
                         ->label('Generate AI tags')

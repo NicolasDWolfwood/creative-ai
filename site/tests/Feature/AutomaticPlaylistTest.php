@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Resources\Albums\Pages\ManageAlbums;
 use App\Filament\Resources\Playlists\Pages\ManagePlaylists;
+use App\Models\Album;
 use App\Models\Playlist;
 use App\Models\Tag;
 use App\Models\Track;
@@ -74,6 +75,27 @@ class AutomaticPlaylistTest extends TestCase
         $this->assertFalse($result['playlist']->is_auto_generated);
         $this->assertSame('ai_assisted', data_get($result['playlist']->smart_rules, 'source'));
         $this->assertSame(3, $result['count']);
+    }
+
+    public function test_automatic_playlists_count_tracks_available_through_a_published_album(): void
+    {
+        Queue::fake();
+        $tag = Tag::create(['name' => 'ambient', 'slug' => 'ambient']);
+        $album = Album::create(['title' => 'Ambient Album', 'published' => false]);
+        $first = Track::create(['title' => 'Album One', 'album_id' => $album->id, 'audio_path' => 'tracks/album-one.mp3', 'published' => false]);
+        $second = Track::create(['title' => 'Album Two', 'album_id' => $album->id, 'audio_path' => 'tracks/album-two.mp3', 'published' => false]);
+        $first->tags()->attach($tag, ['category' => 'mood']);
+        $second->tags()->attach($tag, ['category' => 'mood']);
+        $album->update(['published' => true]);
+
+        $result = app(AutomaticPlaylistService::class)->maintain(target: 1, minimumTracks: 2);
+        $playlist = Playlist::query()->where('is_auto_generated', true)->firstOrFail();
+
+        $this->assertFalse($first->refresh()->standalone_published);
+        $this->assertFalse($second->refresh()->standalone_published);
+        $this->assertSame(1, $result['playlist_count']);
+        $this->assertSame(2, $result['track_matches']);
+        $this->assertEqualsCanonicalizing([$first->id, $second->id], $playlist->tracks()->pluck('tracks.id')->all());
     }
 
     public function test_playlist_and_album_pages_expose_the_quick_organization_workflows(): void

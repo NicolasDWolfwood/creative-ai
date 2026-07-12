@@ -3,7 +3,8 @@
 namespace App\Observers;
 
 use App\Models\Album;
-use App\Services\AlbumPublishingService;
+use App\Services\SmartPlaylistService;
+use App\Services\TrackPublicationService;
 
 class AlbumObserver
 {
@@ -16,8 +17,19 @@ class AlbumObserver
 
     public function saved(Album $album): void
     {
-        if ($album->published) {
-            app(AlbumPublishingService::class)->publishTracks($album);
+        if ($album->wasChanged(['published', 'published_at'])) {
+            app(TrackPublicationService::class)->syncAlbum($album);
+            app(SmartPlaylistService::class)->syncAutomatic();
         }
+    }
+
+    public function deleting(Album $album): void
+    {
+        app(TrackPublicationService::class)->syncAlbumRemoval($album);
+    }
+
+    public function deleted(Album $album): void
+    {
+        app(SmartPlaylistService::class)->syncAutomatic();
     }
 }
