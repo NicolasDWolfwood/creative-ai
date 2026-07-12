@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Tracks;
 
+use App\Filament\Actions\CreateJournalDraftAction;
 use App\Filament\Resources\Tracks\Pages\ManageTracks;
 use App\Jobs\AnalyzeTrackAudio;
 use App\Jobs\AnalyzeTrackMetadata;
@@ -237,6 +238,7 @@ class TrackResource extends Resource
                         AnalyzeTrackAudio::dispatch($record->id);
                         Notification::make()->success()->title('Technical analysis queued')->body('Health status refreshes automatically when the job finishes.')->send();
                     }),
+                    CreateJournalDraftAction::make(),
                     EditAction::make()->after(fn () => app(SmartPlaylistService::class)->syncAutomatic()),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Track actions'),

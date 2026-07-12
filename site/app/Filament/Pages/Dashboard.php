@@ -10,6 +10,7 @@ use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Playlist;
 use App\Models\Track;
+use App\Services\StoryOpportunityService;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -60,6 +61,12 @@ class Dashboard extends BaseDashboard
                 'value' => Collection::query()->count(),
                 'href' => CollectionResource::getUrl(),
                 'accent' => 'steel',
+            ],
+            [
+                'label' => 'Story opportunities',
+                'value' => app(StoryOpportunityService::class)->count(),
+                'href' => StoryOpportunities::getUrl(),
+                'accent' => 'teal',
             ],
         ];
     }

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Albums;
 
+use App\Filament\Actions\CreateJournalDraftAction;
 use App\Filament\Resources\Albums\Pages\ManageAlbums;
 use App\Models\Album;
 use App\Services\AlbumCoverService;
@@ -102,6 +103,7 @@ class AlbumResource extends Resource
                     $record->update(['published' => true, 'published_at' => $record->published_at ?: now()]);
                     Notification::make()->success()->title('Album published')->body($record->tracks()->count().' track'.($record->tracks()->count() === 1 ? '' : 's').' available through this album.')->send();
                 }),
+            CreateJournalDraftAction::make(),
             EditAction::make(),
             DeleteAction::make(),
         ])]);

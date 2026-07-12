@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Playlists;
 
+use App\Filament\Actions\CreateJournalDraftAction;
 use App\Filament\Resources\Playlists\Pages\ManagePlaylists;
 use App\Models\Album;
 use App\Models\Playlist;
@@ -183,6 +184,7 @@ class PlaylistResource extends Resource
                             $record->forceFill(['is_auto_generated' => false, 'auto_generation_key' => null])->saveQuietly();
                             Notification::make()->success()->title('Playlist is now custom')->send();
                         }),
+                    CreateJournalDraftAction::make(),
                     EditAction::make(),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Playlist actions'),

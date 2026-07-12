@@ -173,6 +173,10 @@ Journal stories can also carry shared archive tags and an explicit ordered set o
 
 The connected-stories migration is additive: it creates only relation tables and can remain applied during an image rollback. An older image simply ignores those relations. Avoid editing connections while that image is running because it cannot display or maintain them.
 
+The administrator planning loop starts on **Story opportunities**, a bounded work queue of currently public artwork, collections, albums, playlists, and tracks that have no Journal connection yet. Any public source can create a private Draft from its resource action without changing the source or its publication state. An optional active Journal template supplies a reusable outline, private brief, and public default tags; only the inert `{{ source_title }}` and `{{ source_type }}` placeholders are replaced. Optional source-tag copying follows the same public-only rules as the shared archive, and every generated post remains Draft until it passes the normal human-controlled editorial workflow.
+
+The planning-tools migration adds template tables and inverse indexes for the opportunity queries. It is additive and can stay applied during an image rollback; an older image ignores templates and the extra indexes. Drafts already created by the newer image remain ordinary Journal drafts and connections, so avoid planning and connection edits until the current image is restored.
+
 ## Music library workflow
 
 The track library supports single-file creation and multi-file audio import. Imports read embedded audio metadata (including title, artist, album, album artist, genre, year, disc/track number, duration, and embedded cover art) and fall back to common filename patterns when tags are absent. Explicitly entered values are never overwritten. Bulk imports default to not being published as standalone tracks and retain an operator-visible metadata review state. Automatically detected albums begin as drafts; forcing files into an already-published album makes those tracks immediately publicly playable through that album.
