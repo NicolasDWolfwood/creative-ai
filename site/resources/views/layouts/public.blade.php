@@ -6,9 +6,32 @@
             $metaTitle = $meta['title'] ?? config('app.name', 'Creative-Ai');
             $metaDescription = $meta['description'] ?? 'Generative art and original music by John Reijmer.';
             $canonical = $meta['canonical'] ?? request()->url();
+            $allowedMetaTypes = ['website', 'article', 'music.album', 'music.song', 'music.playlist'];
+            $requestedMetaType = is_string($meta['type'] ?? null) ? $meta['type'] : 'website';
+            $metaType = in_array($requestedMetaType, $allowedMetaTypes, true) ? $requestedMetaType : 'website';
+            $safeMusicUrl = fn ($url) => is_string($url)
+                && filter_var($url, FILTER_VALIDATE_URL)
+                && in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true)
+                    ? $url
+                    : null;
+            $musicDuration = filter_var($meta['music_duration'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+            $musicAudio = $safeMusicUrl($meta['audio'] ?? null);
+            $musicAlbum = $safeMusicUrl($meta['music_album'] ?? null);
+            $musicAlbumDisc = filter_var($meta['music_album_disc'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+            $musicAlbumTrack = filter_var($meta['music_album_track'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+            $musicReleaseDate = is_string($meta['music_release_date'] ?? null) && filled($meta['music_release_date'])
+                ? $meta['music_release_date']
+                : null;
+            $musicSongs = is_array($meta['music_songs'] ?? null)
+                ? collect($meta['music_songs'])
+                    ->map($safeMusicUrl)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                : collect();
             $defaultStructuredData = [
                 '@context' => 'https://schema.org',
-                '@type' => ($meta['type'] ?? 'website') === 'article' ? 'BlogPosting' : 'WebSite',
+                '@type' => $metaType === 'article' ? 'BlogPosting' : 'WebSite',
                 'name' => $metaTitle,
                 'description' => $metaDescription,
                 'url' => $canonical,
@@ -36,7 +59,7 @@
         <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
         <link rel="alternate" type="application/rss+xml" title="Creative-Ai Journal" href="{{ route('feed') }}">
         <meta property="og:site_name" content="Creative-Ai">
-        <meta property="og:type" content="{{ $meta['type'] ?? 'website' }}">
+        <meta property="og:type" content="{{ $metaType }}">
         <meta property="og:title" content="{{ $metaTitle }}">
         <meta property="og:description" content="{{ $metaDescription }}">
         <meta property="og:url" content="{{ $canonical }}">
@@ -49,6 +72,29 @@
         @endif
         @if (! empty($meta['published_at']))
             <meta property="article:published_time" content="{{ $meta['published_at'] }}">
+        @endif
+        @if (str_starts_with($metaType, 'music.'))
+            @if ($musicAudio)
+                <meta property="og:audio" content="{{ $musicAudio }}">
+            @endif
+            @if ($musicDuration)
+                <meta property="music:duration" content="{{ $musicDuration }}">
+            @endif
+            @if ($musicAlbum)
+                <meta property="music:album" content="{{ $musicAlbum }}">
+            @endif
+            @if ($musicAlbumDisc)
+                <meta property="music:album:disc" content="{{ $musicAlbumDisc }}">
+            @endif
+            @if ($musicAlbumTrack)
+                <meta property="music:album:track" content="{{ $musicAlbumTrack }}">
+            @endif
+            @if ($musicReleaseDate)
+                <meta property="music:release_date" content="{{ $musicReleaseDate }}">
+            @endif
+            @foreach ($musicSongs as $musicSong)
+                <meta property="music:song" content="{{ $musicSong }}">
+            @endforeach
         @endif
         <script type="application/ld+json">
             {{ Illuminate\Support\Js::from($structuredData) }}

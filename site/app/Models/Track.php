@@ -144,7 +144,7 @@ class Track extends Model
 
     public function getCoverUrlAttribute(): ?string
     {
-        if ($cover = $this->coverArtwork?->thumb_url) {
+        if ($cover = $this->coverArtwork?->isPubliclyPublished() ? $this->coverArtwork->thumb_url : null) {
             return $cover;
         }
 

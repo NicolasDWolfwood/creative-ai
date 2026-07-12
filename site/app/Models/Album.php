@@ -40,14 +40,19 @@ class Album extends Model
         if ($this->cover_preference === 'none') {
             return null;
         }
-        if ($this->cover_preference !== 'embedded' && $this->coverArtwork) {
-            return $this->coverArtwork->thumb_url;
+
+        $artworkCover = $this->coverArtwork?->isPubliclyPublished()
+            ? $this->coverArtwork->thumb_url
+            : null;
+
+        if ($this->cover_preference !== 'embedded' && $artworkCover) {
+            return $artworkCover;
         }
         if ($this->cover_preference !== 'artwork' && $this->embedded_cover_path) {
             return route('media.albums.embedded-cover', [$this, 'v' => substr(hash('sha256', $this->embedded_cover_path), 0, 12)]);
         }
 
-        return $this->coverArtwork?->thumb_url;
+        return $artworkCover;
     }
 
     /**
