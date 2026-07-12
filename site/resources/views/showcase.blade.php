@@ -148,18 +148,22 @@
             </header>
             <div class="playlist-list">
                 @foreach ($homeAlbums as $album)
-                    <button class="playlist-row" type="button" data-playlist-id="album-{{ $album->id }}" aria-label="Play album {{ $album->title }}" data-reveal>
-                        <span class="playlist-cover" @if ($album->cover_url) style="background-image:url('{{ $album->cover_url }}')" @endif><i data-lucide="disc-3"></i></span>
-                        <span><strong>{{ $album->title }}</strong><small>Album · {{ $album->tracks->count() }} tracks{{ $album->artist ? ' · '.$album->artist : '' }}</small></span>
-                        <i data-lucide="play"></i>
-                    </button>
+                    <article class="playlist-row" data-reveal>
+                        <a class="playlist-row-link" href="{{ route('music.albums.show', $album) }}" wire:navigate>
+                            <span class="playlist-cover" @if ($album->cover_url) style="background-image:url('{{ $album->cover_url }}')" @endif><i data-lucide="disc-3"></i></span>
+                            <span><strong>{{ $album->title }}</strong><small>Album · {{ $album->tracks->count() }} tracks{{ $album->artist ? ' · '.$album->artist : '' }}</small></span>
+                        </a>
+                        <button class="icon-button playlist-row-play" type="button" data-playlist-id="album-{{ $album->id }}" aria-label="Play album {{ $album->title }}"><i data-lucide="play"></i></button>
+                    </article>
                 @endforeach
                 @forelse ($homePlaylists as $playlist)
-                    <button class="playlist-row" type="button" data-playlist-id="playlist-{{ $playlist->id }}" aria-label="Play playlist {{ $playlist->title }}" data-reveal>
-                        <span class="playlist-cover" @if ($playlist->cover_url) style="background-image:url('{{ $playlist->cover_url }}')" @endif><i data-lucide="audio-waveform"></i></span>
-                        <span><strong>{{ $playlist->title }}</strong><small>{{ $playlist->tracks->count() }} tracks · {{ $playlist->description ?: 'Creative-Ai session' }}</small></span>
-                        <i data-lucide="play"></i>
-                    </button>
+                    <article class="playlist-row" data-reveal>
+                        <a class="playlist-row-link" href="{{ route('music.playlists.show', $playlist) }}" wire:navigate>
+                            <span class="playlist-cover" @if ($playlist->cover_url) style="background-image:url('{{ $playlist->cover_url }}')" @endif><i data-lucide="audio-waveform"></i></span>
+                            <span><strong>{{ $playlist->title }}</strong><small>Playlist · {{ $playlist->tracks->count() }} tracks · {{ $playlist->description ?: 'Creative-Ai session' }}</small></span>
+                        </a>
+                        <button class="icon-button playlist-row-play" type="button" data-playlist-id="playlist-{{ $playlist->id }}" aria-label="Play playlist {{ $playlist->title }}"><i data-lucide="play"></i></button>
+                    </article>
                 @empty
                     @if ($homeAlbums->isEmpty())<p class="empty-state">No published albums or playlists yet.</p>@endif
                 @endforelse

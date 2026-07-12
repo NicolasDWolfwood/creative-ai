@@ -13,6 +13,7 @@ Route::get('/', [ShowcaseController::class, 'index'])->name('home');
 Route::get('/gallery', [ShowcaseController::class, 'gallery'])->name('gallery');
 Route::get('/music', [MusicController::class, 'index'])->name('music.index');
 Route::get('/music/albums/{album:slug}', [MusicController::class, 'album'])->name('music.albums.show');
+Route::get('/music/playlists/{playlist:slug}', [MusicController::class, 'playlist'])->name('music.playlists.show');
 Route::get('/music/tracks/{track:slug}', [MusicController::class, 'track'])->name('music.tracks.show');
 Route::get('/artworks/{artwork:slug}', [ArtworkController::class, 'show'])->name('artworks.show');
 Route::get('/artworks/{artwork:slug}/image', [MediaController::class, 'artwork'])->defaults('variant', 'original')->name('artworks.image');

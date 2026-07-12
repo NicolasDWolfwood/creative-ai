@@ -4,13 +4,13 @@
         <header class="section-heading">
             <p class="eyebrow">Listening room</p>
             <h1 id="music-title">Music</h1>
-            <p>Start with a complete release, or explore music published as a standalone track.</p>
+            <p>Start with a complete release, follow a curated playlist, or explore music published as a standalone track.</p>
         </header>
 
         <form class="music-filters" method="get" role="search" data-navigate-form>
-            <label for="music-search">Search albums, tracks, or artists</label>
+            <label for="music-search">Search albums, playlists, tracks, or artists</label>
             <div>
-                <input id="music-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Try an album, track, or artist">
+                <input id="music-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Try an album, playlist, track, or artist">
                 <button class="button button-primary" type="submit">Search</button>
                 @if ($search !== '')
                     <a class="button button-secondary" href="{{ route('music.index') }}" wire:navigate>Clear</a>
@@ -19,7 +19,7 @@
         </form>
 
         @if ($search !== '')
-            <p class="search-summary" role="status">{{ $albums->count() }} {{ str('album')->plural($albums->count()) }} and {{ $tracks->total() }} standalone {{ str('track')->plural($tracks->total()) }} matching “{{ $search }}”. Album results also search their track listings.</p>
+            <p class="search-summary" role="status">{{ $albums->count() }} {{ str('album')->plural($albums->count()) }}, {{ $playlists->count() }} {{ str('playlist')->plural($playlists->count()) }}, and {{ $tracks->total() }} standalone {{ str('track')->plural($tracks->total()) }} matching “{{ $search }}”. Album and playlist results also search their track listings.</p>
         @endif
 
         <section class="music-library-section" aria-labelledby="albums-title">
@@ -59,6 +59,49 @@
                     </article>
                 @empty
                     <p class="empty-state">{{ $search === '' ? 'No albums have been published yet.' : 'No published albums match this search.' }}</p>
+                @endforelse
+            </div>
+        </section>
+
+        <section class="music-library-section" aria-labelledby="playlists-title">
+            <header class="music-library-heading">
+                <div><p class="eyebrow">Curated listening</p><h2 id="playlists-title">Playlists</h2></div>
+                <p>Follow a listening sequence assembled around a mood, theme, or creative session.</p>
+            </header>
+            <div class="collection-grid music-release-grid">
+                @forelse ($playlists as $playlist)
+                    @php
+                        $playlistDuration = (int) $playlist->tracks->sum('duration_seconds');
+                        $matchingTrack = $search === '' ? null : $playlist->tracks->first(
+                            fn ($track) => str(implode(' ', [$track->title, $track->artist]))
+                                ->lower()
+                                ->contains(str($search)->lower()->toString()),
+                        );
+                    @endphp
+                    <article class="collection-card music-release-card">
+                        <div class="music-release-cover">
+                            @if ($playlist->cover_url)
+                                <img src="{{ $playlist->cover_url }}" alt="" loading="lazy">
+                            @else
+                                <span aria-hidden="true"><i data-lucide="audio-waveform"></i></span>
+                            @endif
+                        </div>
+                        <div class="music-release-copy">
+                            <h3><a href="{{ route('music.playlists.show', $playlist) }}" wire:navigate>{{ $playlist->title }}</a></h3>
+                            @if ($playlist->description)<p>{{ $playlist->description }}</p>@endif
+                            <small>{{ $playlist->tracks->count() }} {{ str('track')->plural($playlist->tracks->count()) }}@if ($playlistDuration > 0) · {{ gmdate($playlistDuration >= 3600 ? 'G:i:s' : 'i:s', $playlistDuration) }}@endif</small>
+                            @if ($matchingTrack)
+                                <small class="music-search-match">Includes “{{ $matchingTrack->title }}”@if ($matchingTrack->artist) by {{ $matchingTrack->artist }}@endif</small>
+                            @endif
+                        </div>
+                        @if ($playlist->tracks->isNotEmpty())
+                            <div class="music-release-actions">
+                                <button class="button button-primary" type="button" data-playlist-id="playlist-{{ $playlist->id }}" aria-label="Play playlist {{ $playlist->title }}">Play playlist</button>
+                            </div>
+                        @endif
+                    </article>
+                @empty
+                    <p class="empty-state">{{ $search === '' ? 'No playlists have been published yet.' : 'No published playlists match this search.' }}</p>
                 @endforelse
             </div>
         </section>

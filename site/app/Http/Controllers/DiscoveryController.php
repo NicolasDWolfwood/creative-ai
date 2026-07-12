@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Album;
 use App\Models\Artwork;
 use App\Models\Collection;
+use App\Models\Playlist;
 use App\Models\Post;
+use App\Models\Track;
 use Illuminate\Http\Response;
 
 class DiscoveryController extends Controller
@@ -36,6 +39,22 @@ class DiscoveryController extends Controller
                 ->orderByDesc('id')
                 ->get(),
             'collections' => Collection::query()->published()->get(),
+            'albums' => Album::query()
+                ->published()
+                ->orderByDesc('featured')
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get(),
+            'playlists' => Playlist::query()
+                ->published()
+                ->orderByDesc('featured')
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->get(),
+            'tracks' => Track::query()
+                ->publiclyAvailable()
+                ->orderBy('id')
+                ->get(),
             'posts' => Post::query()->published()->get(),
         ])->header('Content-Type', 'application/xml');
     }

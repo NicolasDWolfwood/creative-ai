@@ -69,9 +69,10 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->get(route('music.index', ['q' => 'nothing']))
             ->assertOk()
             ->assertSee('role="search"', false)
-            ->assertSee('<label for="music-search">Search albums, tracks, or artists</label>', false)
+            ->assertSee('<label for="music-search">Search albums, playlists, tracks, or artists</label>', false)
             ->assertSee('class="search-summary" role="status"', false)
             ->assertSee('No published albums match this search.')
+            ->assertSee('No published playlists match this search.')
             ->assertSee('No standalone tracks match this search.');
     }
 
