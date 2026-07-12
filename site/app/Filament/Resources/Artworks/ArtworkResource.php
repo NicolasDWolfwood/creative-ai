@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Artworks;
 
+use App\Filament\Actions\CreateJournalDraftAction;
 use App\Filament\Resources\Artworks\Pages\ManageArtworks;
 use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
@@ -319,6 +320,7 @@ class ArtworkResource extends Resource
 
                             Notification::make()->title('AI suggestions applied.')->success()->send();
                         }),
+                    CreateJournalDraftAction::make(),
                     EditAction::make(),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Artwork actions'),

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Collections;
 
+use App\Filament\Actions\CreateJournalDraftAction;
 use App\Filament\Resources\Collections\Pages\ManageCollections;
 use App\Models\Artwork;
 use App\Models\Collection;
@@ -176,6 +177,7 @@ class CollectionResource extends Resource
 
                             Notification::make()->success()->title('Collection is now custom')->send();
                         }),
+                    CreateJournalDraftAction::make(),
                     EditAction::make(),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Collection actions'),
