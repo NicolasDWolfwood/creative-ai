@@ -6,6 +6,7 @@ use App\Enums\PostStatus;
 use App\Filament\Resources\Posts\Pages\CreatePost;
 use App\Filament\Resources\Posts\Pages\EditPost;
 use App\Filament\Resources\Posts\Pages\ListPosts;
+use App\Filament\Resources\Posts\Pages\ManagePostAssistant;
 use App\Filament\Resources\Posts\Pages\ManagePostConnections;
 use App\Filament\Resources\Posts\Pages\ManagePostHistory;
 use App\Models\Post;
@@ -202,6 +203,7 @@ class PostResource extends Resource
                     static::previewAction(),
                     static::readinessAction(),
                     ...static::workflowActions(),
+                    static::assistantAction(),
                     static::historyAction(),
                     EditAction::make()->hidden(fn (Post $record): bool => $record->trashed()),
                     static::deleteAction(),
@@ -250,6 +252,16 @@ class PostResource extends Resource
             ->icon('heroicon-o-clock')
             ->authorize('view')
             ->url(fn (Post $record): string => static::getUrl('history', ['record' => $record]));
+    }
+
+    public static function assistantAction(): Action
+    {
+        return Action::make('assistant')
+            ->label('AI assistant')
+            ->icon('heroicon-o-sparkles')
+            ->authorize('view')
+            ->hidden(fn (Post $record): bool => $record->trashed())
+            ->url(fn (Post $record): string => static::getUrl('assistant', ['record' => $record]));
     }
 
     public static function restoreTrashedAction(): RestoreAction
@@ -545,15 +557,15 @@ class PostResource extends Resource
 
         return match ($status) {
             PostStatus::Draft => $query->whereNot(function (Builder $query) use ($now): void {
-                $query->where(function (Builder $query) use ($now): void {
-                    static::applyValidReadyState($query, $now);
+                $query->where(function (Builder $query): void {
+                    static::applyValidReadyState($query);
                 })->orWhere(function (Builder $query): void {
                     static::applyValidScheduledState($query);
                 })->orWhere(function (Builder $query) use ($now): void {
                     static::applyValidPublishedState($query, $now);
                 });
             }),
-            PostStatus::Ready => static::applyValidReadyState($query, $now),
+            PostStatus::Ready => static::applyValidReadyState($query),
             PostStatus::Scheduled => $query
                 ->where('status', PostStatus::Scheduled->value)
                 ->where('published', true)
@@ -580,15 +592,12 @@ class PostResource extends Resource
         };
     }
 
-    protected static function applyValidReadyState(Builder $query, CarbonInterface $at): Builder
+    protected static function applyValidReadyState(Builder $query): Builder
     {
         return $query
             ->where('status', PostStatus::Ready->value)
             ->where('published', false)
-            ->whereNull('scheduled_at')
-            ->where(function (Builder $query) use ($at): void {
-                $query->whereNull('published_at')->orWhere('published_at', '<=', $at);
-            });
+            ->whereNull('scheduled_at');
     }
 
     protected static function applyValidScheduledState(Builder $query): Builder
@@ -618,6 +627,7 @@ class PostResource extends Resource
             'create' => CreatePost::route('/create'),
             'edit' => EditPost::route('/{record}/edit'),
             'connections' => ManagePostConnections::route('/{record}/connections'),
+            'assistant' => ManagePostAssistant::route('/{record}/assistant'),
             'history' => ManagePostHistory::route('/{record}/history'),
         ];
     }
@@ -634,6 +644,7 @@ class PostResource extends Resource
         return $page->generateNavigationItems([
             EditPost::class,
             ManagePostConnections::class,
+            ManagePostAssistant::class,
             ManagePostHistory::class,
         ]);
     }

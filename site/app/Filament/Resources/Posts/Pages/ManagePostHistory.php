@@ -175,6 +175,7 @@ class ManagePostHistory extends ManageRelatedRecords
     {
         return match ($provenance) {
             'content_edit' => 'Content edit',
+            'ai_apply' => 'AI-assisted edit',
             'revision_restore' => 'Revision restore',
             'trash' => 'Moved to trash',
             'trash_restore' => 'Restored from trash',

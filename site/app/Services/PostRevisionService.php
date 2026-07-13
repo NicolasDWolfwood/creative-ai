@@ -18,6 +18,16 @@ use LogicException;
 
 class PostRevisionService
 {
+    /** @var list<string> */
+    private const AI_CONTENT_FIELDS = [
+        'title',
+        'excerpt',
+        'body',
+        'cover_alt_text',
+        'seo_title',
+        'seo_description',
+    ];
+
     private static int $automaticCaptureSuppressionDepth = 0;
 
     public function __construct(
@@ -144,7 +154,80 @@ class PostRevisionService
             ->mapWithKeys(fn (string $field): array => [$field => $post->getAttribute($field)])
             ->all();
 
-        return hash('sha256', json_encode($content, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+        return $this->contentValuesFingerprint($content);
+    }
+
+    public function revisionContentFingerprint(PostRevision $revision): string
+    {
+        if (! $revision->exists) {
+            throw new LogicException('A saved Journal revision is required.');
+        }
+
+        return $this->contentValuesFingerprint($this->restorableContent($revision->snapshot));
+    }
+
+    /**
+     * Persist a server-derived AI content patch as exactly one labelled revision.
+     *
+     * @param  array<string, ?string>  $patch
+     */
+    public function applyAiContentPatch(
+        Post $post,
+        array $patch,
+        User $actor,
+        string $expectedContentFingerprint,
+    ): PostRevision {
+        if (! $post->exists) {
+            throw new LogicException('A saved Journal post is required.');
+        }
+
+        if ($patch === [] || array_diff(array_keys($patch), self::AI_CONTENT_FIELDS) !== []) {
+            throw new DomainException('The Journal AI content patch contains no supported changes.');
+        }
+
+        foreach ($patch as $field => $value) {
+            if (($value !== null && ! is_string($value)) || (in_array($field, ['title', 'body'], true) && $value === null)) {
+                throw new DomainException('The Journal AI content patch contains an invalid value.');
+            }
+        }
+
+        return DB::transaction(function () use ($post, $patch, $actor, $expectedContentFingerprint): PostRevision {
+            $locked = Post::query()
+                ->lockForUpdate()
+                ->findOrFail($post->getKey());
+
+            if (! hash_equals($expectedContentFingerprint, $this->contentFingerprint($locked))) {
+                throw new DomainException('The Journal post changed after the AI result was prepared. Request a fresh suggestion before applying it.');
+            }
+
+            $changed = array_filter(
+                $patch,
+                fn (?string $value, string $field): bool => $locked->getAttribute($field) !== $value,
+                ARRAY_FILTER_USE_BOTH,
+            );
+
+            if ($changed === []) {
+                throw new DomainException('The selected Journal AI suggestion does not change the saved post.');
+            }
+
+            $content = collect(Post::REVISION_CONTENT_FIELDS)
+                ->mapWithKeys(fn (string $field): array => [$field => $locked->getAttribute($field)])
+                ->replace($changed)
+                ->all();
+            $this->assertCandidateIsReadyWhenRequired($locked, $content);
+
+            $this->withoutAutomaticCapture(function () use ($locked, $changed): void {
+                $locked->fill($changed);
+                $locked->saveOrFail();
+            });
+
+            return $this->capture(
+                $locked,
+                provenance: 'ai_apply',
+                actor: $actor,
+                reason: 'Applied reviewed Journal AI suggestions.',
+            );
+        }, 3);
     }
 
     public function trash(Post $post, ?User $actor = null, ?string $reason = null): Post
@@ -485,6 +568,16 @@ class PostRevisionService
     private function snapshotHash(array $snapshot): string
     {
         return hash('sha256', json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+    }
+
+    /** @param array<string, ?string> $content */
+    private function contentValuesFingerprint(array $content): string
+    {
+        $ordered = collect(Post::REVISION_CONTENT_FIELDS)
+            ->mapWithKeys(fn (string $field): array => [$field => $content[$field] ?? null])
+            ->all();
+
+        return hash('sha256', json_encode($ordered, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
     }
 
     private function normalizeProvenance(string $provenance): string

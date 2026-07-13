@@ -11,6 +11,8 @@ use App\Models\Collection;
 use App\Models\Playlist;
 use App\Models\Track;
 use App\Services\StoryOpportunityService;
+use App\Services\StudioWorkQueueService;
+use Carbon\CarbonImmutable;
 use Filament\Pages\Dashboard as BaseDashboard;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -69,6 +71,25 @@ class Dashboard extends BaseDashboard
                 'accent' => 'teal',
             ],
         ];
+    }
+
+    /**
+     * @return list<array{
+     *     key: string,
+     *     label: string,
+     *     count: int,
+     *     oldest_at: ?CarbonImmutable,
+     *     timestamp_label: string,
+     *     reason: string,
+     *     href: string,
+     *     action_label: string,
+     *     tone: string,
+     *     links: list<array{label: string, href: string}>
+     * }>
+     */
+    public function getWorkQueues(): array
+    {
+        return app(StudioWorkQueueService::class)->summaries();
     }
 
     /**

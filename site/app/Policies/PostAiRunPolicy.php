@@ -43,6 +43,16 @@ class PostAiRunPolicy
         return $this->canManage($user, $run);
     }
 
+    public function apply(User $user, PostAiRun $run): bool
+    {
+        return $this->canManage($user, $run);
+    }
+
+    public function undo(User $user, PostAiRun $run): bool
+    {
+        return $this->canManage($user, $run);
+    }
+
     public function recover(User $user): bool
     {
         return $this->isAdministrator($user);
