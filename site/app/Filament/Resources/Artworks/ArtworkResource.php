@@ -83,17 +83,19 @@ class ArtworkResource extends Resource
                         }),
                 ),
             Select::make('collections')
-                ->label('Collections')
+                ->label('Manual collections')
                 ->relationship(
                     'collections',
                     'title',
                     modifyQueryUsing: fn (Builder $query): Builder => $query
+                        ->where('collections.is_smart', false)
                         ->select(['collections.id', 'collections.title'])
                         ->reorder('collections.title'),
                 )
                 ->multiple()
                 ->searchable()
-                ->preload(),
+                ->preload()
+                ->helperText('Only manual memberships are editable here. Smart and automatic collection memberships are derived from their rules and remain unchanged.'),
             FileUpload::make('image_path')
                 ->label('Image')
                 ->disk('local')
@@ -109,6 +111,12 @@ class ArtworkResource extends Resource
                 ->openable()
                 ->downloadable()
                 ->required(),
+            Section::make('Applied tags')
+                ->description('These persisted tags drive smart and automatic collection membership. Apply reviewed AI suggestions to replace them.')
+                ->schema([
+                    Text::make(fn (?Artwork $record): string => static::formatAppliedTags($record)),
+                ])
+                ->columnSpanFull(),
             Textarea::make('description')->rows(3)->columnSpanFull(),
             Textarea::make('alt_text')
                 ->label('Alt text')
@@ -401,5 +409,31 @@ class ArtworkResource extends Resource
             ->implode(' | ');
 
         return 'Suggested tags: '.($summary ?: 'none');
+    }
+
+    protected static function formatAppliedTags(?Artwork $record): string
+    {
+        if (! $record?->exists) {
+            return 'No tags have been applied yet.';
+        }
+
+        $categoryOrder = array_flip(['subject', 'style', 'mood', 'color', 'medium']);
+        $summary = $record->tags()
+            ->get()
+            ->groupBy(fn ($tag): string => filled($tag->pivot?->category) ? (string) $tag->pivot->category : 'other')
+            ->sortKeysUsing(fn (string $left, string $right): int => [
+                $categoryOrder[$left] ?? PHP_INT_MAX,
+                $left,
+            ] <=> [
+                $categoryOrder[$right] ?? PHP_INT_MAX,
+                $right,
+            ])
+            ->map(fn ($tags, string $category): string => str($category)->headline().': '.$tags
+                ->pluck('name')
+                ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                ->implode(', '))
+            ->implode(' | ');
+
+        return $summary ?: 'No tags have been applied yet.';
     }
 }

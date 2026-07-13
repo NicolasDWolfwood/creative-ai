@@ -80,7 +80,7 @@ class ManageCollections extends ManageRecords
                         ->numeric()
                         ->minValue(1)
                         ->maxValue(500)
-                        ->default(AutomaticCollectionService::DEFAULT_MINIMUM_ARTWORK)
+                        ->default(AutomaticCollectionService::DEFAULT_AI_ASSISTED_MINIMUM_ARTWORK)
                         ->required(),
                     Toggle::make('published')->label('Publish immediately')->default(true),
                 ])

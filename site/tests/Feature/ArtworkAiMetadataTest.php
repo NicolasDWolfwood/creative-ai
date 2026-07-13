@@ -8,6 +8,7 @@ use App\Filament\Resources\Artworks\Pages\ManageArtworks;
 use App\Jobs\AnalyzeArtworkWithAi;
 use App\Models\Artwork;
 use App\Models\SiteSetting;
+use App\Models\Tag;
 use App\Models\User;
 use App\Services\AiSettings;
 use App\Services\ArtworkAiMetadataService;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use RuntimeException;
 use Tests\TestCase;
 use Throwable;
 
@@ -68,6 +70,7 @@ class ArtworkAiMetadataTest extends TestCase
         Http::assertSent(function ($request): bool {
             $data = $request->data();
             $content = $data['input'][0]['content'];
+            $prompt = $content[0]['text'];
 
             return $request->url() === 'https://api.openai.com/v1/responses'
                 && $data['model'] === 'gpt-5.4-mini'
@@ -75,7 +78,9 @@ class ArtworkAiMetadataTest extends TestCase
                 && $data['text']['format']['strict'] === true
                 && $content[1]['type'] === 'input_image'
                 && $content[1]['detail'] === 'low'
-                && str_starts_with($content[1]['image_url'], 'data:image/jpeg;base64,');
+                && str_starts_with($content[1]['image_url'], 'data:image/jpeg;base64,')
+                && str_contains($prompt, 'Generic tags should describe visible subjects or themes')
+                && str_contains($prompt, 'do not repeat labels across category arrays');
         });
     }
 
@@ -375,6 +380,84 @@ class ArtworkAiMetadataTest extends TestCase
         );
     }
 
+    public function test_applying_suggestions_normalizes_duplicate_tag_slugs_to_specialized_categories(): void
+    {
+        Storage::fake('public');
+        $longSubject = str_repeat('x', 100);
+        $suggestion = array_replace($this->suggestionPayload(), [
+            'tags' => ['Blue-Green', 'Canvas', 'Surreal_Glow', 'Serene', 'Forest Guardian', $longSubject],
+            'style_tags' => ['blue green', 'canvas', 'surreal glow'],
+            'mood_tags' => ['BLUE_GREEN', 'canvas', 'surreal-glow', 'serene'],
+            'color_tags' => ['#BLUE_GREEN'],
+            'medium_tags' => ['Blue-Green', 'CANVAS'],
+        ]);
+        $artwork = $this->createArtwork([
+            'ai_status' => Artwork::AI_STATUS_READY,
+            'ai_suggestion' => $suggestion,
+        ]);
+
+        $artwork = app(ArtworkAiMetadataService::class)->applySuggestion(
+            $artwork,
+            syncSmartCollections: false,
+        );
+
+        $this->assertSame(['blue green'], $artwork->ai_suggestion['color_tags']);
+        $this->assertSame(['canvas'], $artwork->ai_suggestion['medium_tags']);
+        $this->assertSame(['surreal glow'], $artwork->ai_suggestion['style_tags']);
+        $this->assertSame(['serene'], $artwork->ai_suggestion['mood_tags']);
+        $this->assertSame(['forest guardian', str_repeat('x', 80)], $artwork->ai_suggestion['tags']);
+
+        $categoriesBySlug = $artwork->tags()
+            ->get()
+            ->mapWithKeys(fn (Tag $tag): array => [$tag->slug => $tag->pivot->category])
+            ->all();
+
+        $this->assertCount(6, $categoriesBySlug);
+        $this->assertSame('color', $categoriesBySlug['blue-green']);
+        $this->assertSame('medium', $categoriesBySlug['canvas']);
+        $this->assertSame('style', $categoriesBySlug['surreal-glow']);
+        $this->assertSame('mood', $categoriesBySlug['serene']);
+        $this->assertSame('subject', $categoriesBySlug['forest-guardian']);
+        $this->assertSame('subject', $categoriesBySlug[str_repeat('x', 80)]);
+    }
+
+    public function test_applying_a_tagless_suggestion_preserves_existing_metadata_tags_and_status(): void
+    {
+        Storage::fake('public');
+        $existingTag = Tag::query()->create(['name' => 'curated', 'slug' => 'curated']);
+        $suggestion = array_replace($this->suggestionPayload(title: 'Rejected Replacement'), [
+            'tags' => ['#', '___'],
+            'style_tags' => [],
+            'mood_tags' => ['   '],
+            'color_tags' => ['###'],
+            'medium_tags' => ['💥'],
+        ]);
+        $artwork = $this->createArtwork([
+            'title' => 'Curated Original',
+            'ai_status' => Artwork::AI_STATUS_READY,
+            'ai_suggestion' => $suggestion,
+        ]);
+        $artwork->tags()->attach($existingTag, ['category' => 'subject']);
+
+        try {
+            app(ArtworkAiMetadataService::class)->applySuggestion(
+                $artwork,
+                syncSmartCollections: false,
+            );
+            $this->fail('A suggestion without usable tags must not be applied.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('This AI suggestion has no usable tags to apply.', $exception->getMessage());
+        }
+
+        $artwork->refresh();
+
+        $this->assertSame('Curated Original', $artwork->title);
+        $this->assertSame(Artwork::AI_STATUS_READY, $artwork->ai_status);
+        $this->assertSame($suggestion, $artwork->ai_suggestion);
+        $this->assertSame(['curated'], $artwork->tags()->pluck('slug')->all());
+        $this->assertSame('subject', $artwork->tags()->firstOrFail()->pivot->category);
+    }
+
     public function test_filament_row_action_queues_ai_analysis(): void
     {
         Storage::fake('public');
@@ -513,6 +596,38 @@ class ArtworkAiMetadataTest extends TestCase
         $this->assertNull($queued->ai_queue_token);
         $this->assertSame(Artwork::AI_STATUS_PROCESSING, $processing->refresh()->ai_status);
         $this->assertSame('processing-token', $processing->ai_queue_token);
+    }
+
+    public function test_ai_queue_preview_uses_the_authorized_thumbnail_route_for_private_media(): void
+    {
+        Storage::fake('local');
+        Storage::fake('public');
+        Queue::fake();
+
+        $filename = 'queued-private.jpg';
+        $path = 'artworks/originals/'.$filename;
+
+        Storage::disk('local')->putFileAs(
+            'artworks/originals',
+            UploadedFile::fake()->image($filename, 900, 600),
+            $filename,
+        );
+
+        $artwork = $this->createArtwork([
+            'title' => 'Queued private artwork',
+            'image_path' => $path,
+            'published' => false,
+            'ai_status' => Artwork::AI_STATUS_QUEUED,
+        ]);
+
+        $component = Livewire::actingAs(User::factory()->admin()->create())
+            ->test(ManageAiQueue::class)
+            ->assertCanSeeTableRecords([$artwork]);
+        $preview = $component->instance()->getTable()->getColumn('thumb_path')->record($artwork);
+
+        $this->assertSame($artwork->thumb_url, $preview->getState());
+        $this->assertSame($artwork->thumb_url, $preview->getImageUrl($preview->getState()));
+        $this->get($artwork->thumb_url)->assertOk();
     }
 
     /**

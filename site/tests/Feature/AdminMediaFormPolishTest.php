@@ -7,9 +7,12 @@ use App\Filament\Resources\Tracks\Pages\ManageTracks;
 use App\Jobs\AnalyzeTrackAudio;
 use App\Models\Album;
 use App\Models\Artwork;
+use App\Models\Collection as ArtworkCollection;
+use App\Models\Tag;
 use App\Models\Track;
 use App\Models\User;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -142,6 +145,81 @@ class AdminMediaFormPolishTest extends TestCase
         $this->assertStringContainsString(
             (string) Js::from($artwork->public_image_url),
             $copy->getCustomAlpineClickHandler(),
+        );
+    }
+
+    public function test_artwork_editor_shows_applied_tags_and_only_edits_manual_collections(): void
+    {
+        Storage::fake('local');
+        Queue::fake();
+        Storage::disk('local')->put('artworks/originals/tagged.jpg', 'tagged-image');
+        $artwork = Artwork::withoutEvents(fn (): Artwork => Artwork::query()->create([
+            'title' => 'Tagged artwork',
+            'slug' => 'tagged-artwork',
+            'image_path' => 'artworks/originals/tagged.jpg',
+            'published' => false,
+        ]));
+        $subject = Tag::query()->create(['name' => 'antlered deer']);
+        $glowing = Tag::query()->create(['name' => 'glowing']);
+        $misty = Tag::query()->create(['name' => 'misty']);
+        $artwork->tags()->attach($subject, ['category' => 'subject']);
+        $artwork->tags()->attach($glowing, ['category' => 'mood']);
+        $artwork->tags()->attach($misty, ['category' => 'mood']);
+
+        $manual = ArtworkCollection::query()->create(['title' => 'Curated by hand']);
+        $smart = ArtworkCollection::query()->create([
+            'title' => 'Rule-managed smart collection',
+            'is_smart' => true,
+        ]);
+        $automatic = ArtworkCollection::query()->create([
+            'title' => 'Generated automatic collection',
+            'is_smart' => true,
+            'is_auto_generated' => true,
+            'auto_generation_key' => 'generated-automatic-test',
+        ]);
+        $artwork->collections()->attach([$manual->id, $smart->id, $automatic->id]);
+
+        $livewire = Livewire::actingAs(User::factory()->admin()->create())
+            ->test(ManageArtworks::class)
+            ->mountTableAction('edit', $artwork)
+            ->assertMountedActionModalSee([
+                'Applied tags',
+                'Subject: antlered deer',
+                'Mood: glowing, misty',
+                'These persisted tags drive smart and automatic collection membership.',
+                'Manual collections',
+            ]);
+        $instance = $livewire->instance();
+        $schema = $instance->getSchema($instance->getMountedActionSchemaName());
+        $collections = collect($schema->getFlatComponents(withHidden: true))
+            ->first(fn ($component): bool => $component instanceof Select && $component->getName() === 'collections');
+        $options = $collections->getOptions();
+
+        $this->assertSame('Curated by hand', $options[$manual->id]);
+        $this->assertArrayNotHasKey($smart->id, $options);
+        $this->assertArrayNotHasKey($automatic->id, $options);
+        $this->assertSame([$manual->id], $collections->getState());
+
+        $livewire
+            ->setTableActionData(['collections' => []])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        $this->assertDatabaseMissing('artwork_collection', [
+            'artwork_id' => $artwork->id,
+            'collection_id' => $manual->id,
+        ]);
+        $this->assertDatabaseHas('artwork_collection', [
+            'artwork_id' => $artwork->id,
+            'collection_id' => $smart->id,
+        ]);
+        $this->assertDatabaseHas('artwork_collection', [
+            'artwork_id' => $artwork->id,
+            'collection_id' => $automatic->id,
+        ]);
+        $this->assertEqualsCanonicalizing(
+            [$subject->id, $glowing->id, $misty->id],
+            $artwork->fresh()->tags()->pluck('tags.id')->all(),
         );
     }
 
