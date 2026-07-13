@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PostStatus;
 use App\Models\Concerns\BuildsSlugs;
+use App\Services\JournalAiRunService;
 use App\Services\PostConnectionService;
 use App\Services\PostRevisionService;
 use App\Services\PostSlugRedirectService;
@@ -123,6 +124,8 @@ class Post extends Model
                 return;
             }
 
+            app(JournalAiRunService::class)->invalidateForPostTrash($post);
+
             $wasPublic = $post->isPubliclyPublishedAt();
             $state = [
                 'status' => PostStatus::Draft->value,
@@ -169,6 +172,11 @@ class Post extends Model
     public function slugRedirects(): HasMany
     {
         return $this->hasMany(PostSlugRedirect::class)->latest('id');
+    }
+
+    public function aiRuns(): HasMany
+    {
+        return $this->hasMany(PostAiRun::class)->latest('id');
     }
 
     public function scopePublished(Builder $query, ?CarbonInterface $at = null): Builder

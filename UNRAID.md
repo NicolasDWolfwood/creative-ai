@@ -306,6 +306,8 @@ For a backward-compatible code rollback:
 
 For the inherited-album and Journal lifecycle releases, retain the expand-compatible migrations and do not run `migrate:rollback`. The connected-stories, planning-tools, revision, redirect, and soft-delete additions can also remain applied because older images ignore their columns, tables, and indexes. Treat music and all Journal administration as read-only while the older image is running, then restore the current image before making publication, scheduling, slug, trash, history, connection, template, or album-membership changes.
 
+The Journal AI foundation is also additive, but its serialized queue job requires the image that created it. Before rolling back to an image without that job class, use the current image to cancel pending Journal AI work, leave its worker running until the cancelled and superseded payloads have been consumed as no-ops, and confirm no Journal AI run remains queued or processing. Then run Compose Down and replace the image digest. Leave `post_ai_runs` applied and keep Journal AI administration paused while the older image is active.
+
 For an incompatible schema or data change, restore the matching database, storage, `.env`/`APP_KEY`, and image digest together. All normal migrations should therefore use an expand/contract approach and remain backward-compatible through at least one release.
 
 ## 10. Environment ownership
