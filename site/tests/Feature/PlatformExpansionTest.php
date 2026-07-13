@@ -266,6 +266,29 @@ class PlatformExpansionTest extends TestCase
         Queue::assertNotPushed(AnalyzeArtworkWithAi::class);
     }
 
+    public function test_bulk_upload_only_accepts_manual_collection_memberships(): void
+    {
+        Storage::fake('public');
+        Queue::fake();
+        $manual = Collection::query()->create(['title' => 'Manual destination']);
+        $smart = Collection::query()->create([
+            'title' => 'Rule-managed destination',
+            'is_smart' => true,
+        ]);
+        $path = 'artworks/originals/manual-only.jpg';
+        Storage::disk('public')->put($path, UploadedFile::fake()->image('manual-only.jpg')->getContent());
+
+        $artwork = app(ArtworkBulkUploadService::class)->create(
+            [$path],
+            collectionIds: [$manual->id, $smart->id],
+            published: false,
+        )->sole();
+
+        $this->assertSame([$manual->id], $artwork->collections()->pluck('collections.id')->all());
+        $this->assertSame($manual->id, $artwork->collection_id);
+        $this->assertFalse($smart->artworks()->whereKey($artwork->id)->exists());
+    }
+
     public function test_published_journal_post_has_public_page_feed_and_sitemap(): void
     {
         $post = Post::query()->create([

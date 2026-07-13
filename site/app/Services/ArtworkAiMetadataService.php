@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Artwork;
 use App\Models\Tag;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -52,20 +53,29 @@ class ArtworkAiMetadataService
 
         $suggestion = $this->normalizeSuggestion($artwork->ai_suggestion);
 
-        $artwork->forceFill([
-            'title' => $suggestion['title'] ?: $artwork->title,
-            'description' => $suggestion['description'] ?: $artwork->description,
-            'alt_text' => $suggestion['alt_text'] ?: $artwork->alt_text,
-            'ai_suggestion' => $suggestion,
-            'ai_status' => Artwork::AI_STATUS_APPLIED,
-            'ai_queue_token' => $preserveQueueState ? $artwork->ai_queue_token : null,
-            'ai_apply_after_analysis' => $preserveQueueState ? $artwork->ai_apply_after_analysis : false,
-            'ai_error' => null,
-            'ai_started_at' => $preserveQueueState ? $artwork->ai_started_at : null,
-            'ai_analyzed_at' => $artwork->ai_analyzed_at ?: now(),
-        ])->save();
+        if ($this->suggestionTagsAreEmpty($suggestion)) {
+            throw new RuntimeException('This AI suggestion has no usable tags to apply.');
+        }
 
-        $this->syncTags($artwork, $suggestion);
+        $artwork = DB::transaction(function () use ($artwork, $suggestion, $preserveQueueState): Artwork {
+            $artwork->forceFill([
+                'title' => $suggestion['title'] ?: $artwork->title,
+                'description' => $suggestion['description'] ?: $artwork->description,
+                'alt_text' => $suggestion['alt_text'] ?: $artwork->alt_text,
+                'ai_suggestion' => $suggestion,
+                'ai_status' => Artwork::AI_STATUS_APPLIED,
+                'ai_queue_token' => $preserveQueueState ? $artwork->ai_queue_token : null,
+                'ai_apply_after_analysis' => $preserveQueueState ? $artwork->ai_apply_after_analysis : false,
+                'ai_error' => null,
+                'ai_started_at' => $preserveQueueState ? $artwork->ai_started_at : null,
+                'ai_analyzed_at' => $artwork->ai_analyzed_at ?: now(),
+            ])->save();
+
+            $this->syncTags($artwork, $suggestion);
+
+            return $artwork->refresh();
+        });
+
         if ($syncSmartCollections) {
             app(AutomaticCollectionService::class)->refreshExisting(sync: false);
             app(SmartCollectionService::class)->syncAutomatic();
@@ -135,6 +145,8 @@ Rules:
 - Description should be 1-2 polished public-facing sentences.
 - Alt text should be factual, accessible, and under 160 characters.
 - Tags should be lowercase words or short phrases without hash symbols.
+- Generic tags should describe visible subjects or themes, not style, mood, color, or medium.
+- Put each label in exactly one tag array; do not repeat labels across category arrays.
 - Color tags should be color names, not hex values.
 - Use content_warning as an empty string unless the image contains sensitive or adult content.
 
@@ -154,7 +166,10 @@ PROMPT);
     {
         $tagArray = [
             'type' => 'array',
-            'items' => ['type' => 'string'],
+            'items' => [
+                'type' => 'string',
+                'maxLength' => 80,
+            ],
             'minItems' => 0,
             'maxItems' => 12,
         ];
@@ -222,18 +237,51 @@ PROMPT);
      */
     protected function normalizeSuggestion(array $suggestion): array
     {
-        return [
-            'title' => $this->cleanText($suggestion['title'] ?? '', 120),
-            'description' => $this->cleanText($suggestion['description'] ?? '', 600),
-            'alt_text' => $this->cleanText($suggestion['alt_text'] ?? '', 200),
+        $tagLists = [
             'tags' => $this->cleanList($suggestion['tags'] ?? []),
             'style_tags' => $this->cleanList($suggestion['style_tags'] ?? []),
             'mood_tags' => $this->cleanList($suggestion['mood_tags'] ?? []),
             'color_tags' => $this->cleanList($suggestion['color_tags'] ?? []),
             'medium_tags' => $this->cleanList($suggestion['medium_tags'] ?? []),
+        ];
+        $seenSlugs = [];
+
+        foreach (['color_tags', 'medium_tags', 'style_tags', 'mood_tags', 'tags'] as $key) {
+            $tagLists[$key] = collect($tagLists[$key])
+                ->filter(function (string $tag) use (&$seenSlugs): bool {
+                    $slug = Str::slug($tag);
+
+                    if (blank($slug) || isset($seenSlugs[$slug])) {
+                        return false;
+                    }
+
+                    $seenSlugs[$slug] = true;
+
+                    return true;
+                })
+                ->values()
+                ->all();
+        }
+
+        return [
+            'title' => $this->cleanText($suggestion['title'] ?? '', 120),
+            'description' => $this->cleanText($suggestion['description'] ?? '', 600),
+            'alt_text' => $this->cleanText($suggestion['alt_text'] ?? '', 200),
+            'tags' => $tagLists['tags'],
+            'style_tags' => $tagLists['style_tags'],
+            'mood_tags' => $tagLists['mood_tags'],
+            'color_tags' => $tagLists['color_tags'],
+            'medium_tags' => $tagLists['medium_tags'],
             'confidence' => max(0, min(1, (float) ($suggestion['confidence'] ?? 0))),
             'content_warning' => $this->cleanText($suggestion['content_warning'] ?? '', 200),
         ];
+    }
+
+    /** @param array<string, mixed> $suggestion */
+    protected function suggestionTagsAreEmpty(array $suggestion): bool
+    {
+        return collect(['tags', 'style_tags', 'mood_tags', 'color_tags', 'medium_tags'])
+            ->every(fn (string $key): bool => empty($suggestion[$key]));
     }
 
     /**
@@ -245,11 +293,11 @@ PROMPT);
         $attachedSlugs = [];
 
         $categories = [
-            'subject' => $suggestion['tags'] ?? [],
-            'style' => $suggestion['style_tags'] ?? [],
-            'mood' => $suggestion['mood_tags'] ?? [],
             'color' => $suggestion['color_tags'] ?? [],
             'medium' => $suggestion['medium_tags'] ?? [],
+            'style' => $suggestion['style_tags'] ?? [],
+            'mood' => $suggestion['mood_tags'] ?? [],
+            'subject' => $suggestion['tags'] ?? [],
         ];
 
         foreach ($categories as $category => $tags) {
@@ -303,7 +351,7 @@ PROMPT);
         }
 
         return collect($values)
-            ->map(fn (mixed $value): string => Str::of((string) $value)->replace(['#', '_'], ['', ' '])->squish()->lower()->toString())
+            ->map(fn (mixed $value): string => Str::of((string) $value)->replace(['#', '_'], ['', ' '])->squish()->lower()->limit(80, '')->toString())
             ->filter()
             ->unique()
             ->take(12)

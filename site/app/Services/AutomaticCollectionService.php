@@ -17,6 +17,8 @@ class AutomaticCollectionService
 
     public const DEFAULT_MINIMUM_ARTWORK = 3;
 
+    public const DEFAULT_AI_ASSISTED_MINIMUM_ARTWORK = 2;
+
     public function __construct(
         protected SmartCollectionService $smartCollections,
         protected AiProviderManager $providers,
@@ -145,17 +147,19 @@ class AutomaticCollectionService
     /**
      * @return array{collection:Collection,count:int,explanation:string}
      */
-    public function createWithAi(?string $guidance = null, int $minimumArtwork = self::DEFAULT_MINIMUM_ARTWORK, bool $published = true): array
+    public function createWithAi(?string $guidance = null, int $minimumArtwork = self::DEFAULT_AI_ASSISTED_MINIMUM_ARTWORK, bool $published = true): array
     {
         $minimumArtwork = max(1, min(500, $minimumArtwork));
-        $tags = $this->prioritizedAiCatalog($guidance);
+        $tags = $this->prioritizedAiCatalog($guidance, $minimumArtwork);
 
         if ($tags->isEmpty()) {
-            throw new RuntimeException('No AI-approved artwork tags are available yet.');
+            $artworkLabel = Str::plural('artwork', $minimumArtwork);
+
+            throw new RuntimeException("No suitable AI-approved artwork tag is shared by at least {$minimumArtwork} eligible published {$artworkLabel}.");
         }
 
         $catalog = $tags
-            ->map(fn (array $tag): string => $tag['slug'].' | '.$tag['name'].' | '.$tag['artwork_count'].' artwork')
+            ->map(fn (array $tag): string => $tag['slug'].' | '.$tag['name'].' | '.$tag['artwork_count'].' '.Str::plural('artwork', $tag['artwork_count']))
             ->implode("\n");
         $existingTitles = Collection::query()->orderBy('title')->pluck('title')->implode(', ');
         $request = filled($guidance) ? trim((string) $guidance) : 'Choose the strongest broad theme that is not already represented.';
@@ -281,17 +285,18 @@ PROMPT);
     /** @return SupportCollection<int, array{id:int,name:string,slug:string,artwork_count:int}> */
     protected function availableTagStats(): SupportCollection
     {
-        return DB::table('tags')
-            ->join('artwork_tag', 'tags.id', '=', 'artwork_tag.tag_id')
-            ->join('artworks', 'artworks.id', '=', 'artwork_tag.artwork_id')
+        return Artwork::query()
+            ->published()
             ->where('artworks.ai_status', Artwork::AI_STATUS_APPLIED)
             ->whereNotNull('artworks.ai_analyzed_at')
-            ->where('artworks.published', true)
+            ->join('artwork_tag', 'artworks.id', '=', 'artwork_tag.artwork_id')
+            ->join('tags', 'tags.id', '=', 'artwork_tag.tag_id')
             ->whereIn('artwork_tag.category', ['subject', 'style', 'mood'])
             ->select(['tags.id', 'tags.name', 'tags.slug'])
             ->selectRaw('COUNT(DISTINCT artworks.id) AS artwork_count')
             ->groupBy('tags.id', 'tags.name', 'tags.slug')
             ->orderByDesc('artwork_count')
+            ->toBase()
             ->get()
             ->map(fn (object $tag): array => [
                 'id' => (int) $tag->id,
@@ -302,7 +307,7 @@ PROMPT);
     }
 
     /** @return SupportCollection<int, array{id:int,name:string,slug:string,artwork_count:int}> */
-    protected function prioritizedAiCatalog(?string $guidance): SupportCollection
+    protected function prioritizedAiCatalog(?string $guidance, int $minimumArtwork): SupportCollection
     {
         $words = Str::of((string) $guidance)
             ->lower()
@@ -310,19 +315,20 @@ PROMPT);
             ->explode(' ')
             ->filter(fn (string $word): bool => strlen($word) >= 3)
             ->values();
-        $generic = collect([
+        $genericSlugs = collect([
             'digital art',
             'digital artwork',
-            'digital-painting',
+            'digital painting',
             'generative art',
             'cinematic lighting',
             'high detail',
             'realistic',
             'photorealistic',
-        ]);
+        ])->map(fn (string $label): string => Str::slug($label));
 
         return $this->availableTagStats()
-            ->reject(fn (array $tag): bool => $generic->contains($tag['name']))
+            ->filter(fn (array $tag): bool => $tag['artwork_count'] >= $minimumArtwork)
+            ->reject(fn (array $tag): bool => $genericSlugs->contains(Str::slug($tag['slug'])))
             ->sortByDesc(function (array $tag) use ($words): int {
                 $guidanceMatch = $words->contains(fn (string $word): bool => $this->tagMatchesKeyword($tag['name'], $word));
 
@@ -336,9 +342,9 @@ PROMPT);
     protected function countMatchingArtwork(array $tagIds): int
     {
         return Artwork::query()
+            ->published()
             ->where('ai_status', Artwork::AI_STATUS_APPLIED)
             ->whereNotNull('ai_analyzed_at')
-            ->where('published', true)
             ->whereHas('tags', fn ($query) => $query->whereKey($tagIds))
             ->count();
     }

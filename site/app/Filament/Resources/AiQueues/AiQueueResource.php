@@ -76,8 +76,7 @@ class AiQueueResource extends Resource
             ->defaultSort('ai_queued_at')
             ->columns([
                 ImageColumn::make('thumb_path')
-                    ->getStateUsing(fn (Artwork $record): string => $record->availableThumbPath())
-                    ->disk('public')
+                    ->getStateUsing(fn (Artwork $record): string => $record->thumb_url)
                     ->square()
                     ->label('Preview'),
                 TextColumn::make('title')->searchable()->sortable(),

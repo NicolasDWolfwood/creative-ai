@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Artwork;
+use App\Models\Collection as ArtworkCollection;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
@@ -23,7 +24,21 @@ class ArtworkBulkUploadService
     ): Collection {
         $created = new Collection;
         $nextSortOrder = ((int) Artwork::query()->max('sort_order')) + 1;
-        $collectionIds = collect($collectionIds)->map(fn (mixed $id): int => (int) $id)->filter()->unique()->values()->all();
+        $requestedCollectionIds = collect($collectionIds)
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+        $manualCollectionIds = ArtworkCollection::query()
+            ->where('is_smart', false)
+            ->whereKey($requestedCollectionIds->all())
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
+        $collectionIds = $requestedCollectionIds
+            ->intersect($manualCollectionIds)
+            ->values()
+            ->all();
 
         foreach (array_values(array_filter($paths)) as $path) {
             $originalName = $originalNames[$path] ?? basename($path);

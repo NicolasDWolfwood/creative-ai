@@ -19,7 +19,7 @@ class SmartCollectionService
         $query = Artwork::query();
 
         if ((bool) ($rules['only_published'] ?? true)) {
-            $query->where('published', true);
+            $query->published();
         }
 
         if ($collection->is_auto_generated || (bool) ($rules['only_ai_applied'] ?? false)) {
