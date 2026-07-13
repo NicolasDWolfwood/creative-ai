@@ -50,7 +50,7 @@ class MediaController extends Controller
         abort_unless($published || $this->isAdministrator($request), 404);
         abort_if(blank($post->cover_image_path), 404);
 
-        return $this->file($media, $post->cover_image_path, $published);
+        return $this->file($media, $post->cover_image_path, $published, revalidatePublic: true);
     }
 
     protected function file(PrivateMediaService $media, string $path, bool $public, bool $revalidatePublic = false): BinaryFileResponse

@@ -16,11 +16,12 @@ class PostWorkflowService
     public function __construct(
         private readonly PostReadiness $readiness,
         private readonly PostConnectionService $connections,
+        private readonly PostRevisionService $revisions,
     ) {}
 
     public function markReady(Post $post): Post
     {
-        return $this->transition($post, function (Post $post): void {
+        return $this->transition($post, 'Marked Journal post Ready.', function (Post $post): void {
             $this->assertStoredStatus($post, [PostStatus::Draft], 'mark ready');
             $this->assertReady($post);
             $this->setUnpublishedState($post, PostStatus::Ready);
@@ -29,7 +30,7 @@ class PostWorkflowService
 
     public function revertToDraft(Post $post): Post
     {
-        return $this->transition($post, function (Post $post): void {
+        return $this->transition($post, 'Returned Journal post to Draft.', function (Post $post): void {
             $this->assertStoredStatus($post, [PostStatus::Ready], 'revert to draft');
             $this->setUnpublishedState($post, PostStatus::Draft);
         });
@@ -43,7 +44,7 @@ class PostWorkflowService
             throw new DomainException('A journal post must be scheduled for a future date.');
         }
 
-        return $this->transition($post, function (Post $post) use ($scheduledAt): void {
+        return $this->transition($post, 'Scheduled Journal post for '.$scheduledAt->toIso8601String().'.', function (Post $post) use ($scheduledAt): void {
             $this->assertStoredStatus($post, [PostStatus::Ready, PostStatus::Scheduled], 'schedule');
 
             if ($post->isPubliclyPublishedAt()) {
@@ -65,7 +66,7 @@ class PostWorkflowService
 
     public function publishNow(Post $post): Post
     {
-        return $this->transition($post, function (Post $post): void {
+        return $this->transition($post, 'Published Journal post immediately.', function (Post $post): void {
             $this->assertStoredStatus($post, [PostStatus::Ready, PostStatus::Scheduled], 'publish');
             $this->assertReady($post);
 
@@ -83,7 +84,7 @@ class PostWorkflowService
 
     public function cancelSchedule(Post $post): Post
     {
-        return $this->transition($post, function (Post $post): void {
+        return $this->transition($post, 'Cancelled Journal post schedule.', function (Post $post): void {
             $this->assertStoredStatus($post, [PostStatus::Scheduled], 'cancel schedule');
 
             if ($post->isPubliclyPublishedAt()) {
@@ -99,7 +100,7 @@ class PostWorkflowService
 
     public function unpublish(Post $post): Post
     {
-        return $this->transition($post, function (Post $post): void {
+        return $this->transition($post, 'Unpublished Journal post and returned it to Ready.', function (Post $post): void {
             if (! $post->isPubliclyPublishedAt()) {
                 throw new DomainException('Cannot unpublish a journal post that is not public.');
             }
@@ -113,13 +114,13 @@ class PostWorkflowService
     /**
      * @param  Closure(Post): void  $callback
      */
-    private function transition(Post $post, Closure $callback): Post
+    private function transition(Post $post, string $reason, Closure $callback): Post
     {
         if (! $post->exists) {
             throw new LogicException('Journal workflow transitions require a persisted post.');
         }
 
-        return DB::transaction(function () use ($post, $callback): Post {
+        return DB::transaction(function () use ($post, $reason, $callback): Post {
             $locked = Post::query()->lockForUpdate()->findOrFail($post->getKey());
             $wasPublic = $locked->isPubliclyPublishedAt();
 
@@ -129,6 +130,8 @@ class PostWorkflowService
             if ($wasPublic !== $locked->isPubliclyPublishedAt()) {
                 $this->connections->touchConnectedMedia($locked);
             }
+
+            $this->revisions->capture($locked, 'workflow', reason: $reason);
 
             return $locked->refresh();
         }, 3);

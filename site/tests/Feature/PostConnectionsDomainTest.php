@@ -172,6 +172,13 @@ class PostConnectionsDomainTest extends TestCase
 
         $post->delete();
 
+        $this->assertDatabaseHas('post_tag', [
+            'post_id' => $post->id,
+            'tag_id' => $tag->id,
+        ]);
+
+        $post->forceDelete();
+
         $this->assertDatabaseMissing('post_tag', [
             'post_id' => $post->id,
             'tag_id' => $tag->id,

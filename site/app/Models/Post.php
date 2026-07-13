@@ -4,18 +4,23 @@ namespace App\Models;
 
 use App\Enums\PostStatus;
 use App\Models\Concerns\BuildsSlugs;
+use App\Services\PostConnectionService;
+use App\Services\PostRevisionService;
+use App\Services\PostSlugRedirectService;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Post extends Model
 {
     use BuildsSlugs;
     use HasFactory;
+    use SoftDeletes;
 
     protected $attributes = [
         'status' => PostStatus::Draft->value,
@@ -26,6 +31,17 @@ class Post extends Model
     private const PUBLIC_CONTENT_FIELDS = [
         'title',
         'slug',
+        'excerpt',
+        'body',
+        'cover_image_path',
+        'cover_alt_text',
+        'seo_title',
+        'seo_description',
+    ];
+
+    /** @var list<string> */
+    public const REVISION_CONTENT_FIELDS = [
+        'title',
         'excerpt',
         'body',
         'cover_image_path',
@@ -62,12 +78,15 @@ class Post extends Model
             'published' => 'boolean',
             'published_at' => 'datetime',
             'public_content_updated_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 
     protected static function booted(): void
     {
         static::saving(function (Post $post): void {
+            app(PostSlugRedirectService::class)->assertModelSaveAllowed($post);
+
             if (! $post->exists || $post->isDirty(self::PUBLIC_CONTENT_FIELDS)) {
                 $post->public_content_updated_at = now();
 
@@ -77,6 +96,56 @@ class Post extends Model
             if ($post->isDirty('public_content_updated_at')) {
                 $post->public_content_updated_at = $post->getOriginal('public_content_updated_at');
             }
+        });
+
+        static::saved(function (Post $post): void {
+            if (
+                PostRevisionService::automaticCaptureIsSuppressed()
+                || (! $post->wasRecentlyCreated && ! $post->wasChanged(self::REVISION_CONTENT_FIELDS))
+            ) {
+                return;
+            }
+
+            app(PostRevisionService::class)->capture($post);
+        });
+
+        static::restoring(function (Post $post): void {
+            $post->forceFill([
+                'status' => PostStatus::Draft,
+                'scheduled_at' => null,
+                'published' => false,
+                'published_at' => null,
+            ]);
+        });
+
+        static::deleting(function (Post $post): void {
+            if ($post->isForceDeleting()) {
+                return;
+            }
+
+            $wasPublic = $post->isPubliclyPublishedAt();
+            $state = [
+                'status' => PostStatus::Draft->value,
+                'scheduled_at' => null,
+                'published' => false,
+                'published_at' => null,
+                'updated_at' => now(),
+            ];
+
+            static::query()->whereKey($post->getKey())->update($state);
+            $post->forceFill($state);
+
+            if ($wasPublic) {
+                app(PostConnectionService::class)->touchConnectedMedia($post);
+            }
+        });
+
+        static::forceDeleting(function (Post $post): void {
+            if ($post->isPubliclyPublishedAt()) {
+                app(PostConnectionService::class)->touchConnectedMedia($post);
+            }
+
+            app(PostSlugRedirectService::class)->tombstoneCurrentSlug($post);
         });
     }
 
@@ -90,6 +159,16 @@ class Post extends Model
     public function mediaItems(): HasMany
     {
         return $this->hasMany(PostMedia::class)->orderBy('position');
+    }
+
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(PostRevision::class)->latest('id');
+    }
+
+    public function slugRedirects(): HasMany
+    {
+        return $this->hasMany(PostSlugRedirect::class)->latest('id');
     }
 
     public function scopePublished(Builder $query, ?CarbonInterface $at = null): Builder
@@ -135,6 +214,10 @@ class Post extends Model
 
     public function effectiveStatusAt(?CarbonInterface $at = null): PostStatus
     {
+        if ($this->trashed()) {
+            return PostStatus::Draft;
+        }
+
         $at ??= now();
         $status = $this->storedStatus();
 
@@ -159,6 +242,10 @@ class Post extends Model
 
     public function effectivePublishedAt(?CarbonInterface $at = null): ?CarbonInterface
     {
+        if ($this->trashed()) {
+            return null;
+        }
+
         $at ??= now();
         $status = $this->storedStatus();
 
@@ -214,6 +301,28 @@ class Post extends Model
     public function getSummaryAttribute(): string
     {
         return $this->excerpt ?: Str::of(strip_tags((string) $this->body))->squish()->limit(180)->toString();
+    }
+
+    protected static function uniqueSlug(Model $model, string $source): string
+    {
+        $base = Str::substr(Str::slug($source) ?: Str::random(8), 0, 255);
+        $slug = $base;
+        $suffix = 2;
+
+        while (
+            static::query()
+                ->withTrashed()
+                ->where('slug', $slug)
+                ->when($model->exists, fn (Builder $query) => $query->whereKeyNot($model->getKey()))
+                ->exists()
+            || PostSlugRedirect::query()->where('slug', $slug)->exists()
+        ) {
+            $ending = '-'.$suffix;
+            $slug = Str::substr($base, 0, 255 - Str::length($ending)).$ending;
+            $suffix++;
+        }
+
+        return $slug;
     }
 
     private function storedStatus(): ?PostStatus

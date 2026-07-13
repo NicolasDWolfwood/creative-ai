@@ -9,6 +9,7 @@ use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Playlist;
 use App\Models\Post;
+use App\Models\PostSlugRedirect;
 use App\Models\PostTemplate;
 use App\Models\Tag;
 use App\Models\Track;
@@ -105,6 +106,8 @@ class JournalDraftPlanningService
                 $post->tags()->attach($safeTagIds);
             }
 
+            app(PostRevisionService::class)->capture($post, 'draft_planning');
+
             return $post->refresh()->load([
                 'tags',
                 'mediaItems.artwork',
@@ -159,7 +162,10 @@ class JournalDraftPlanningService
         $slug = $base.$sourceSuffix;
         $duplicate = 2;
 
-        while (Post::query()->where('slug', $slug)->exists()) {
+        while (
+            Post::query()->withTrashed()->where('slug', $slug)->exists()
+            || PostSlugRedirect::query()->where('slug', $slug)->exists()
+        ) {
             $duplicateSuffix = '-'.$duplicate;
             $slug = Str::substr(
                 $base,

@@ -116,7 +116,10 @@ class StoryOpportunityService
             PostMediaType::Playlist => Playlist::query()->published(),
         };
 
-        return $query->whereDoesntHave('journalMediaItems');
+        return $query->whereDoesntHave(
+            'journalMediaItems',
+            fn (EloquentBuilder $query) => $query->whereHas('post'),
+        );
     }
 
     protected function unionSourceQuery(PostMediaType $type, ?string $search): Builder
