@@ -7,8 +7,11 @@ use App\Filament\Resources\Posts\Pages\CreatePost;
 use App\Filament\Resources\Posts\Pages\EditPost;
 use App\Filament\Resources\Posts\Pages\ListPosts;
 use App\Filament\Resources\Posts\Pages\ManagePostConnections;
+use App\Filament\Resources\Posts\Pages\ManagePostHistory;
 use App\Models\Post;
+use App\Models\User;
 use App\Services\PostReadiness;
+use App\Services\PostRevisionService;
 use App\Services\PostWorkflowService;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -16,10 +19,15 @@ use Closure;
 use DomainException;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreAction;
+use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\MarkdownEditor;
@@ -36,8 +44,14 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
+use Throwable;
 
 class PostResource extends Resource
 {
@@ -63,7 +77,8 @@ class PostResource extends Resource
                     TextInput::make('title')->required()->maxLength(255)->columnSpanFull(),
                     TextInput::make('slug')
                         ->maxLength(255)
-                        ->helperText('Leave empty to generate it from the title. Avoid changing a shared slug until redirect support is available.'),
+                        ->required(fn (string $operation): bool => $operation === 'edit')
+                        ->helperText('Leave empty when creating a post to generate it from the title. Later changes preserve the former URL as a permanent redirect.'),
                     Toggle::make('featured')
                         ->label('Feature this post')
                         ->helperText('Featuring controls placement only; it never publishes the post.')
@@ -124,7 +139,7 @@ class PostResource extends Resource
             ->defaultSort('updated_at', 'desc')
             ->columns([
                 ImageColumn::make('cover_image_path')
-                    ->getStateUsing(fn (Post $record): ?string => $record->cover_url)
+                    ->getStateUsing(fn (Post $record): ?string => $record->trashed() ? null : $record->cover_url)
                     ->square()
                     ->label('Cover'),
                 TextColumn::make('title')
@@ -180,19 +195,25 @@ class PostResource extends Resource
                     ->multiple()
                     ->searchable()
                     ->preload(),
+                TrashedFilter::make(),
             ])
             ->recordActions([
                 ActionGroup::make([
                     static::previewAction(),
                     static::readinessAction(),
                     ...static::workflowActions(),
-                    EditAction::make(),
-                    DeleteAction::make(),
+                    static::historyAction(),
+                    EditAction::make()->hidden(fn (Post $record): bool => $record->trashed()),
+                    static::deleteAction(),
+                    static::restoreTrashedAction(),
+                    static::forceDeleteAction(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Post actions'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    static::deleteBulkAction(),
+                    static::restoreBulkAction(),
+                    static::forceDeleteBulkAction(),
                 ]),
             ]);
     }
@@ -203,10 +224,145 @@ class PostResource extends Resource
             ->label('Preview saved version')
             ->icon('heroicon-o-arrow-top-right-on-square')
             ->authorize('preview')
+            ->hidden(fn (Post $record): bool => $record->trashed())
             ->url(
                 fn (Post $record): string => route('admin.posts.preview', $record),
                 shouldOpenInNewTab: true,
             );
+    }
+
+    public static function deleteAction(): DeleteAction
+    {
+        return DeleteAction::make()
+            ->modalDescription('Move this post to the trash. Its revision history, connections, redirect history, and private cover file are retained so the post can be restored safely.')
+            ->successNotificationTitle('Post moved to trash.')
+            ->using(fn (Post $record): Post => app(PostRevisionService::class)->trash(
+                $record,
+                static::authenticatedUser(),
+                'Moved to trash from Journal administration.',
+            ));
+    }
+
+    public static function historyAction(): Action
+    {
+        return Action::make('history')
+            ->label('Revision history')
+            ->icon('heroicon-o-clock')
+            ->authorize('view')
+            ->url(fn (Post $record): string => static::getUrl('history', ['record' => $record]));
+    }
+
+    public static function restoreTrashedAction(): RestoreAction
+    {
+        return RestoreAction::make()
+            ->modalDescription('Restore this post to the private Draft state. Its former publication or schedule will not be resumed automatically.')
+            ->successNotificationTitle('Post restored as a draft.')
+            ->using(fn (Post $record): Post => app(PostRevisionService::class)->restoreTrashed(
+                $record,
+                static::authenticatedUser(),
+                'Restored from the Journal trash.',
+            ));
+    }
+
+    public static function forceDeleteAction(): ForceDeleteAction
+    {
+        return ForceDeleteAction::make()
+            ->label('Delete permanently')
+            ->modalHeading('Permanently delete this Journal post?')
+            ->modalDescription('This cannot be undone. The post, its history, and connections are removed. Former and current slugs remain permanently reserved as non-public tombstones, and private cover source files are retained rather than deleted implicitly.')
+            ->successNotificationTitle('Post permanently deleted.')
+            ->using(function (Post $record): bool {
+                app(PostRevisionService::class)->forceDelete(
+                    $record,
+                    static::authenticatedUser(),
+                    'Permanently deleted from Journal administration.',
+                );
+
+                return true;
+            });
+    }
+
+    protected static function deleteBulkAction(): DeleteBulkAction
+    {
+        return DeleteBulkAction::make()
+            ->modalDescription('Move the selected posts to the trash while retaining their history and private source files for safe restoration.')
+            ->using(function (DeleteBulkAction $action, EloquentCollection|Collection|LazyCollection $records): void {
+                static::processBulkRevisionAction(
+                    $action,
+                    $records,
+                    fn (Post $post): Post => app(PostRevisionService::class)->trash(
+                        $post,
+                        static::authenticatedUser(),
+                        'Moved to trash with a bulk Journal action.',
+                    ),
+                );
+            });
+    }
+
+    protected static function restoreBulkAction(): RestoreBulkAction
+    {
+        return RestoreBulkAction::make()
+            ->modalDescription('Restore the selected posts as private drafts. Previous publication and scheduling state will not resume automatically.')
+            ->using(function (RestoreBulkAction $action, EloquentCollection|Collection|LazyCollection $records): void {
+                static::processBulkRevisionAction(
+                    $action,
+                    $records,
+                    fn (Post $post): Post => app(PostRevisionService::class)->restoreTrashed(
+                        $post,
+                        static::authenticatedUser(),
+                        'Restored with a bulk Journal action.',
+                    ),
+                );
+            });
+    }
+
+    protected static function forceDeleteBulkAction(): ForceDeleteBulkAction
+    {
+        return ForceDeleteBulkAction::make()
+            ->label('Delete permanently')
+            ->modalDescription('Permanently remove the selected trashed posts. Slugs remain reserved as non-public tombstones, and private cover source files are retained rather than deleted implicitly.')
+            ->using(function (ForceDeleteBulkAction $action, EloquentCollection|Collection|LazyCollection $records): void {
+                static::processBulkRevisionAction(
+                    $action,
+                    $records,
+                    function (Post $post): void {
+                        app(PostRevisionService::class)->forceDelete(
+                            $post,
+                            static::authenticatedUser(),
+                            'Permanently deleted with a bulk Journal action.',
+                        );
+                    },
+                );
+            });
+    }
+
+    /**
+     * @param  EloquentCollection<int, Post>|Collection<int, Post>|LazyCollection<int, Post>  $records
+     * @param  Closure(Post): mixed  $operation
+     */
+    protected static function processBulkRevisionAction(BulkAction $action, iterable $records, Closure $operation): void
+    {
+        $reportedException = false;
+
+        foreach ($records as $record) {
+            try {
+                $operation($record);
+            } catch (Throwable $exception) {
+                $action->reportBulkProcessingFailure();
+
+                if (! $reportedException) {
+                    report($exception);
+                    $reportedException = true;
+                }
+            }
+        }
+    }
+
+    public static function authenticatedUser(): ?User
+    {
+        $user = auth()->user();
+
+        return $user instanceof User ? $user : null;
     }
 
     public static function readinessAction(): Action
@@ -215,6 +371,7 @@ class PostResource extends Resource
             ->label('Readiness check')
             ->icon('heroicon-o-clipboard-document-check')
             ->authorize('view')
+            ->hidden(fn (Post $record): bool => $record->trashed())
             ->modalHeading('Publication readiness')
             ->modalContent(fn (Post $record) => view('filament.posts.readiness-checklist', [
                 'report' => app(PostReadiness::class)->evaluate($record),
@@ -232,7 +389,7 @@ class PostResource extends Resource
                 ->icon('heroicon-o-check-circle')
                 ->color('info')
                 ->authorize('markReady')
-                ->visible(fn (Post $record): bool => $record->effectiveStatusAt() === PostStatus::Draft)
+                ->visible(fn (Post $record): bool => ! $record->trashed() && $record->effectiveStatusAt() === PostStatus::Draft)
                 ->requiresConfirmation()
                 ->modalDescription('The shared readiness checks will run before this post can enter the Ready state.')
                 ->action(fn (Post $record) => static::performTransition(
@@ -244,7 +401,7 @@ class PostResource extends Resource
                 ->label('Return to draft')
                 ->icon('heroicon-o-pencil-square')
                 ->authorize('revertToDraft')
-                ->visible(fn (Post $record): bool => $record->effectiveStatusAt() === PostStatus::Ready)
+                ->visible(fn (Post $record): bool => ! $record->trashed() && $record->effectiveStatusAt() === PostStatus::Ready)
                 ->requiresConfirmation()
                 ->action(fn (Post $record) => static::performTransition(
                     $record,
@@ -258,7 +415,7 @@ class PostResource extends Resource
                 ->icon('heroicon-o-calendar-days')
                 ->color('warning')
                 ->authorize('cancelSchedule')
-                ->visible(fn (Post $record): bool => $record->effectiveStatusAt() === PostStatus::Scheduled)
+                ->visible(fn (Post $record): bool => ! $record->trashed() && $record->effectiveStatusAt() === PostStatus::Scheduled)
                 ->requiresConfirmation()
                 ->modalDescription('The post will return to Ready and will not become public at the scheduled time.')
                 ->action(fn (Post $record) => static::performTransition(
@@ -271,7 +428,7 @@ class PostResource extends Resource
                 ->icon('heroicon-o-globe-alt')
                 ->color('success')
                 ->authorize('publishNow')
-                ->visible(fn (Post $record): bool => in_array($record->effectiveStatusAt(), [PostStatus::Ready, PostStatus::Scheduled], true))
+                ->visible(fn (Post $record): bool => ! $record->trashed() && in_array($record->effectiveStatusAt(), [PostStatus::Ready, PostStatus::Scheduled], true))
                 ->requiresConfirmation()
                 ->modalDescription('This immediately makes the last saved version public.')
                 ->action(fn (Post $record) => static::performTransition(
@@ -284,7 +441,7 @@ class PostResource extends Resource
                 ->icon('heroicon-o-eye-slash')
                 ->color('danger')
                 ->authorize('unpublish')
-                ->visible(fn (Post $record): bool => $record->effectiveStatusAt() === PostStatus::Published)
+                ->visible(fn (Post $record): bool => ! $record->trashed() && $record->effectiveStatusAt() === PostStatus::Published)
                 ->requiresConfirmation()
                 ->modalDescription('The post will be removed from every public Journal surface and return to Ready.')
                 ->action(fn (Post $record) => static::performTransition(
@@ -302,7 +459,7 @@ class PostResource extends Resource
             ->icon('heroicon-o-calendar-days')
             ->color('warning')
             ->authorize('schedule')
-            ->visible(fn (Post $record): bool => $record->effectiveStatusAt() === PostStatus::Ready)
+            ->visible(fn (Post $record): bool => ! $record->trashed() && $record->effectiveStatusAt() === PostStatus::Ready)
             ->schema([static::publicationTimePicker()])
             ->requiresConfirmation()
             ->modalSubmitActionLabel('Schedule')
@@ -323,7 +480,7 @@ class PostResource extends Resource
             ->icon('heroicon-o-calendar-days')
             ->color('warning')
             ->authorize('schedule')
-            ->visible(fn (Post $record): bool => $record->effectiveStatusAt() === PostStatus::Scheduled)
+            ->visible(fn (Post $record): bool => ! $record->trashed() && $record->effectiveStatusAt() === PostStatus::Scheduled)
             ->fillForm(fn (Post $record): array => ['scheduled_at' => $record->scheduled_at])
             ->schema([static::publicationTimePicker()])
             ->requiresConfirmation()
@@ -461,7 +618,15 @@ class PostResource extends Resource
             'create' => CreatePost::route('/create'),
             'edit' => EditPost::route('/{record}/edit'),
             'connections' => ManagePostConnections::route('/{record}/connections'),
+            'history' => ManagePostHistory::route('/{record}/history'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->withoutGlobalScopes([
+            SoftDeletingScope::class,
+        ]);
     }
 
     public static function getRecordSubNavigation(Page $page): array
@@ -469,6 +634,7 @@ class PostResource extends Resource
         return $page->generateNavigationItems([
             EditPost::class,
             ManagePostConnections::class,
+            ManagePostHistory::class,
         ]);
     }
 }

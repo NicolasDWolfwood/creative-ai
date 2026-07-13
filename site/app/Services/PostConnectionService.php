@@ -44,6 +44,7 @@ class PostConnectionService
             if ($current !== $ids) {
                 $locked->tags()->sync($ids);
                 $this->touchPublicContent($locked);
+                app(PostRevisionService::class)->capture($locked, 'connections_update');
             }
 
             return $locked->refresh()->load('tags');
@@ -110,6 +111,7 @@ class PostConnectionService
                 }
 
                 $this->touchPublicContent($locked);
+                app(PostRevisionService::class)->capture($locked, 'connections_update');
             }
 
             return $locked->refresh()->load([

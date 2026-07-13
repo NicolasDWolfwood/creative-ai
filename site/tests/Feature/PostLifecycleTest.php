@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\PostStatus;
 use App\Models\Post;
 use App\Services\PostReadiness;
+use App\Services\PostSlugRedirectService;
 use App\Services\PostWorkflowService;
 use Carbon\CarbonImmutable;
 use DomainException;
@@ -300,7 +301,7 @@ class PostLifecycleTest extends TestCase
         $this->assertTrue($ready->refresh()->public_content_updated_at->equalTo($createdAt->addHours(2)));
 
         CarbonImmutable::setTestNow($createdAt->addHours(4));
-        $ready->update(['slug' => 'content-timestamp-updated']);
+        $ready = app(PostSlugRedirectService::class)->changeSlug($ready, 'content-timestamp-updated');
         $this->assertTrue($ready->refresh()->public_content_updated_at->equalTo(now()));
 
         CarbonImmutable::setTestNow($createdAt->addHours(5));
