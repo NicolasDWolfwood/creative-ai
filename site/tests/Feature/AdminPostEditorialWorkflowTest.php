@@ -235,6 +235,26 @@ class AdminPostEditorialWorkflowTest extends TestCase
             ->assertCanNotSeeTableRecords([$futureSchedule]);
     }
 
+    public function test_ready_filter_matches_the_model_when_a_legacy_publication_date_remains(): void
+    {
+        $ready = $this->createPost(['title' => 'Ready story with legacy date']);
+        $ready->forceFill([
+            'status' => PostStatus::Ready,
+            'scheduled_at' => null,
+            'published' => false,
+            'published_at' => now()->addDay(),
+        ])->saveQuietly();
+
+        $this->assertSame(PostStatus::Ready, $ready->fresh()->effectiveStatusAt());
+
+        Livewire::actingAs(User::factory()->admin()->create())
+            ->test(ListPosts::class)
+            ->filterTable('workflow_status', PostStatus::Ready->value)
+            ->assertCanSeeTableRecords([$ready])
+            ->filterTable('workflow_status', PostStatus::Draft->value)
+            ->assertCanNotSeeTableRecords([$ready]);
+    }
+
     /** @param array<string, mixed> $overrides */
     private function createPost(array $overrides = []): Post
     {

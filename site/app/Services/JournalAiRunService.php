@@ -204,6 +204,58 @@ class JournalAiRunService
         }, 3);
     }
 
+    public function regenerate(
+        PostAiRun $run,
+        User $actor,
+        string $expectedContextHash,
+        string $expectedProviderProfileHash,
+        string $expectedRequestHash,
+    ): PostAiRun {
+        $this->authorizeRun($actor, 'retry', $run);
+
+        return DB::transaction(function () use (
+            $run,
+            $actor,
+            $expectedContextHash,
+            $expectedProviderProfileHash,
+            $expectedRequestHash,
+        ): PostAiRun {
+            [$post, $lockedRun] = $this->lockPostThenRun($run);
+            $this->authorizeRun($actor, 'retry', $lockedRun);
+
+            if (! in_array($lockedRun->status, [PostAiRunStatus::Ready, PostAiRunStatus::Applied], true)) {
+                throw new DomainException('Only ready or applied Journal AI results can be regenerated.');
+            }
+
+            $this->authorizeRequest($actor, $post);
+            $selection = $lockedRun->context_manifest['selection'] ?? null;
+
+            if (! is_array($selection)) {
+                throw new DomainException('The Journal AI run no longer has a valid context selection.');
+            }
+
+            $child = $this->createAcknowledgedRun(
+                $post,
+                $lockedRun->operation,
+                $selection,
+                $actor,
+                $expectedContextHash,
+                $expectedProviderProfileHash,
+                $expectedRequestHash,
+                retryOf: $lockedRun,
+            );
+
+            if ($lockedRun->status === PostAiRunStatus::Ready) {
+                $lockedRun->forceFill([
+                    'status' => PostAiRunStatus::Dismissed,
+                    'dismissed_at' => now(),
+                ])->saveOrFail();
+            }
+
+            return $child;
+        }, 3);
+    }
+
     public function dismiss(PostAiRun $run, User $actor): PostAiRun
     {
         $this->authorizeRun($actor, 'dismiss', $run);

@@ -23,6 +23,52 @@
             @endforeach
         </section>
 
+        <section class="creative-admin-panel creative-admin-work-queues" aria-labelledby="studio-work-queues-heading">
+            <div class="creative-admin-panel-heading">
+                <div>
+                    <p class="creative-admin-eyebrow">Operator work queues</p>
+                    <h3 id="studio-work-queues-heading">What needs attention</h3>
+                </div>
+                <p>Counts and safe provenance only. Open the source library for record details.</p>
+            </div>
+
+            <div class="creative-admin-work-queue-grid">
+                @foreach ($this->getWorkQueues() as $queue)
+                    <article class="creative-admin-work-queue creative-admin-work-queue-{{ $queue['tone'] }}">
+                        <div class="creative-admin-work-queue-heading">
+                            <h4>{{ $queue['label'] }}</h4>
+                            <strong aria-label="{{ $queue['label'] }} count">{{ number_format($queue['count']) }}</strong>
+                        </div>
+
+                        <p>{{ $queue['reason'] }}</p>
+
+                        <div class="creative-admin-work-queue-meta">
+                            @if ($queue['oldest_at'])
+                                <span>
+                                    {{ $queue['timestamp_label'] }}
+                                    <time datetime="{{ $queue['oldest_at']->toIso8601String() }}" title="{{ $queue['oldest_at']->toDayDateTimeString() }}">
+                                        {{ $queue['oldest_at']->diffForHumans() }}
+                                    </time>
+                                </span>
+                            @else
+                                <span>No open items</span>
+                            @endif
+
+                            @if (count($queue['links']) > 1)
+                                <span class="creative-admin-work-queue-links">
+                                    @foreach ($queue['links'] as $link)
+                                        <a href="{{ $link['href'] }}">{{ $link['label'] }}</a>
+                                    @endforeach
+                                </span>
+                            @else
+                                <a href="{{ $queue['href'] }}">{{ $queue['action_label'] }}</a>
+                            @endif
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        </section>
+
         <section class="creative-admin-grid">
             <div class="creative-admin-panel creative-admin-panel-wide">
                 <div class="creative-admin-panel-heading">
