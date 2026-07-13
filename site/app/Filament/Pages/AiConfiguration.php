@@ -56,7 +56,7 @@ class AiConfiguration extends Page
 
     public function getSubheading(): string|Htmlable|null
     {
-        return 'Choose local or cloud image intelligence, compare available models, and keep credentials encrypted.';
+        return 'Choose image and Journal models independently, declare where content is processed, and keep credentials encrypted.';
     }
 
     public function form(Schema $schema): Schema
@@ -70,8 +70,8 @@ class AiConfiguration extends Page
                         Tab::make('Provider')
                             ->icon('heroicon-o-cpu-chip')
                             ->schema([
-                                Section::make('Active metadata provider')
-                                    ->description('Queued artwork uses the provider and model selected here when the worker starts the job.')
+                                Section::make('Active AI provider')
+                                    ->description('Artwork uses the image model. New Journal runs pin the Journal model, endpoint, timeout, and a credential fingerprint when queued.')
                                     ->schema([
                                         Select::make('provider')
                                             ->options(AiSettings::PROVIDERS)
@@ -142,7 +142,8 @@ class AiConfiguration extends Page
             $inspection = app(AiProviderManager::class)->inspect($provider, [
                 'base_url' => $this->data[$provider.'_base_url'] ?? null,
                 'api_key' => $this->data[$provider.'_api_key'] ?? null,
-                'model' => $this->data[$provider.'_model'] ?? null,
+                'image_model' => $this->data[$provider.'_model'] ?? null,
+                'journal_model' => $this->data[$provider.'_journal_model'] ?? null,
             ]);
             $this->providerVersion = $inspection['version'];
             $this->providerModels = $inspection['models'];
@@ -169,26 +170,33 @@ class AiConfiguration extends Page
         }
     }
 
-    public function chooseModel(string $model): void
+    public function chooseModel(string $model, string $purpose = 'image'): void
     {
-        if (! collect($this->providerModels)->contains(fn (array $candidate): bool => $candidate['name'] === $model)) {
+        $suitability = $purpose === 'journal' ? 'journal_suitable' : 'image_suitable';
+
+        if (! collect($this->providerModels)->contains(
+            fn (array $candidate): bool => $candidate['name'] === $model && ($candidate[$suitability] ?? false),
+        )) {
             return;
         }
 
         $provider = (string) ($this->data['provider'] ?? 'ollama');
-        $this->data[$provider.'_model'] = $model;
+        $field = $purpose === 'journal' ? $provider.'_journal_model' : $provider.'_model';
+        $this->data[$field] = $model;
     }
 
     /** @return array<string, string> */
-    public function getModelOptions(string $provider): array
+    public function getModelOptions(string $provider, string $purpose = 'image'): array
     {
+        $suitability = $purpose === 'journal' ? 'journal_suitable' : 'image_suitable';
+        $field = $purpose === 'journal' ? $provider.'_journal_model' : $provider.'_model';
         $options = collect($this->providerModels)
-            ->where('suitable', true)
+            ->where($suitability, true)
             ->mapWithKeys(fn (array $model): array => [
                 $model['name'] => ($model['label'] ?? $model['name']).' · '.$model['context_label'],
             ])
             ->all();
-        $selected = (string) ($this->data[$provider.'_model'] ?? '');
+        $selected = (string) ($this->data[$field] ?? '');
 
         if (filled($selected) && ! isset($options[$selected])) {
             $options = [$selected => $selected.' · saved selection'] + $options;
@@ -222,8 +230,14 @@ class AiConfiguration extends Page
             ->columns(2)
             ->schema([
                 TextInput::make('ollama_base_url')->label('Server URL')->url()->required()->maxLength(255)->columnSpanFull(),
-                Select::make('ollama_model')->label('Model')->options(fn (): array => $this->getModelOptions('ollama'))->searchable()->native(false)->required(),
-                TextInput::make('ollama_request_timeout')->label('Request timeout')->suffix('seconds')->numeric()->minValue(30)->maxValue(600)->required(),
+                Toggle::make('ollama_external_processing')
+                    ->label('Treat this server as external processing')
+                    ->helperText('Keep enabled unless this exact server is inside your controlled private environment. External Journal processing requires HTTPS; Ollama is not assumed local from its name.')
+                    ->columnSpanFull(),
+                Select::make('ollama_model')->label('Image analysis model')->options(fn (): array => $this->getModelOptions('ollama'))->searchable()->native(false)->required(),
+                Select::make('ollama_journal_model')->label('Journal writing model')->options(fn (): array => $this->getModelOptions('ollama', 'journal'))->searchable()->native(false)->required(),
+                TextInput::make('ollama_request_timeout')->label('Request timeout')->suffix('seconds')->numeric()->minValue(30)->maxValue(600)->required()
+                    ->helperText('Journal requests are capped at 120 seconds so they finish inside the queue-worker deadline.'),
                 TextInput::make('ollama_context_length')->label('Context length')->numeric()->minValue(2048)->maxValue(131072)->step(1024)->required(),
                 TextInput::make('ollama_keep_alive')->label('Keep alive')->placeholder('5m')->regex('/^-?\d+(?:ms|s|m|h)?$/')->required()->maxLength(20),
             ]);
@@ -247,8 +261,14 @@ class AiConfiguration extends Page
                 TextInput::make($provider.'_base_url')->label('API base URL')->placeholder($placeholder)->url()->required()->maxLength(255)
                     ->helperText('Changing this endpoint clears the saved API key unless you enter the key again, preventing silent credential forwarding.')
                     ->columnSpanFull(),
-                Select::make($provider.'_model')->label('Model')->options(fn (): array => $this->getModelOptions($provider))->searchable()->native(false)->required(),
-                TextInput::make($provider.'_request_timeout')->label('Request timeout')->suffix('seconds')->numeric()->minValue(30)->maxValue(600)->required(),
+                Toggle::make($provider.'_external_processing')
+                    ->label('Treat this endpoint as external processing')
+                    ->helperText('Leave enabled for provider-hosted APIs. External Journal processing requires HTTPS; disable only for an endpoint inside your controlled private environment.')
+                    ->columnSpanFull(),
+                Select::make($provider.'_model')->label('Image analysis model')->options(fn (): array => $this->getModelOptions($provider))->searchable()->native(false)->required(),
+                Select::make($provider.'_journal_model')->label('Journal writing model')->options(fn (): array => $this->getModelOptions($provider, 'journal'))->searchable()->native(false)->required(),
+                TextInput::make($provider.'_request_timeout')->label('Request timeout')->suffix('seconds')->numeric()->minValue(30)->maxValue(600)->required()
+                    ->helperText('Journal requests are capped at 120 seconds so they finish inside the queue-worker deadline.'),
             ]);
     }
 }

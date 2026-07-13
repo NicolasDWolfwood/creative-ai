@@ -38,13 +38,17 @@
                             <th title="Schema-constrained output">JSON</th>
                             <th>Tools</th>
                             <th title="Extended reasoning support">Reason</th>
-                            <th><span class="sr-only">Selection</span></th>
+                            <th title="Suitable for artwork metadata">Image</th>
+                            <th title="Suitable for Journal writing">Journal</th>
+                            <th>Use model</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($providerModels as $model)
                             @php($provider = $data['provider'] ?? 'ollama')
-                            @php($selected = ($data[$provider.'_model'] ?? null) === $model['name'])
+                            @php($imageSelected = ($data[$provider.'_model'] ?? null) === $model['name'])
+                            @php($journalSelected = ($data[$provider.'_journal_model'] ?? null) === $model['name'])
+                            @php($selected = $imageSelected || $journalSelected)
                             <tr wire:key="provider-model-{{ md5($provider.$model['name']) }}" class="{{ $selected ? 'is-selected' : '' }}">
                                 <td>
                                     <div class="ca-ai-model-name">
@@ -52,8 +56,8 @@
                                         <small>{{ $model['name'] }}</small>
                                         @if ($model['recommended'])
                                             <span>Recommended</span>
-                                        @elseif (! $model['suitable'])
-                                            <span class="is-muted">Not suitable</span>
+                                        @elseif (! $model['image_suitable'] && ! $model['journal_suitable'])
+                                            <span class="is-muted">No supported use</span>
                                         @endif
                                     </div>
                                 </td>
@@ -69,12 +73,28 @@
                                         @endif
                                     </td>
                                 @endforeach
+                                @foreach (['image_suitable', 'journal_suitable'] as $suitability)
+                                    <td class="ca-ai-capability">
+                                        @if ($model[$suitability])
+                                            <x-filament::icon icon="heroicon-m-check" title="Suitable" /><span class="sr-only">Suitable</span>
+                                        @else
+                                            <x-filament::icon icon="heroicon-m-minus" title="Not suitable" /><span class="sr-only">Not suitable</span>
+                                        @endif
+                                    </td>
+                                @endforeach
                                 <td class="ca-ai-model-action">
-                                    @if ($selected)
-                                        <span class="ca-ai-selected-label">Selected</span>
-                                    @elseif ($model['suitable'])
-                                        <button type="button" wire:click="chooseModel(@js($model['name']))" title="Use {{ $model['name'] }}">
-                                            <x-filament::icon icon="heroicon-o-check-circle" /><span class="sr-only">Select {{ $model['name'] }}</span>
+                                    @if ($imageSelected)
+                                        <span class="ca-ai-selected-label">Image</span>
+                                    @elseif ($model['image_suitable'])
+                                        <button type="button" wire:click="chooseModel(@js($model['name']), 'image')" title="Use {{ $model['name'] }} for image analysis">
+                                            <x-filament::icon icon="heroicon-o-photo" /><span class="sr-only">Select {{ $model['name'] }} for image analysis</span>
+                                        </button>
+                                    @endif
+                                    @if ($journalSelected)
+                                        <span class="ca-ai-selected-label">Journal</span>
+                                    @elseif ($model['journal_suitable'])
+                                        <button type="button" wire:click="chooseModel(@js($model['name']), 'journal')" title="Use {{ $model['name'] }} for Journal writing">
+                                            <x-filament::icon icon="heroicon-o-document-text" /><span class="sr-only">Select {{ $model['name'] }} for Journal writing</span>
                                         </button>
                                     @endif
                                 </td>

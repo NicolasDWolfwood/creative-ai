@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Data\JournalAiProviderResult;
+use App\Exceptions\AiProviderException;
 use RuntimeException;
 
 class AiProviderManager
@@ -17,7 +19,6 @@ class AiProviderManager
     /**
      * @param  array<string, mixed>  $schema
      * @param  array<string, mixed>  $image
-     * @return array<string, mixed>
      */
     public function analyzeImage(string $prompt, array $schema, array $image): array
     {
@@ -42,6 +43,35 @@ class AiProviderManager
             'anthropic' => $this->anthropic->generateStructured($prompt, $schema),
             'zai' => $this->zai->generateStructured($prompt, $schema),
             default => throw new RuntimeException('Unsupported AI provider configured.'),
+        };
+    }
+
+    public function createJournalExecutionProfile(): ProviderExecutionProfile
+    {
+        $this->settings->refresh();
+
+        return ProviderExecutionProfile::fromSettings($this->settings);
+    }
+
+    /**
+     * @param  array<string, mixed>  $schema
+     */
+    public function generateJournalStructured(
+        ProviderExecutionProfile $profile,
+        string $instructions,
+        string $input,
+        array $schema,
+        int $maxTokens,
+    ): JournalAiProviderResult {
+        ProviderExecutionProfile::validateStructuredRequest($instructions, $input, $schema, $maxTokens);
+        $profile->assertRequestCapacity($instructions, $input, $schema, $maxTokens);
+
+        return match ($profile->provider) {
+            'ollama' => $this->ollama->generateJournalStructured($profile, $instructions, $input, $schema, $maxTokens),
+            'openai' => $this->openAi->generateJournalStructured($profile, $instructions, $input, $schema, $maxTokens),
+            'anthropic' => $this->anthropic->generateJournalStructured($profile, $instructions, $input, $schema, $maxTokens),
+            'zai' => $this->zai->generateJournalStructured($profile, $instructions, $input, $schema, $maxTokens),
+            default => throw AiProviderException::invalidConfiguration(),
         };
     }
 

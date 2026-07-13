@@ -13,7 +13,7 @@ class AiSettings
     public const SETTING_KEY = 'ai_configuration';
 
     public const PROVIDERS = [
-        'ollama' => 'Ollama (local)',
+        'ollama' => 'Ollama',
         'openai' => 'OpenAI',
         'anthropic' => 'Claude by Anthropic',
         'zai' => 'Z.AI',
@@ -105,9 +105,21 @@ class AiSettings
         return (string) ($this->all()[$provider.'_model'] ?? '');
     }
 
+    public function journalModel(?string $provider = null): string
+    {
+        $provider ??= $this->provider();
+
+        return (string) ($this->all()[$provider.'_journal_model'] ?? '');
+    }
+
     public function modelDescriptor(): string
     {
         return $this->provider().':'.$this->model();
+    }
+
+    public function journalModelDescriptor(): string
+    {
+        return $this->provider().':'.$this->journalModel();
     }
 
     public function baseUrl(?string $provider = null): string
@@ -122,6 +134,20 @@ class AiSettings
         $provider ??= $this->provider();
 
         return (int) ($this->all()[$provider.'_request_timeout'] ?? 90);
+    }
+
+    public function externalProcessing(?string $provider = null): bool
+    {
+        $provider ??= $this->provider();
+
+        return (bool) ($this->all()[$provider.'_external_processing'] ?? true);
+    }
+
+    public function refresh(): self
+    {
+        $this->resolved = null;
+
+        return $this;
     }
 
     public function apiKey(string $provider, ?string $override = null): string
@@ -192,21 +218,29 @@ class AiSettings
             'provider' => 'ollama',
             'ollama_base_url' => 'http://ollama:11434',
             'ollama_model' => 'qwen3.5:latest',
+            'ollama_journal_model' => 'qwen3.5:latest',
             'ollama_request_timeout' => 150,
+            'ollama_external_processing' => true,
             'ollama_context_length' => 4096,
             'ollama_keep_alive' => '5m',
             'openai_api_key' => '',
             'openai_base_url' => 'https://api.openai.com/v1',
             'openai_model' => 'gpt-5.4-mini',
+            'openai_journal_model' => 'gpt-5.4-mini',
             'openai_request_timeout' => 90,
+            'openai_external_processing' => true,
             'anthropic_api_key' => '',
             'anthropic_base_url' => 'https://api.anthropic.com/v1',
             'anthropic_model' => 'claude-sonnet-4-6',
+            'anthropic_journal_model' => 'claude-sonnet-4-6',
             'anthropic_request_timeout' => 120,
+            'anthropic_external_processing' => true,
             'zai_api_key' => '',
             'zai_base_url' => 'https://api.z.ai/api/paas/v4',
             'zai_model' => 'glm-4.6v-flash',
+            'zai_journal_model' => 'glm-4.6v-flash',
             'zai_request_timeout' => 120,
+            'zai_external_processing' => true,
             'auto_analyze_uploads' => false,
             'image_max_width' => 768,
             'image_jpeg_quality' => 72,
@@ -227,18 +261,26 @@ class AiSettings
             'provider' => $provider,
             'ollama_base_url' => $this->normalizeUrl((string) ($settings['ollama_base_url'] ?? ''), 'Ollama server'),
             'ollama_model' => $this->cleanName($settings['ollama_model'] ?? 'qwen3.5:latest', 'qwen3.5:latest'),
+            'ollama_journal_model' => $this->cleanName($settings['ollama_journal_model'] ?? 'qwen3.5:latest', 'qwen3.5:latest'),
             'ollama_request_timeout' => $this->clampInteger($settings['ollama_request_timeout'] ?? 150, 30, 600),
+            'ollama_external_processing' => filter_var($settings['ollama_external_processing'] ?? true, FILTER_VALIDATE_BOOL),
             'ollama_context_length' => $this->clampInteger($settings['ollama_context_length'] ?? 4096, 2048, 131072),
             'ollama_keep_alive' => $this->normalizeKeepAlive((string) ($settings['ollama_keep_alive'] ?? '5m')),
             'openai_base_url' => $this->normalizeUrl((string) ($settings['openai_base_url'] ?? ''), 'OpenAI API'),
             'openai_model' => $this->cleanName($settings['openai_model'] ?? 'gpt-5.4-mini', 'gpt-5.4-mini'),
+            'openai_journal_model' => $this->cleanName($settings['openai_journal_model'] ?? 'gpt-5.4-mini', 'gpt-5.4-mini'),
             'openai_request_timeout' => $this->clampInteger($settings['openai_request_timeout'] ?? 90, 30, 600),
+            'openai_external_processing' => filter_var($settings['openai_external_processing'] ?? true, FILTER_VALIDATE_BOOL),
             'anthropic_base_url' => $this->normalizeUrl((string) ($settings['anthropic_base_url'] ?? ''), 'Anthropic API'),
             'anthropic_model' => $this->cleanName($settings['anthropic_model'] ?? 'claude-sonnet-4-6', 'claude-sonnet-4-6'),
+            'anthropic_journal_model' => $this->cleanName($settings['anthropic_journal_model'] ?? 'claude-sonnet-4-6', 'claude-sonnet-4-6'),
             'anthropic_request_timeout' => $this->clampInteger($settings['anthropic_request_timeout'] ?? 120, 30, 600),
+            'anthropic_external_processing' => filter_var($settings['anthropic_external_processing'] ?? true, FILTER_VALIDATE_BOOL),
             'zai_base_url' => $this->normalizeUrl((string) ($settings['zai_base_url'] ?? ''), 'Z.AI API'),
             'zai_model' => $this->cleanName($settings['zai_model'] ?? 'glm-4.6v-flash', 'glm-4.6v-flash'),
+            'zai_journal_model' => $this->cleanName($settings['zai_journal_model'] ?? 'glm-4.6v-flash', 'glm-4.6v-flash'),
             'zai_request_timeout' => $this->clampInteger($settings['zai_request_timeout'] ?? 120, 30, 600),
+            'zai_external_processing' => filter_var($settings['zai_external_processing'] ?? true, FILTER_VALIDATE_BOOL),
             'auto_analyze_uploads' => filter_var($settings['auto_analyze_uploads'] ?? false, FILTER_VALIDATE_BOOL),
             'image_max_width' => $this->clampInteger($settings['image_max_width'] ?? 768, 256, 2048),
             'image_jpeg_quality' => $this->clampInteger($settings['image_jpeg_quality'] ?? 72, 40, 95),
@@ -282,7 +324,9 @@ class AiSettings
         if (! filter_var($url, FILTER_VALIDATE_URL)
             || ! in_array($scheme, ['http', 'https'], true)
             || ! empty($parts['user'])
-            || ! empty($parts['pass'])) {
+            || ! empty($parts['pass'])
+            || isset($parts['query'])
+            || isset($parts['fragment'])) {
             throw new RuntimeException($label.' must be a valid HTTP or HTTPS URL.');
         }
 
