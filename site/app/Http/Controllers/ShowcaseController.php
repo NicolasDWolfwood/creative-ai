@@ -50,21 +50,35 @@ class ShowcaseController extends Controller
             'title' => 'Creative-Ai',
             'body' => 'A living archive of generative artwork, visual experiments, and original sound.',
         ];
+        $publicArtworkForContext = function (Builder $query) use ($selectedCollection): void {
+            if ($selectedCollection) {
+                $query
+                    ->publiclyAvailable()
+                    ->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
+
+                return;
+            }
+
+            $query->published();
+        };
         $selectedTag = $selectedTagSlug
             ? Tag::query()
                 ->where('slug', $selectedTagSlug)
-                ->whereHas('artworks', fn (Builder $query) => $query->published())
+                ->whereHas('artworks', $publicArtworkForContext)
                 ->first()
             : null;
         $artworksQuery = Artwork::query()
-            ->published()
             ->with(['collections', 'tags'])
             ->orderByDesc('sort_order')
             ->orderByDesc('created_at')
             ->orderByDesc('id');
 
         if ($selectedCollection) {
-            $artworksQuery->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
+            $artworksQuery
+                ->publiclyAvailable()
+                ->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
+        } else {
+            $artworksQuery->published();
         }
 
         if ($selectedTag) {
@@ -79,28 +93,15 @@ class ShowcaseController extends Controller
             ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
         $collections = Collection::query()
             ->published()
-            ->with(['artworks' => fn ($query) => $query->published()->where('featured', true)])
-            ->withCount(['artworks' => fn ($query) => $query->published()])
+            ->withCount(['artworks' => fn ($query) => $query->publiclyAvailable()])
             ->orderByDesc('featured')
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
         $collectionCovers = $this->collectionCovers->select($collections);
         $tags = Tag::query()
-            ->whereHas('artworks', function (Builder $query) use ($selectedCollection): void {
-                $query->published();
-
-                if ($selectedCollection) {
-                    $query->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
-                }
-            })
-            ->withCount(['artworks' => function (Builder $query) use ($selectedCollection): void {
-                $query->published();
-
-                if ($selectedCollection) {
-                    $query->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
-                }
-            }])
+            ->whereHas('artworks', $publicArtworkForContext)
+            ->withCount(['artworks' => $publicArtworkForContext])
             ->orderByDesc('artworks_count')
             ->limit(36)
             ->get();

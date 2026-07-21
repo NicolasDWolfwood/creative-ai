@@ -16,7 +16,8 @@ class MediaController extends Controller
 {
     public function artwork(Artwork $artwork, string $variant, Request $request, PrivateMediaService $media): BinaryFileResponse
     {
-        abort_unless($artwork->isPubliclyPublished() || $this->isAdministrator($request), 404);
+        $public = $artwork->isPubliclyAvailable();
+        abort_unless($public || $this->isAdministrator($request), 404);
         $path = match ($variant) {
             'display' => $artwork->availableDisplayPath(),
             'thumb' => $artwork->availableThumbPath(),
@@ -24,7 +25,12 @@ class MediaController extends Controller
         };
         abort_if(blank($path), 404);
 
-        return $this->file($media, $path, $artwork->isPubliclyPublished());
+        return $this->file(
+            $media,
+            $path,
+            $public,
+            revalidatePublic: $public && ! $artwork->isPubliclyPublished(),
+        );
     }
 
     public function trackAudio(Track $track, Request $request, PrivateMediaService $media): BinaryFileResponse
@@ -64,7 +70,7 @@ class MediaController extends Controller
         ]);
 
         if ($public && $revalidatePublic) {
-            // Audio access can change when either a track or its album is
+            // Access can change when a parent album or collection is
             // unpublished. Require browsers to revalidate before reuse so a
             // previously cached response cannot bypass the current policy.
             $response->setPrivate();

@@ -37,7 +37,10 @@ class DiscoveryController extends Controller
     ): Response {
         return response()->view('discovery.sitemap', [
             'artworks' => Artwork::query()
-                ->published()
+                ->publiclyAvailable()
+                ->with(['collections' => fn ($query) => $query
+                    ->published()
+                    ->memberPublicationGrants()])
                 ->orderByDesc('sort_order')
                 ->orderByDesc('created_at')
                 ->orderByDesc('id')

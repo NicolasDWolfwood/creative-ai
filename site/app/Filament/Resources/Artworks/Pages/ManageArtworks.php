@@ -127,7 +127,10 @@ class ManageArtworks extends ManageRecords
                         ->searchable()
                         ->preload()
                         ->helperText('Smart and automatic memberships are derived from their rules.'),
-                    Toggle::make('published')->label('Publish immediately')->default(true),
+                    Toggle::make('published')
+                        ->label('Publish as standalone artwork')
+                        ->helperText('Collection membership can make artwork public inside a collection later without listing it separately in All artwork.')
+                        ->default(true),
                     Toggle::make('analyze_after_upload')->label('Queue AI analysis after upload')->default(true),
                     ...JournalPlanningFields::actionOptions(
                         app(JournalPlanningSettings::class)->current()->artworkBatchMode,

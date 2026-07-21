@@ -31,7 +31,7 @@ class PublicStoryConnections
                 $query
                     ->where(fn (Builder $query) => $query
                         ->whereNotNull('artwork_id')
-                        ->whereHas('artwork', fn (Builder $query) => $query->published()))
+                        ->whereHas('artwork', fn (Builder $query) => $query->publiclyAvailable()))
                     ->orWhere(fn (Builder $query) => $query
                         ->whereNotNull('collection_id')
                         ->whereHas('collection', fn (Builder $query) => $query->published()))
@@ -69,7 +69,7 @@ class PublicStoryConnections
     {
         return match (PostMediaType::forModel($media)) {
             PostMediaType::Track => $media instanceof Track && $media->isPubliclyAvailable(),
-            PostMediaType::Artwork => $media instanceof Artwork && $media->isPubliclyPublished(),
+            PostMediaType::Artwork => $media instanceof Artwork && $media->isPubliclyAvailable(),
             PostMediaType::Collection => $media instanceof Collection && $media->isPubliclyPublished(),
             PostMediaType::Album => $media instanceof Album && $media->isPubliclyPublished(),
             PostMediaType::Playlist => $media instanceof Playlist && $media->isPubliclyPublished(),

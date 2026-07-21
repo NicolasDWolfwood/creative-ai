@@ -5,6 +5,10 @@ namespace App\Models;
 use App\Models\Concerns\BuildsSlugs;
 use App\Models\Concerns\HasPublicationSchedule;
 use App\Services\PrivateMediaService;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -108,6 +112,82 @@ class Artwork extends Model
         return $this->belongsToMany(Collection::class)
             ->withTimestamps()
             ->orderBy('sort_order');
+    }
+
+    /**
+     * Standalone publication and collection-controlled availability are kept
+     * separate so a collection can expose a member without listing it in the
+     * global artwork archive.
+     */
+    #[Scope]
+    protected function publiclyAvailable(Builder $query): void
+    {
+        $query->where(function (Builder $query): void {
+            $query
+                ->published()
+                ->orWhere(function (Builder $query): void {
+                    $query
+                        ->where(function (Builder $query): void {
+                            $query
+                                ->whereNull('published_at')
+                                ->orWhere('published_at', '<=', now());
+                        })
+                        ->whereHas('collections', fn (Builder $query) => $query
+                            ->published()
+                            ->memberPublicationGrants());
+                });
+        });
+    }
+
+    public function isPubliclyAvailable(): bool
+    {
+        if ($this->isPubliclyPublished()) {
+            return true;
+        }
+
+        if ($this->published_at?->isFuture()) {
+            return false;
+        }
+
+        return $this->collections()
+            ->published()
+            ->memberPublicationGrants()
+            ->exists();
+    }
+
+    public function effectivePublishedAt(): ?CarbonInterface
+    {
+        $dates = collect();
+
+        if ($this->isPubliclyPublished() && $this->published_at) {
+            $dates->push($this->published_at);
+        }
+
+        $this->collections()
+            ->published()
+            ->memberPublicationGrants()
+            ->pluck('collections.published_at')
+            ->each(function (mixed $publishedAt) use ($dates): void {
+                $collectionPublishedAt = match (true) {
+                    $publishedAt instanceof CarbonInterface => $publishedAt,
+                    filled($publishedAt) => CarbonImmutable::parse((string) $publishedAt),
+                    default => null,
+                };
+                $effectiveGrantDate = $collectionPublishedAt;
+
+                if ($this->published_at
+                    && (! $effectiveGrantDate || $this->published_at->gt($effectiveGrantDate))) {
+                    $effectiveGrantDate = $this->published_at;
+                }
+
+                if ($effectiveGrantDate) {
+                    $dates->push($effectiveGrantDate);
+                }
+            });
+
+        return $dates
+            ->sortBy(fn (CarbonInterface $publishedAt): int => $publishedAt->getTimestamp())
+            ->first();
     }
 
     public function tags(): BelongsToMany

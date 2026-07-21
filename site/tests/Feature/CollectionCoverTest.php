@@ -21,7 +21,7 @@ class CollectionCoverTest extends TestCase
         Storage::fake('public');
     }
 
-    public function test_only_published_featured_artwork_is_eligible_for_a_collection_cover(): void
+    public function test_collection_cover_prefers_a_visible_featured_member(): void
     {
         $collection = $this->collection('Eligible work', ['hero_image_path' => 'collections/heroes/legacy.jpg']);
         $unfeatured = $this->artwork('Published but not featured');
@@ -99,7 +99,7 @@ class CollectionCoverTest extends TestCase
         );
     }
 
-    public function test_collection_without_featured_artwork_renders_the_neutral_placeholder(): void
+    public function test_collection_without_featured_artwork_uses_any_usable_member_as_a_fallback(): void
     {
         $collection = $this->collection('No featured cover', [
             'hero_image_path' => 'collections/heroes/legacy.jpg',
@@ -109,13 +109,13 @@ class CollectionCoverTest extends TestCase
 
         $covers = $this->covers([$collection]);
 
-        $this->assertNull($covers->get($collection->id));
+        $this->assertSame($unfeatured->id, $covers->get($collection->id)?->id);
         $this->get(route('home'))
             ->assertOk()
-            ->assertSee(asset(CollectionCoverService::PLACEHOLDER_PATH), escape: false)
-            ->assertSee('data-collection-cover-placeholder', escape: false)
+            ->assertSee('data-cover-artwork-id="'.$unfeatured->id.'"', escape: false)
+            ->assertSee($unfeatured->thumb_url, escape: false)
             ->assertDontSee('/storage/collections/heroes/legacy.jpg', escape: false)
-            ->assertDontSee('data-cover-artwork-id="'.$unfeatured->id.'"', escape: false);
+            ->assertDontSee('data-collection-cover-placeholder', escape: false);
     }
 
     public function test_featured_artwork_with_no_available_media_uses_the_neutral_placeholder(): void
@@ -129,6 +129,25 @@ class CollectionCoverTest extends TestCase
             ->assertOk()
             ->assertSee('data-collection-cover-placeholder', escape: false)
             ->assertDontSee('data-cover-artwork-id="'.$missing->id.'"', escape: false);
+    }
+
+    public function test_cover_candidate_scan_finds_a_usable_fallback_after_a_missing_first_batch(): void
+    {
+        $collection = $this->collection('Bounded cover candidates');
+        $usable = $this->artwork('Old usable fallback');
+        $memberIds = [$usable->id];
+
+        for ($index = 1; $index <= CollectionCoverService::CANDIDATE_BATCH_SIZE; $index++) {
+            $memberIds[] = $this->artwork('Missing recent fallback '.$index, storeMedia: false)->id;
+        }
+
+        $collection->artworks()->attach($memberIds);
+        $collections = Collection::query()->whereKey($collection)->get();
+        $cover = app(CollectionCoverService::class)
+            ->select($collections, CarbonImmutable::parse('2026-07-11'))
+            ->get($collection->id);
+
+        $this->assertSame($usable->id, $cover?->id);
     }
 
     /**

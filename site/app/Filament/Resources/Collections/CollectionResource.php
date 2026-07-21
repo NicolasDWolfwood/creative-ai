@@ -26,6 +26,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -65,7 +66,20 @@ class CollectionResource extends Resource
             Textarea::make('description')->rows(4)->columnSpanFull(),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
-            Toggle::make('published')->default(true),
+            Toggle::make('published')
+                ->helperText('Publishing the collection controls its page. Member artwork can remain off the standalone archive.')
+                ->default(true)
+                ->live(),
+            Toggle::make('publishes_members')
+                ->label('Make member artwork public through this collection')
+                ->helperText('Members become viewable from this published collection without appearing in All artwork. For smart collections that include drafts, membership becomes a reviewed snapshot.')
+                ->default(false)
+                ->live()
+                ->afterStateUpdated(function (bool $state, Get $get, Set $set): void {
+                    if ($state && (bool) $get('is_smart') && ! (bool) $get('smart_rules.only_published')) {
+                        $set('auto_sync', false);
+                    }
+                }),
             DateTimePicker::make('published_at'),
             Toggle::make('is_smart')
                 ->label('Smart collection')
@@ -95,12 +109,28 @@ class CollectionResource extends Resource
                         ->options(['any' => 'Match any selected tag', 'all' => 'Match every selected tag'])
                         ->default('any')
                         ->native(false),
-                    Toggle::make('smart_rules.only_published')->label('Published artwork only')->default(true),
+                    Toggle::make('smart_rules.only_published')
+                        ->label('Standalone-published artwork only')
+                        ->helperText('Turn this off to include reviewed drafts. If members are public through this collection, synchronization becomes an explicit snapshot refresh.')
+                        ->default(true)
+                        ->live()
+                        ->afterStateUpdated(function (bool $state, Get $get, Set $set): void {
+                            if (! $state && (bool) $get('publishes_members')) {
+                                $set('auto_sync', false);
+                            }
+                        }),
                     Toggle::make('smart_rules.only_ai_applied')
                         ->label('AI-approved artwork only')
                         ->helperText('Requires reviewed or automatically applied AI metadata.')
                         ->default(true),
-                    Toggle::make('auto_sync')->label('Keep collection synchronized')->default(true),
+                    Toggle::make('auto_sync')
+                        ->label('Keep collection synchronized')
+                        ->helperText(fn (Get $get): string => (bool) $get('publishes_members') && ! (bool) $get('smart_rules.only_published')
+                            ? 'Disabled for collection-only publication. Use Sync smart collection to review and approve a new membership snapshot.'
+                            : 'Automatically updates membership when eligible metadata changes.')
+                        ->default(true)
+                        ->disabled(fn (Get $get): bool => (bool) $get('publishes_members') && ! (bool) $get('smart_rules.only_published'))
+                        ->dehydrated(),
                 ])
                 ->columnSpanFull(),
             JournalPlanningFields::make(PostMediaType::Collection),
@@ -122,6 +152,7 @@ class CollectionResource extends Resource
                 TextColumn::make('sort_order')->sortable(),
                 IconColumn::make('featured')->boolean(),
                 IconColumn::make('published')->boolean(),
+                IconColumn::make('publishes_members')->label('Members public')->boolean(),
                 TextColumn::make('last_synced_at')->label('Synced')->since()->placeholder('Never')->toggleable(),
             ])
             ->recordActions([
@@ -130,15 +161,32 @@ class CollectionResource extends Resource
                         ->label('Sync smart collection')
                         ->icon('heroicon-o-arrow-path')
                         ->visible(fn (Collection $record): bool => $record->is_smart)
+                        ->requiresConfirmation()
+                        ->modalDescription(fn (Collection $record): string => $record->publishes_members && ! (bool) data_get($record->smart_rules, 'only_published', true)
+                            ? 'Replaces the reviewed membership snapshot now. Newly matched drafts become public through this collection but remain off All artwork. Later AI metadata changes cannot update this snapshot automatically.'
+                            : 'Refreshes membership from the current smart rules.')
                         ->action(function (Collection $record): void {
-                            $count = app(SmartCollectionService::class)->sync($record);
-                            Notification::make()->success()->title($count.' artwork matched')->send();
+                            $before = $record->artworks()->pluck('artworks.id');
+                            $count = app(SmartCollectionService::class)->sync($record, explicit: true);
+                            $after = $record->artworks()->pluck('artworks.id');
+
+                            Notification::make()
+                                ->success()
+                                ->title($count.' artwork matched')
+                                ->body($after->diff($before)->count().' added; '.$before->diff($after)->count().' removed. '
+                                    .($record->publishes_members && ! (bool) data_get($record->smart_rules, 'only_published', true)
+                                        ? 'This public membership is now a fixed snapshot.'
+                                        : 'Live synchronization remains available for standalone-published artwork.'))
+                                ->send();
                         }),
                     Action::make('suggestSmartRules')
                         ->label('Suggest rules with AI')
                         ->icon('heroicon-o-sparkles')
                         ->color('info')
                         ->requiresConfirmation()
+                        ->modalDescription(fn (Collection $record): string => $record->publishes_members
+                            ? 'AI will suggest tags, but this confirmed action is the publication gate. Any newly matched drafts become public only through this collection, and the resulting membership is kept as a fixed snapshot.'
+                            : 'AI will suggest approved tags and immediately refresh this collection membership. Member artwork is not made public by this collection.')
                         ->visible(fn (Collection $record): bool => $record->is_smart)
                         ->action(function (Collection $record): void {
                             $suggestion = app(SmartRuleAiService::class)->suggest(
@@ -161,7 +209,7 @@ class CollectionResource extends Resource
                                 'ai_model' => $suggestion['model'],
                             ]);
                             $record->forceFill(['smart_rules' => $rules])->saveQuietly();
-                            $count = app(SmartCollectionService::class)->sync($record);
+                            $count = app(SmartCollectionService::class)->sync($record, explicit: true);
 
                             Notification::make()->success()->title('AI rules suggested')->body($suggestion['explanation'].' '.$count.' artwork matched.')->send();
                         }),
@@ -170,7 +218,7 @@ class CollectionResource extends Resource
                         ->icon('heroicon-o-lock-open')
                         ->color('warning')
                         ->requiresConfirmation()
-                        ->modalDescription('Stops the automatic collection generator from replacing or removing this collection. Tag-based synchronization stays enabled.')
+                        ->modalDescription('Stops the automatic collection generator from replacing or removing this collection. Its tag rules and explicit Sync smart collection action remain available.')
                         ->visible(fn (Collection $record): bool => $record->is_auto_generated)
                         ->action(function (Collection $record): void {
                             $record->forceFill([

@@ -3,22 +3,27 @@
 namespace App\Http\Controllers;
 
 use App\Models\Artwork;
+use App\Models\Collection;
 use App\Services\CrossMediaRecommendationService;
 use App\Services\PublicMediaService;
 use App\Services\PublicStoryConnections;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class ArtworkController extends Controller
 {
     public function show(
         Artwork $artwork,
+        Request $request,
         PublicMediaService $media,
         CrossMediaRecommendationService $recommendations,
         PublicStoryConnections $storyConnections,
     ): View {
-        abort_unless($artwork->isPubliclyPublished(), 404);
+        abort_unless($artwork->isPubliclyAvailable(), 404);
+
+        $collectionContext = $this->collectionContext($artwork, $request);
 
         $artwork->load([
             'collections' => fn ($query) => $query->published(),
@@ -53,6 +58,7 @@ class ArtworkController extends Controller
         $canonical = route('artworks.show', $artwork);
         $stories = $storyConnections->postsForMedia($artwork);
         $imageUrl = url($artwork->public_image_url);
+        $publishedAt = $artwork->effectivePublishedAt();
         $description = Str::of($artwork->description ?: 'A generative artwork from the Creative-Ai archive.')
             ->stripTags()
             ->squish()
@@ -81,7 +87,7 @@ class ArtworkController extends Controller
                     'image' => ['@id' => $canonical.'#image'],
                     'creator' => ['@type' => 'Person', 'name' => 'John Reijmer'],
                     'dateCreated' => $artwork->generated_at?->toIso8601String() ?: $artwork->created_at?->toIso8601String(),
-                    'datePublished' => $artwork->published_at?->toIso8601String(),
+                    'datePublished' => $publishedAt?->toIso8601String(),
                     'keywords' => $artwork->tags->pluck('name')->implode(', ') ?: null,
                     'subjectOf' => $stories
                         ->map(fn ($post): array => ['@id' => route('posts.show', $post).'#article'])
@@ -95,8 +101,13 @@ class ArtworkController extends Controller
         return view('artworks.show', [
             'artwork' => $artwork,
             'stories' => $stories,
-            'previousArtwork' => $this->adjacentArtwork($artwork, before: true),
-            'nextArtwork' => $this->adjacentArtwork($artwork, before: false),
+            'collectionContext' => $collectionContext,
+            'previousArtwork' => $collectionContext || $artwork->isPubliclyPublished()
+                ? $this->adjacentArtwork($artwork, before: true, collection: $collectionContext)
+                : null,
+            'nextArtwork' => $collectionContext || $artwork->isPubliclyPublished()
+                ? $this->adjacentArtwork($artwork, before: false, collection: $collectionContext)
+                : null,
             'tracks' => $tracks,
             'recommendationPlaylistId' => $recommendationPlaylistId,
             'recommendationDescription' => $recommendationDescription,
@@ -107,19 +118,58 @@ class ArtworkController extends Controller
                 'image' => $imageUrl,
                 'canonical' => $canonical,
                 'type' => 'article',
-                'published_at' => $artwork->published_at?->toIso8601String(),
+                'published_at' => $publishedAt?->toIso8601String(),
             ],
             'structured_data' => $structuredData,
         ]);
     }
 
-    private function adjacentArtwork(Artwork $artwork, bool $before): ?Artwork
+    private function collectionContext(Artwork $artwork, Request $request): ?Collection
     {
+        $slug = trim((string) $request->query('collection'));
+
+        if ($slug !== '') {
+            $collection = Collection::query()
+                ->published()
+                ->where('slug', $slug)
+                ->whereHas('artworks', fn (Builder $query) => $query->whereKey($artwork->getKey()))
+                ->first();
+
+            abort_unless($collection, 404);
+
+            return $collection;
+        }
+
+        if ($artwork->isPubliclyPublished()) {
+            return null;
+        }
+
+        return $artwork->collections()
+            ->published()
+            ->memberPublicationGrants()
+            ->orderBy('collections.id')
+            ->first();
+    }
+
+    private function adjacentArtwork(
+        Artwork $artwork,
+        bool $before,
+        ?Collection $collection = null,
+    ): ?Artwork {
         $comparison = $before ? '>' : '<';
         $direction = $before ? 'asc' : 'desc';
 
-        return Artwork::query()
-            ->published()
+        $query = Artwork::query();
+
+        if ($collection) {
+            $query
+                ->publiclyAvailable()
+                ->whereHas('collections', fn (Builder $query) => $query->whereKey($collection->getKey()));
+        } else {
+            $query->published();
+        }
+
+        return $query
             ->where(function (Builder $query) use ($artwork, $comparison): void {
                 $query
                     ->where('sort_order', $comparison, $artwork->sort_order)

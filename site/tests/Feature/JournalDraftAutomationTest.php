@@ -159,7 +159,7 @@ class JournalDraftAutomationTest extends TestCase
         $this->assertDatabaseCount('posts', 2);
     }
 
-    public function test_automation_excludes_generated_sources_and_album_member_tracks(): void
+    public function test_automation_excludes_generated_sources_album_member_tracks_and_collection_only_artwork(): void
     {
         $automaticCollection = Collection::query()->create([
             'title' => 'Generated collection',
@@ -179,16 +179,44 @@ class JournalDraftAutomationTest extends TestCase
             'audio_path' => 'tracks/audio/member.mp3',
             'standalone_published' => false,
         ]));
+        $publishingCollection = Collection::query()->create([
+            'title' => 'Collection story source',
+            'published' => true,
+            'publishes_members' => true,
+        ]);
+        $collectionOnlyArtwork = $this->artwork('Collection member', false);
+        $publishingCollection->artworks()->attach($collectionOnlyArtwork);
+        $futureCollection = Collection::query()->create([
+            'title' => 'Future collection story source',
+            'published' => true,
+            'published_at' => now()->addDay(),
+            'publishes_members' => true,
+        ]);
+        $futureCollectionArtwork = $this->artwork('Future collection member', false);
+        $futureCollection->artworks()->attach($futureCollectionArtwork);
         $automation = app(JournalDraftAutomationService::class);
 
-        foreach ([$automaticCollection, $member] as $source) {
+        foreach ([$automaticCollection, $member, $collectionOnlyArtwork, $futureCollectionArtwork] as $source) {
             try {
                 $automation->createFor($source);
-                $this->fail('This automatically maintained or album-member source should be excluded.');
+                $this->fail('This automatically maintained or inherited-publication source should be excluded.');
             } catch (DomainException) {
                 $this->assertDatabaseCount('posts', 0);
             }
         }
+
+        $privateArtwork = $this->artwork('Unassigned private source', false);
+        $privateResult = $automation->createFor($privateArtwork);
+
+        $this->assertTrue($privateResult->created);
+        $this->assertSame(PostMediaType::Artwork, $privateResult->post->mediaItems->sole()->type());
+
+        $scheduledStandalone = $this->artwork('Scheduled standalone source', true);
+        $scheduledStandalone->forceFill(['published_at' => now()->addDay()])->saveQuietly();
+        $scheduledResult = $automation->createFor($scheduledStandalone);
+
+        $this->assertTrue($scheduledResult->created);
+        $this->assertSame(PostMediaType::Artwork, $scheduledResult->post->mediaItems->sole()->type());
 
         $standalone = $member->replicate();
         $standalone->forceFill([
@@ -202,6 +230,7 @@ class JournalDraftAutomationTest extends TestCase
 
         $this->assertTrue($result->created);
         $this->assertSame(PostMediaType::Track, $result->post->mediaItems->sole()->type());
+        $this->assertDatabaseCount('posts', 3);
     }
 
     private function artwork(string $title, bool $published): Artwork

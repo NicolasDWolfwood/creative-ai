@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\BuildsSlugs;
 use App\Models\Concerns\HasPublicationSchedule;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -25,6 +27,7 @@ class Collection extends Model
         'featured',
         'published',
         'published_at',
+        'publishes_members',
         'is_smart',
         'is_auto_generated',
         'auto_generation_key',
@@ -39,6 +42,7 @@ class Collection extends Model
             'featured' => 'boolean',
             'published' => 'boolean',
             'published_at' => 'datetime',
+            'publishes_members' => 'boolean',
             'is_smart' => 'boolean',
             'is_auto_generated' => 'boolean',
             'smart_rules' => 'array',
@@ -53,6 +57,28 @@ class Collection extends Model
             ->withTimestamps()
             ->orderByDesc('sort_order')
             ->latest('artworks.created_at');
+    }
+
+    /**
+     * Published-only smart collections mirror standalone availability and do
+     * not independently grant access. This keeps a stale pivot fail-closed if
+     * a later synchronization cannot remove an unpublished artwork.
+     */
+    #[Scope]
+    protected function memberPublicationGrants(Builder $query): void
+    {
+        $query
+            ->where('publishes_members', true)
+            ->where(fn (Builder $query) => $query
+                ->where('is_smart', false)
+                ->orWhere('smart_rules->only_published', false));
+    }
+
+    public function grantsMemberPublication(): bool
+    {
+        return (bool) $this->publishes_members
+            && (! (bool) $this->is_smart
+                || data_get($this->smart_rules, 'only_published', true) === false);
     }
 
     public function journalMediaItems(): HasMany

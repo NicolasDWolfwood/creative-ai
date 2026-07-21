@@ -89,7 +89,7 @@ class PostTemplateResource extends Resource
                             modifyQueryUsing: fn (Builder $query): Builder => $query->where(function (Builder $query): void {
                                 $query
                                     ->whereHas('posts', fn (Builder $query) => $query->published())
-                                    ->orWhereHas('artworks', fn (Builder $query) => $query->published())
+                                    ->orWhereHas('artworks', fn (Builder $query) => $query->publiclyAvailable())
                                     ->orWhereHas('tracks', fn (Builder $query) => $query->publiclyAvailable());
                             }),
                         )

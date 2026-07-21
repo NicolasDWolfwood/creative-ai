@@ -6,6 +6,7 @@ use App\Jobs\DeleteArtworkMedia;
 use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
 use App\Services\AiSettings;
+use App\Services\SmartCollectionService;
 
 class ArtworkObserver
 {
@@ -36,11 +37,13 @@ class ArtworkObserver
 
     public function updated(Artwork $artwork): void
     {
-        if (! $artwork->wasChanged('image_path')) {
-            return;
+        if ($artwork->wasChanged('image_path')) {
+            $this->queueVariants($artwork);
         }
 
-        $this->queueVariants($artwork);
+        if ($artwork->wasChanged(['published', 'published_at'])) {
+            app(SmartCollectionService::class)->syncAutomatic();
+        }
     }
 
     public function deleted(Artwork $artwork): void
