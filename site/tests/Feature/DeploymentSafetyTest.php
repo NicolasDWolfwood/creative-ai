@@ -53,18 +53,25 @@ class DeploymentSafetyTest extends TestCase
 
     public function test_structured_data_cannot_close_its_script_element(): void
     {
+        $unsafeDescription = '</script><script>window.compromised = true</script>';
         SiteSetting::query()->create([
             'key' => 'home_intro',
             'value' => [
                 'title' => 'Creative-Ai',
-                'body' => '</script><script>window.compromised = true</script>',
+                'body' => $unsafeDescription,
             ],
         ]);
 
-        $this->get('/')
+        $response = $this->get('/');
+
+        $response
             ->assertOk()
-            ->assertDontSee('</script><script>window.compromised = true</script>', escape: false)
+            ->assertDontSee($unsafeDescription, escape: false)
             ->assertSee('window.compromised', escape: false);
+
+        $structuredData = $this->decodeStructuredData($response);
+
+        $this->assertSame($unsafeDescription, $structuredData['description']);
     }
 
     public function test_future_dated_media_is_excluded_from_public_scopes(): void

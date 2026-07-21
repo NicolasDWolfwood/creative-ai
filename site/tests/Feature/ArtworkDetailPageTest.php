@@ -141,6 +141,11 @@ class ArtworkDetailPageTest extends TestCase
             ->assertSee('VisualArtwork')
             ->assertSee('ImageObject')
             ->assertDontSee('</script><script>window.artworkCompromised = true</script>', false);
+
+        $renderedGraph = collect($this->decodeStructuredData($response)['@graph'] ?? [])->keyBy('@type');
+
+        $this->assertTrue($renderedGraph->has('VisualArtwork'));
+        $this->assertTrue($renderedGraph->has('ImageObject'));
     }
 
     public function test_sitemap_includes_only_currently_published_artwork_pages(): void
