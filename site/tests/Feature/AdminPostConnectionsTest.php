@@ -16,12 +16,16 @@ use App\Models\Track;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class AdminPostConnectionsTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
     public function test_only_administrators_can_open_and_mutate_post_connections(): void
     {
@@ -118,6 +122,50 @@ class AdminPostConnectionsTest extends TestCase
             'artwork_id' => $artwork->getKey(),
         ]);
         $this->assertDatabaseHas('artworks', ['id' => $artwork->getKey(), 'title' => 'Public artwork']);
+    }
+
+    public function test_public_connected_artwork_can_replace_the_journal_cover_with_a_private_snapshot(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        Storage::fake('public');
+        $bytes = base64_decode(self::PNG, true);
+        Storage::disk('local')->put('posts/covers/existing.png', $bytes);
+        Storage::disk('local')->put('artworks/display/connection.png', $bytes);
+        $post = $this->createPost();
+        $post->update([
+            'cover_image_path' => 'posts/covers/existing.png',
+            'cover_alt_text' => 'Existing cover',
+        ]);
+        $artwork = Artwork::withoutEvents(fn (): Artwork => Artwork::query()->create([
+            'title' => 'Connected cover source',
+            'slug' => 'connected-cover-source',
+            'image_path' => 'artworks/originals/connection.png',
+            'display_path' => 'artworks/display/connection.png',
+            'alt_text' => 'Copper arcs over a dark blue field.',
+            'published' => true,
+            'published_at' => now()->subMinute(),
+        ]));
+        $connection = $post->mediaItems()->create([
+            'position' => 1,
+            'artwork_id' => $artwork->getKey(),
+        ]);
+
+        Livewire::actingAs(User::factory()->admin()->create())
+            ->test(ManagePostConnections::class, ['record' => $post->getKey()])
+            ->assertTableActionVisible('useAsJournalCover', $connection)
+            ->callTableAction('useAsJournalCover', $connection)
+            ->assertHasNoActionErrors();
+
+        $post->refresh();
+        $this->assertNotSame('posts/covers/existing.png', $post->cover_image_path);
+        $this->assertSame('Copper arcs over a dark blue field.', $post->cover_alt_text);
+        $this->assertSame($bytes, Storage::disk('local')->get($post->cover_image_path));
+        Storage::disk('local')->assertExists('posts/covers/existing.png');
+        $this->assertTrue($post->revisions()->where(
+            'snapshot->content->cover_image_path',
+            $post->cover_image_path,
+        )->exists());
     }
 
     private function createPost(): Post

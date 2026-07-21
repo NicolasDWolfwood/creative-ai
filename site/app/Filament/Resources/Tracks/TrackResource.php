@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\Tracks;
 
+use App\Enums\PostMediaType;
 use App\Filament\Actions\CreateJournalDraftAction;
+use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Tracks\Pages\ManageTracks;
 use App\Jobs\AnalyzeTrackAudio;
 use App\Jobs\AnalyzeTrackMetadata;
@@ -62,7 +64,7 @@ class TrackResource extends Resource
                 ->relationship('coverArtwork', 'title')
                 ->searchable()
                 ->preload(),
-            Select::make('album_id')->relationship('album', 'title')->searchable()->preload(),
+            Select::make('album_id')->relationship('album', 'title')->searchable()->preload()->live(),
             FileUpload::make('audio_path')
                 ->label('Audio')
                 ->disk('local')
@@ -94,7 +96,8 @@ class TrackResource extends Resource
             Toggle::make('standalone_published')
                 ->label('Publish as standalone track')
                 ->helperText('Album tracks are already playable when their album is published. Enable this only to list the track separately as a single.')
-                ->default(false),
+                ->default(false)
+                ->live(),
             DateTimePicker::make('standalone_published_at')->label('Standalone publish date'),
             Section::make('Audio health and technical analysis')
                 ->description('Read-only results from Analyze audio health. Run the analysis again after resolving an issue.')
@@ -129,6 +132,7 @@ class TrackResource extends Resource
                 ])
                 ->columns(2)
                 ->columnSpanFull(),
+            JournalPlanningFields::make(PostMediaType::Track),
         ]);
     }
 
@@ -238,7 +242,7 @@ class TrackResource extends Resource
                         AnalyzeTrackAudio::dispatch($record->id);
                         Notification::make()->success()->title('Technical analysis queued')->body('Health status refreshes automatically when the job finishes.')->send();
                     }),
-                    CreateJournalDraftAction::make(),
+                    CreateJournalDraftAction::make()->allowPrivateSources(),
                     EditAction::make()->after(fn () => app(SmartPlaylistService::class)->syncAutomatic()),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Track actions'),

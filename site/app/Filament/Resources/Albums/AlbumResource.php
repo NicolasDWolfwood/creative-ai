@@ -2,10 +2,14 @@
 
 namespace App\Filament\Resources\Albums;
 
+use App\Enums\PostMediaType;
 use App\Filament\Actions\CreateJournalDraftAction;
+use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Albums\Pages\ManageAlbums;
 use App\Models\Album;
 use App\Services\AlbumCoverService;
+use App\Services\JournalDraftAutomationService;
+use App\Services\JournalPlanningSettings;
 use App\Services\MusicArtworkSuggestionService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -24,6 +28,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Throwable;
 
 class AlbumResource extends Resource
 {
@@ -72,6 +77,7 @@ class AlbumResource extends Resource
             Toggle::make('featured'),
             Toggle::make('published')->helperText('Publishing the album makes its complete track listing publicly playable. Tracks stay off the standalone list unless enabled individually.'),
             DateTimePicker::make('published_at'),
+            JournalPlanningFields::make(PostMediaType::Album),
         ]);
     }
 
@@ -98,12 +104,35 @@ class AlbumResource extends Resource
                 ->label('Publish album')->icon('heroicon-o-play-circle')->color('success')
                 ->visible(fn (Album $record): bool => ! $record->published)
                 ->requiresConfirmation()
+                ->schema(JournalPlanningFields::actionOptions(
+                    app(JournalPlanningSettings::class)->current()->albumMode,
+                ))
                 ->modalDescription('Publishes the album and makes its complete track listing playable. It does not add those tracks to the standalone track list.')
-                ->action(function (Album $record): void {
+                ->action(function (Album $record, array $data): void {
                     $record->update(['published' => true, 'published_at' => $record->published_at ?: now()]);
                     Notification::make()->success()->title('Album published')->body($record->tracks()->count().' track'.($record->tracks()->count() === 1 ? '' : 's').' available through this album.')->send();
+
+                    if (! (bool) ($data['journal_create_draft'] ?? false)) {
+                        return;
+                    }
+
+                    try {
+                        $result = app(JournalDraftAutomationService::class)->createFor($record->refresh(), $data);
+                    } catch (Throwable $exception) {
+                        report($exception);
+                        Notification::make()->warning()
+                            ->title('Album published; Journal draft needs attention')
+                            ->body('The album and its tracks remain public. Use Create Journal draft to retry.')
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()->success()
+                        ->title($result->created ? 'Private Journal draft created' : 'Existing Journal plan kept')
+                        ->send();
                 }),
-            CreateJournalDraftAction::make(),
+            CreateJournalDraftAction::make()->allowPrivateSources(),
             EditAction::make(),
             DeleteAction::make(),
         ])]);

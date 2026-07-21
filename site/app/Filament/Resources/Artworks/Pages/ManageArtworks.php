@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Artworks\Pages;
 
+use App\Filament\Actions\CreateSourceWithJournalAction;
+use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Artworks\ArtworkResource;
 use App\Models\Artwork;
 use App\Models\Collection;
@@ -9,14 +11,16 @@ use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkUploadService;
+use App\Services\JournalDraftAutomationService;
+use App\Services\JournalPlanningSettings;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
+use Throwable;
 
 class ManageArtworks extends ManageRecords
 {
@@ -125,6 +129,9 @@ class ManageArtworks extends ManageRecords
                         ->helperText('Smart and automatic memberships are derived from their rules.'),
                     Toggle::make('published')->label('Publish immediately')->default(true),
                     Toggle::make('analyze_after_upload')->label('Queue AI analysis after upload')->default(true),
+                    ...JournalPlanningFields::actionOptions(
+                        app(JournalPlanningSettings::class)->current()->artworkBatchMode,
+                    ),
                 ])
                 ->modalWidth('4xl')
                 ->action(function (array $data): void {
@@ -141,8 +148,36 @@ class ManageArtworks extends ManageRecords
                         ->title($created->count().' artwork uploaded')
                         ->body(($data['analyze_after_upload'] ?? false) ? 'The batch has been added to the AI queue.' : 'The batch is ready for review.')
                         ->send();
+
+                    if (! (bool) ($data['journal_create_draft'] ?? false) || $created->isEmpty()) {
+                        return;
+                    }
+
+                    try {
+                        $result = app(JournalDraftAutomationService::class)->createBatch($created, $data);
+                    } catch (Throwable $exception) {
+                        report($exception);
+                        Notification::make()
+                            ->warning()
+                            ->title('Artwork uploaded; Journal batch needs attention')
+                            ->body('The artwork is safe. Select this batch in the artwork library and use Bulk actions → Create one Journal draft.')
+                            ->actions([
+                                Action::make('retryJournalBatch')
+                                    ->label('Open artwork library')
+                                    ->url(ArtworkResource::getUrl()),
+                            ])
+                            ->send();
+
+                        return;
+                    }
+
+                    Notification::make()
+                        ->success()
+                        ->title($result->created() ? 'Batch Journal draft created' : 'Existing Journal plans kept')
+                        ->body($result->connected.' artwork connected; '.$result->skipped.' already planned.')
+                        ->send();
                 }),
-            CreateAction::make()->label('New artwork'),
+            CreateSourceWithJournalAction::make()->label('New artwork'),
         ];
     }
 }

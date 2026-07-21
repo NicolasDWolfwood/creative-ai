@@ -108,7 +108,7 @@
         @endif
         @unless ($isPreview)
             <script type="application/ld+json">
-                {{ Illuminate\Support\Js::from($structuredData) }}
+                {!! Illuminate\Support\Js::encode($structuredData) !!}
             </script>
         @endunless
         @vite(['resources/css/app.css', 'resources/js/app.js'])

@@ -2,14 +2,18 @@
 
 namespace App\Filament\Resources\Artworks;
 
+use App\Enums\PostMediaType;
 use App\Filament\Actions\CreateJournalDraftAction;
+use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Artworks\Pages\ManageArtworks;
+use App\Filament\Resources\Posts\PostResource;
 use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
 use App\Models\Collection as ArtworkCollection;
 use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
+use App\Services\JournalDraftAutomationService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -39,6 +43,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Js;
+use Throwable;
 
 class ArtworkResource extends Resource
 {
@@ -134,6 +139,7 @@ class ArtworkResource extends Resource
             Toggle::make('published')->default(true),
             DateTimePicker::make('generated_at'),
             DateTimePicker::make('published_at'),
+            JournalPlanningFields::make(PostMediaType::Artwork),
             Section::make('AI suggestions')
                 ->schema([
                     TextInput::make('ai_status')
@@ -328,13 +334,50 @@ class ArtworkResource extends Resource
 
                             Notification::make()->title('AI suggestions applied.')->success()->send();
                         }),
-                    CreateJournalDraftAction::make(),
+                    CreateJournalDraftAction::make()->allowPrivateSources(),
                     EditAction::make(),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Artwork actions'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('createJournalBatch')
+                        ->label('Create one Journal draft')
+                        ->icon('heroicon-o-document-plus')
+                        ->color('info')
+                        ->schema(JournalPlanningFields::actionOptions(includeRequestToggle: false))
+                        ->requiresConfirmation()
+                        ->modalDescription('Creates one private Journal draft for the selected artwork that is not already connected. This never runs AI or publishes the story.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records, array $data): void {
+                            try {
+                                $result = app(JournalDraftAutomationService::class)->createBatch($records, $data);
+                            } catch (Throwable $exception) {
+                                report($exception);
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Journal batch could not be created')
+                                    ->body('The selected artwork is unchanged. Check its source files and try again.')
+                                    ->send();
+
+                                return;
+                            }
+
+                            $notification = Notification::make()
+                                ->success()
+                                ->title($result->created() ? 'Batch Journal draft created' : 'No duplicate draft created')
+                                ->body($result->connected.' artwork connected; '.$result->skipped.' already planned.');
+
+                            if ($result->post !== null) {
+                                $notification->actions([
+                                    Action::make('openJournalBatch')
+                                        ->label('Open Journal draft')
+                                        ->url(PostResource::getUrl('edit', ['record' => $result->post])),
+                                ]);
+                            }
+
+                            $notification->send();
+                        }),
                     BulkAction::make('analyzeSelectedWithAi')
                         ->label('Analyze selected with AI')
                         ->icon('heroicon-o-sparkles')

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SiteSettings;
 use App\Filament\Resources\SiteSettings\Pages\ManageSiteSettings;
 use App\Models\SiteSetting;
 use App\Services\AiSettings;
+use App\Services\JournalPlanningSettings;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -33,7 +34,7 @@ class SiteSettingResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('key', '!=', AiSettings::SETTING_KEY);
+        return parent::getEloquentQuery()->whereNotIn('key', static::reservedKeys());
     }
 
     public static function form(Schema $schema): Schema
@@ -42,7 +43,7 @@ class SiteSettingResource extends Resource
             TextInput::make('key')
                 ->required()
                 ->maxLength(255)
-                ->rule('not_in:'.AiSettings::SETTING_KEY),
+                ->rule('not_in:'.implode(',', static::reservedKeys())),
             KeyValue::make('value')
                 ->keyLabel('Field')
                 ->valueLabel('Value')
@@ -72,6 +73,15 @@ class SiteSettingResource extends Resource
     {
         return [
             'index' => ManageSiteSettings::route('/'),
+        ];
+    }
+
+    /** @return list<string> */
+    private static function reservedKeys(): array
+    {
+        return [
+            AiSettings::SETTING_KEY,
+            JournalPlanningSettings::SETTING_KEY,
         ];
     }
 }

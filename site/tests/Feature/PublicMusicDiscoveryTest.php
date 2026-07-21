@@ -178,6 +178,19 @@ class PublicMusicDiscoveryTest extends TestCase
             ->assertSee('<meta property="music:album:track" content="1">', false)
             ->assertSee('AudioObject')
             ->assertDontSee('</script><script>window.musicCompromised = true</script>', false);
+
+        foreach ([
+            [$albumResponse, 'MusicAlbum'],
+            [$playlistResponse, 'MusicPlaylist'],
+            [$trackResponse, 'MusicRecording'],
+        ] as [$response, $expectedType]) {
+            $graph = collect($this->decodeStructuredData($response)['@graph'] ?? []);
+
+            $this->assertTrue(
+                $graph->contains('@type', $expectedType),
+                "The rendered JSON-LD graph is missing {$expectedType}.",
+            );
+        }
     }
 
     public function test_sitemap_covers_every_current_music_document_and_excludes_future_or_private_records(): void

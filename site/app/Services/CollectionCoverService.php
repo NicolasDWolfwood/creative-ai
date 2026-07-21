@@ -17,6 +17,24 @@ class CollectionCoverService
     protected const SECONDS_PER_DAY = 86_400;
 
     /**
+     * Resolve a collection against the complete ordered public showcase set so
+     * uniqueness reassignment matches the cover visitors see today.
+     */
+    public function selectPublicCover(
+        ArtworkCollection $collection,
+        ?CarbonInterface $forDay = null,
+    ): ?Artwork {
+        $collections = ArtworkCollection::query()
+            ->published()
+            ->orderByDesc('featured')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+
+        return $this->select($collections, $forDay)->get($collection->getKey());
+    }
+
+    /**
      * Select one cover per collection. Unique source media is assigned whenever
      * the collection/media graph permits it; duplicates are used only when every
      * unique option has already been exhausted.

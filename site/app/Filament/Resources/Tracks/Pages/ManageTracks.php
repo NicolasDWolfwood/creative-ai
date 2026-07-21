@@ -2,22 +2,26 @@
 
 namespace App\Filament\Resources\Tracks\Pages;
 
+use App\Filament\Actions\CreateSourceWithJournalAction;
+use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Tracks\TrackResource;
 use App\Jobs\AnalyzeTrackAudio;
 use App\Models\Album;
 use App\Models\Track;
 use App\Services\AlbumImportService;
+use App\Services\JournalDraftAutomationService;
+use App\Services\JournalPlanningSettings;
 use App\Services\SmartPlaylistService;
 use App\Services\TrackAiMetadataService;
 use App\Services\TrackAiQueueService;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
+use Throwable;
 
 class ManageTracks extends ManageRecords
 {
@@ -97,6 +101,9 @@ class ManageTracks extends ManageRecords
                         ->label('Release imported tracks as standalone')
                         ->helperText('Leave off for album releases. Publishing the album makes its tracks playable without listing every track separately.')
                         ->default(false),
+                    ...JournalPlanningFields::actionOptions(
+                        app(JournalPlanningSettings::class)->current()->albumImportMode,
+                    ),
                 ])
                 ->modalWidth('5xl')
                 ->action(function (array $data): void {
@@ -110,8 +117,44 @@ class ManageTracks extends ManageRecords
                     Notification::make()->success()->title($tracks->count().' tracks imported')
                         ->body($albums.' album'.($albums === 1 ? '' : 's').' detected and grouped. Review the detected metadata in the track and album tables.')
                         ->send();
+
+                    if (! (bool) ($data['journal_create_draft'] ?? false)) {
+                        return;
+                    }
+
+                    $tracks->each->loadMissing('album');
+                    $sources = $tracks
+                        ->pluck('album')
+                        ->filter()
+                        ->unique(fn (Album $album): int => (int) $album->getKey())
+                        ->values()
+                        ->concat($tracks->filter(fn (Track $track): bool => $track->album_id === null
+                            && (bool) $track->standalone_published))
+                        ->values();
+
+                    $createdDrafts = 0;
+                    $keptDrafts = 0;
+                    $failedDrafts = 0;
+
+                    foreach ($sources as $source) {
+                        try {
+                            $result = app(JournalDraftAutomationService::class)->createFor($source, $data);
+                            $result->created ? $createdDrafts++ : $keptDrafts++;
+                        } catch (Throwable $exception) {
+                            report($exception);
+                            $failedDrafts++;
+                        }
+                    }
+
+                    $notification = Notification::make()
+                        ->title($failedDrafts > 0 ? 'Music imported; some Journal drafts need attention' : 'Album Journal planning complete')
+                        ->body($createdDrafts.' private drafts created; '.$keptDrafts.' existing plans kept; '.$failedDrafts.' failed. No track-level album stories were created.');
+
+                    $failedDrafts > 0 ? $notification->warning() : $notification->success();
+                    $notification->send();
                 }),
-            CreateAction::make()->after(fn () => app(SmartPlaylistService::class)->syncAutomatic()),
+            CreateSourceWithJournalAction::make()
+                ->afterSourceCreated(fn () => app(SmartPlaylistService::class)->syncAutomatic()),
         ];
     }
 }

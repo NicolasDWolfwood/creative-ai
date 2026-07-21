@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\Collections;
 
+use App\Enums\PostMediaType;
 use App\Filament\Actions\CreateJournalDraftAction;
+use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Collections\Pages\ManageCollections;
 use App\Models\Artwork;
 use App\Models\Collection;
@@ -101,6 +103,7 @@ class CollectionResource extends Resource
                     Toggle::make('auto_sync')->label('Keep collection synchronized')->default(true),
                 ])
                 ->columnSpanFull(),
+            JournalPlanningFields::make(PostMediaType::Collection),
         ]);
     }
 
@@ -177,7 +180,7 @@ class CollectionResource extends Resource
 
                             Notification::make()->success()->title('Collection is now custom')->send();
                         }),
-                    CreateJournalDraftAction::make(),
+                    CreateJournalDraftAction::make()->allowPrivateSources(),
                     EditAction::make(),
                     DeleteAction::make(),
                 ])->icon('heroicon-m-ellipsis-horizontal')->tooltip('Collection actions'),
