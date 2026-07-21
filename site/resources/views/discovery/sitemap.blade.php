@@ -2,10 +2,18 @@
     @php
         $lastModified = static function (string $type, $record) use ($storyLastModified) {
             $storyDate = $storyLastModified[$type][$record->getKey()] ?? null;
+            $dates = collect([$record->updated_at, $storyDate])->filter();
 
-            return $storyDate && $storyDate->gt($record->updated_at)
-                ? $storyDate
-                : $record->updated_at;
+            if ($type === 'artwork' && $record->relationLoaded('collections')) {
+                foreach ($record->collections as $collection) {
+                    $dates->push($collection->updated_at, $collection->pivot?->updated_at);
+                }
+            }
+
+            return $dates
+                ->filter()
+                ->sortByDesc(fn ($date) => $date->getTimestamp())
+                ->first();
         };
     @endphp
     <url><loc>{{ route('home') }}</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>

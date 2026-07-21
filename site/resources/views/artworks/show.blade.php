@@ -4,7 +4,11 @@
 
 @section('content')
 <article class="section-shell artwork-page">
-    <a class="text-link artwork-back-link" href="{{ route('gallery') }}#gallery" wire:navigate>All artwork</a>
+    @if ($collectionContext)
+        <a class="text-link artwork-back-link" href="{{ route('collections.show', $collectionContext) }}#gallery" wire:navigate>Back to {{ $collectionContext->title }}</a>
+    @else
+        <a class="text-link artwork-back-link" href="{{ route('gallery') }}#gallery" wire:navigate>All artwork</a>
+    @endif
 
     <header class="artwork-header">
         <span class="eyebrow">Artwork</span>
@@ -85,13 +89,13 @@
 
     <nav class="artwork-neighbors" aria-label="Artwork archive navigation">
         @if ($previousArtwork)
-            <a class="artwork-neighbor artwork-neighbor-previous" href="{{ route('artworks.show', $previousArtwork) }}" rel="prev" wire:navigate>
+            <a class="artwork-neighbor artwork-neighbor-previous" href="{{ route('artworks.show', $collectionContext ? ['artwork' => $previousArtwork, 'collection' => $collectionContext->slug] : $previousArtwork) }}" rel="prev" wire:navigate>
                 <span>Previous artwork</span>
                 <strong>{{ $previousArtwork->title }}</strong>
             </a>
         @endif
         @if ($nextArtwork)
-            <a class="artwork-neighbor artwork-neighbor-next" href="{{ route('artworks.show', $nextArtwork) }}" rel="next" wire:navigate>
+            <a class="artwork-neighbor artwork-neighbor-next" href="{{ route('artworks.show', $collectionContext ? ['artwork' => $nextArtwork, 'collection' => $collectionContext->slug] : $nextArtwork) }}" rel="next" wire:navigate>
                 <span>Next artwork</span>
                 <strong>{{ $nextArtwork->title }}</strong>
             </a>

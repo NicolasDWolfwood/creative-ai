@@ -44,7 +44,7 @@ class SharedTagPageService
             'collections' => Collection::query()
                 ->published()
                 ->whereHas('artworks', fn (Builder $query) => $query
-                    ->published()
+                    ->publiclyAvailable()
                     ->whereHas('tags', fn (Builder $query) => $query->whereKey($tag->getKey())))
                 ->orderByDesc('featured')
                 ->orderBy('sort_order')
@@ -95,7 +95,7 @@ class SharedTagPageService
             ->where(function (Builder $query): void {
                 $query
                     ->whereHas('posts', fn (Builder $query) => $query->published())
-                    ->orWhereHas('artworks', fn (Builder $query) => $query->published())
+                    ->orWhereHas('artworks', fn (Builder $query) => $query->publiclyAvailable())
                     ->orWhereHas('tracks', fn (Builder $query) => $query->publiclyAvailable());
             })
             ->orderBy('name')

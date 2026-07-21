@@ -175,6 +175,49 @@ class PublicConnectedStoriesTest extends TestCase
             ->assertDontSee(route('tags.show', $emptyTag), false);
     }
 
+    public function test_collection_only_artwork_keeps_public_story_and_tag_context_without_becoming_a_standalone_tag_result(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        Storage::disk('local')->put('artworks/originals/private.jpg', 'collection-only-art');
+
+        $tag = Tag::query()->create(['name' => 'collection signal']);
+        $artwork = $this->artwork('Collection-only Artwork', 'collection-only-artwork', false);
+        $artwork->tags()->attach($tag, ['category' => 'mood']);
+        $collection = Collection::query()->create([
+            'title' => 'Collection-only World',
+            'published' => true,
+            'published_at' => now()->subMinute(),
+            'publishes_members' => true,
+        ]);
+        $collection->artworks()->attach($artwork);
+        $post = $this->publishPost('Collection Journal Story', 'collection-journal-story');
+        app(PostConnectionService::class)->syncMedia($post, [[
+            'type' => PostMediaType::Artwork,
+            'id' => $artwork->getKey(),
+        ]]);
+
+        $this->get(route('posts.show', $post))
+            ->assertOk()
+            ->assertSee($artwork->title)
+            ->assertSee(route('artworks.show', $artwork), false);
+        $this->get(route('artworks.show', $artwork))
+            ->assertOk()
+            ->assertSee($post->title);
+        $this->get(route('tags.show', $tag))
+            ->assertOk()
+            ->assertSee($collection->title)
+            ->assertDontSee($artwork->title);
+
+        $collection->update(['published' => false]);
+
+        $this->get(route('posts.show', $post))
+            ->assertOk()
+            ->assertDontSee($artwork->title);
+        $this->get(route('artworks.show', $artwork))->assertNotFound();
+        $this->get(route('tags.show', $tag))->assertNotFound();
+    }
+
     private function publishPost(string $title, string $slug): Post
     {
         $post = Post::query()->create([

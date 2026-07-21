@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Data\JournalDraftBatchPlanningResult;
 use App\Data\JournalDraftPlanningResult;
 use App\Enums\PostMediaType;
+use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Playlist;
 use App\Models\PostTemplate;
@@ -73,6 +74,10 @@ class JournalDraftAutomationService
             return false;
         }
 
+        if ($this->isCollectionMemberOnlyArtwork($source)) {
+            return false;
+        }
+
         return ! ($source instanceof Track
             && $source->album_id !== null
             && ! (bool) $source->standalone_published);
@@ -117,8 +122,21 @@ class JournalDraftAutomationService
             throw new DomainException('Automatically maintained collections and playlists remain in Story opportunities instead of creating Journal drafts.');
         }
 
+        if ($this->isCollectionMemberOnlyArtwork($source)) {
+            throw new DomainException('Collection-only artwork uses the collection Journal story unless it is intentionally published as standalone artwork.');
+        }
+
         if ($source instanceof Track && $source->album_id !== null && ! (bool) $source->standalone_published) {
             throw new DomainException('Album-member tracks use the album Journal story unless they are intentionally released as standalone tracks.');
         }
+    }
+
+    private function isCollectionMemberOnlyArtwork(Model $source): bool
+    {
+        return $source instanceof Artwork
+            && ! (bool) $source->published
+            && $source->collections()
+                ->memberPublicationGrants()
+                ->exists();
     }
 }

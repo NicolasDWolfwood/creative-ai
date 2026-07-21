@@ -471,10 +471,10 @@ class JournalDraftPlanningService
 
         match (true) {
             $source instanceof Artwork => $query->whereHas('artworks', fn (Builder $query) => $query
-                ->published()
+                ->publiclyAvailable()
                 ->whereKey($source->getKey())),
             $source instanceof Collection => $query->whereHas('artworks', fn (Builder $query) => $query
-                ->published()
+                ->publiclyAvailable()
                 ->whereHas('collections', fn (Builder $query) => $query->whereKey($source->getKey()))),
             $source instanceof Album => $query->whereHas('tracks', fn (Builder $query) => $query
                 ->publiclyAvailable()
@@ -510,7 +510,7 @@ class JournalDraftPlanningService
             ->where(function (Builder $query): void {
                 $query
                     ->whereHas('posts', fn (Builder $query) => $query->published())
-                    ->orWhereHas('artworks', fn (Builder $query) => $query->published())
+                    ->orWhereHas('artworks', fn (Builder $query) => $query->publiclyAvailable())
                     ->orWhereHas('tracks', fn (Builder $query) => $query->publiclyAvailable());
             })
             ->orderBy('id')

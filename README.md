@@ -163,6 +163,22 @@ The command copies each referenced file, verifies its SHA-256 hash, and only the
 
 The normal worker consumes those jobs. Run the command with `--sync` only for deliberate foreground maintenance. It exits unsuccessfully when an original file is missing and records that failure on the artwork row; rerunning it leaves completed variants unchanged and recovers queued or processing work after the configurable stale interval.
 
+## Collection-first artwork publication
+
+An artwork's **Publish as standalone artwork** control governs the homepage and **All artwork** archive. A published collection can separately enable **Make member artwork public through this collection**. That grant gives its selected members publication-aware detail and image URLs while they remain absent from the standalone archive, mirroring album-only tracks. Removing the final current collection grant withdraws a collection-only artwork; another current grant or deliberate standalone publication keeps it available.
+
+An artwork's future **Standalone publish date** is also an embargo for collection grants. Live standalone-only smart membership may retain that scheduled row so it becomes visible automatically when due, but collection pages, detail routes, protected images, covers, connections, and sitemap entries all remain closed before that timestamp.
+
+Generated and AI-assisted collections default to this collection-only behavior. They can select AI-applied, reviewed artwork that is not standalone-published, while future-scheduled artwork and unavailable image files are excluded. Any smart collection that can expose drafts uses an explicit membership snapshot: **Generate/Refresh**, **Sync smart collection**, or confirmed AI-rule replacement is the human publication gate. Later AI metadata changes cannot silently add another draft to a public snapshot. Existing collections start with member publication disabled and change only after an administrator explicitly enables or refreshes them.
+
+Live smart collections restricted to standalone-published artwork never act as an independent publication grant. If an artwork is unpublished, a stale membership cannot keep its detail or image routes public even if background synchronization fails; collection-only grants come only from manual collections or reviewed draft-capable snapshots.
+
+Collection covers prefer a visible Featured member, then fall back to any visible member with usable media. Collection-only detail navigation retains its collection context, while canonical artwork URLs remain query-free. The sitemap and artwork structured data use effective collection-or-standalone availability, but global artwork recommendations, Story opportunities, and the standalone gallery remain standalone-only so collection members are not duplicated as independent releases.
+
+The artwork library selection menu supports **Publish selected now**, **Remove standalone publication**, **Mark selected as Featured**, and **Remove Featured from selected**. Publication batches are transactional and refresh live smart membership once for the complete selection. Publishing now replaces future dates but preserves existing past dates; removing standalone publication preserves dates and collection memberships, so the confirmation and result explicitly report artwork that remains available through a published collection. Featured actions never change publication or membership.
+
+The member-publication migration is additive. An older image ignores the new collection flag and serves only standalone-published artwork, so collection-only members temporarily disappear rather than becoming public unexpectedly. Keep collection publication, smart rules, and membership administration read-only during that rollback, then restore the current image before making those changes.
+
 ## Journal editorial workflow
 
 Journal posts move through explicit **Draft**, **Ready**, **Scheduled**, and **Published** states. Drafts can hold incomplete writing plus a private editorial brief and private notes. The readiness check reports publication blockers and quality warnings, and the administrator preview renders the last saved article without making it public, canonical, cacheable, or indexable.

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Artwork;
 use App\Models\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -32,7 +33,11 @@ class AutomaticCollectionService
      *     removed:int,
      *     collection_count:int,
      *     artwork_matches:int,
-     *     collections:array<int, array{title:string,count:int}>
+     *     memberships_added:int,
+     *     memberships_removed:int,
+     *     publicly_visible:int,
+     *     collection_only:int,
+     *     collections:array<int, array{title:string,count:int,added:int,removed:int,visible:int,collection_only:int}>
      * }
      */
     public function maintain(
@@ -40,6 +45,7 @@ class AutomaticCollectionService
         int $minimumArtwork = self::DEFAULT_MINIMUM_ARTWORK,
         bool $published = true,
         bool $sync = true,
+        bool $publishesMembers = true,
     ): array {
         $target = max(1, min(self::MAX_AUTOMATIC_COLLECTIONS, $target));
         $minimumArtwork = max(1, min(500, $minimumArtwork));
@@ -47,6 +53,10 @@ class AutomaticCollectionService
         $created = 0;
         $updated = 0;
         $removed = 0;
+        $membershipsAdded = 0;
+        $membershipsRemoved = 0;
+        $publiclyVisibleIds = [];
+        $collectionOnlyIds = [];
         $matches = [];
 
         DB::transaction(function () use (
@@ -55,9 +65,14 @@ class AutomaticCollectionService
             $minimumArtwork,
             $published,
             $sync,
+            $publishesMembers,
             &$created,
             &$updated,
             &$removed,
+            &$membershipsAdded,
+            &$membershipsRemoved,
+            &$publiclyVisibleIds,
+            &$collectionOnlyIds,
             &$matches,
         ): void {
             $existing = Collection::query()
@@ -69,10 +84,15 @@ class AutomaticCollectionService
             foreach ($proposals as $position => $proposal) {
                 $collection = $existing->pull($proposal['key']) ?: new Collection;
                 $collection->exists ? $updated++ : $created++;
+                $beforeIds = $collection->exists
+                    ? $collection->artworks()->pluck('artworks.id')->map(fn (mixed $id): int => (int) $id)
+                    : collect();
                 $rules = [
                     'tag_ids' => $proposal['tag_ids'],
                     'match' => 'any',
-                    'only_published' => true,
+                    'only_published' => false,
+                    'exclude_future_scheduled' => true,
+                    'only_with_available_media' => true,
                     'only_analyzed' => true,
                     'only_ai_applied' => true,
                     'source' => 'tag_frequency',
@@ -91,21 +111,73 @@ class AutomaticCollectionService
                     'featured' => false,
                     'published' => $published,
                     'published_at' => $published ? ($collection->published_at ?: now()) : null,
+                    'publishes_members' => $publishesMembers,
                     'is_smart' => true,
                     'is_auto_generated' => true,
                     'auto_generation_key' => $proposal['key'],
                     'hero_image_path' => null,
                     'smart_rules' => $rules,
-                    'auto_sync' => true,
+                    'auto_sync' => ! $publishesMembers,
                 ])->saveQuietly();
 
-                $matched = $sync ? $this->smartCollections->sync($collection) : $proposal['artwork_count'];
+                $matched = $sync
+                    ? $this->smartCollections->sync($collection, explicit: true)
+                    : $proposal['artwork_count'];
+                $afterIds = $sync
+                    ? $collection->artworks()->pluck('artworks.id')->map(fn (mixed $id): int => (int) $id)
+                    : $beforeIds;
+                $added = $afterIds->diff($beforeIds)->count();
+                $removedFromCollection = $beforeIds->diff($afterIds)->count();
+                $membershipsAdded += $added;
+                $membershipsRemoved += $removedFromCollection;
 
-                $matches[] = ['title' => $collection->title, 'count' => $matched];
+                $matches[] = [
+                    'collection_id' => (int) $collection->getKey(),
+                    'title' => $collection->title,
+                    'count' => $matched,
+                    'added' => $added,
+                    'removed' => $removedFromCollection,
+                ];
             }
 
             $removed = $existing->count();
+            $membershipsRemoved += $existing->sum(fn (Collection $collection): int => $collection->artworks()->count());
             $existing->each->delete();
+
+            // Visibility must be measured only after every generated
+            // collection has its final publication state. Themes can overlap,
+            // so measuring inside the update loop can count a grant that a
+            // later iteration is about to revoke.
+            $matches = collect($matches)
+                ->map(function (array $match) use (&$publiclyVisibleIds, &$collectionOnlyIds): array {
+                    $collection = Collection::query()->findOrFail($match['collection_id']);
+                    $memberIds = $collection->artworks()
+                        ->pluck('artworks.id')
+                        ->map(fn (mixed $id): int => (int) $id);
+                    $visibleIds = $this->visibleArtworkIds(
+                        $memberIds,
+                        $collection->isPubliclyPublished(),
+                    );
+                    $onlyViaCollectionIds = $visibleIds->diff($this->standalonePublishedIds($visibleIds));
+
+                    $publiclyVisibleIds = array_replace(
+                        $publiclyVisibleIds,
+                        $visibleIds->mapWithKeys(fn (int $id): array => [$id => true])->all(),
+                    );
+                    $collectionOnlyIds = array_replace(
+                        $collectionOnlyIds,
+                        $onlyViaCollectionIds->mapWithKeys(fn (int $id): array => [$id => true])->all(),
+                    );
+
+                    unset($match['collection_id']);
+
+                    return [
+                        ...$match,
+                        'visible' => $visibleIds->count(),
+                        'collection_only' => $onlyViaCollectionIds->count(),
+                    ];
+                })
+                ->all();
         });
 
         return [
@@ -114,6 +186,10 @@ class AutomaticCollectionService
             'removed' => $removed,
             'collection_count' => count($matches),
             'artwork_matches' => collect($matches)->sum('count'),
+            'memberships_added' => $membershipsAdded,
+            'memberships_removed' => $membershipsRemoved,
+            'publicly_visible' => count($publiclyVisibleIds),
+            'collection_only' => count($collectionOnlyIds),
             'collections' => $matches,
         ];
     }
@@ -125,6 +201,13 @@ class AutomaticCollectionService
      */
     public function refreshExisting(bool $sync = true): ?array
     {
+        if (! $sync && Collection::query()
+            ->where('is_auto_generated', true)
+            ->get()
+            ->contains(fn (Collection $collection): bool => $this->requiresSnapshot($collection))) {
+            return null;
+        }
+
         $collection = Collection::query()
             ->where('is_auto_generated', true)
             ->orderBy('id')
@@ -141,21 +224,34 @@ class AutomaticCollectionService
             minimumArtwork: (int) ($rules['minimum_artwork'] ?? self::DEFAULT_MINIMUM_ARTWORK),
             published: (bool) ($rules['publish_automatically'] ?? true),
             sync: $sync,
+            publishesMembers: (bool) $collection->publishes_members,
         );
     }
 
     /**
-     * @return array{collection:Collection,count:int,explanation:string}
+     * @return array{
+     *     collection:Collection,
+     *     count:int,
+     *     added:int,
+     *     removed:int,
+     *     visible:int,
+     *     collection_only:int,
+     *     explanation:string
+     * }
      */
-    public function createWithAi(?string $guidance = null, int $minimumArtwork = self::DEFAULT_AI_ASSISTED_MINIMUM_ARTWORK, bool $published = true): array
-    {
+    public function createWithAi(
+        ?string $guidance = null,
+        int $minimumArtwork = self::DEFAULT_AI_ASSISTED_MINIMUM_ARTWORK,
+        bool $published = true,
+        bool $publishesMembers = true,
+    ): array {
         $minimumArtwork = max(1, min(500, $minimumArtwork));
         $tags = $this->prioritizedAiCatalog($guidance, $minimumArtwork);
 
         if ($tags->isEmpty()) {
             $artworkLabel = Str::plural('artwork', $minimumArtwork);
 
-            throw new RuntimeException("No suitable AI-approved artwork tag is shared by at least {$minimumArtwork} eligible published {$artworkLabel}.");
+            throw new RuntimeException("No suitable AI-approved artwork tag is shared by at least {$minimumArtwork} eligible {$artworkLabel}.");
         }
 
         $catalog = $tags
@@ -221,24 +317,39 @@ PROMPT);
             'sort_order' => (int) Collection::query()->max('sort_order') + 1,
             'published' => $published,
             'published_at' => $published ? now() : null,
+            'publishes_members' => $publishesMembers,
             'is_smart' => true,
             'is_auto_generated' => false,
             'smart_rules' => [
                 'tag_ids' => $tagIds,
                 'match' => 'any',
-                'only_published' => true,
+                'only_published' => false,
+                'exclude_future_scheduled' => true,
+                'only_with_available_media' => true,
                 'only_analyzed' => true,
                 'only_ai_applied' => true,
                 'source' => 'ai_assisted',
                 'ai_explanation' => $explanation,
                 'ai_model' => $this->settings->modelDescriptor(),
             ],
-            'auto_sync' => true,
+            'auto_sync' => ! $publishesMembers,
         ]);
+
+        $count = $this->smartCollections->sync($collection, explicit: true);
+        $memberIds = $collection->artworks()->pluck('artworks.id')->map(fn (mixed $id): int => (int) $id);
+        $visibleIds = $this->visibleArtworkIds(
+            $memberIds,
+            $collection->isPubliclyPublished(),
+        );
+        $collectionOnly = $visibleIds->diff($this->standalonePublishedIds($visibleIds))->count();
 
         return [
             'collection' => $collection->refresh(),
-            'count' => $this->smartCollections->sync($collection),
+            'count' => $count,
+            'added' => $memberIds->count(),
+            'removed' => 0,
+            'visible' => $visibleIds->count(),
+            'collection_only' => $collectionOnly,
             'explanation' => $explanation,
         ];
     }
@@ -285,10 +396,16 @@ PROMPT);
     /** @return SupportCollection<int, array{id:int,name:string,slug:string,artwork_count:int}> */
     protected function availableTagStats(): SupportCollection
     {
+        $eligibleIds = $this->eligibleGeneratedArtwork()
+            ->pluck('id')
+            ->all();
+
+        if ($eligibleIds === []) {
+            return collect();
+        }
+
         return Artwork::query()
-            ->published()
-            ->where('artworks.ai_status', Artwork::AI_STATUS_APPLIED)
-            ->whereNotNull('artworks.ai_analyzed_at')
+            ->whereKey($eligibleIds)
             ->join('artwork_tag', 'artworks.id', '=', 'artwork_tag.artwork_id')
             ->join('tags', 'tags.id', '=', 'artwork_tag.tag_id')
             ->whereIn('artwork_tag.category', ['subject', 'style', 'mood'])
@@ -341,12 +458,74 @@ PROMPT);
     /** @param array<int, int> $tagIds */
     protected function countMatchingArtwork(array $tagIds): int
     {
+        return $this->eligibleGeneratedArtworkQuery()
+            ->whereHas('tags', fn ($query) => $query->whereKey($tagIds))
+            ->get()
+            ->filter(fn (Artwork $artwork): bool => $artwork->hasAvailableImage())
+            ->count();
+    }
+
+    /** @return SupportCollection<int, Artwork> */
+    protected function eligibleGeneratedArtwork(): SupportCollection
+    {
+        return $this->eligibleGeneratedArtworkQuery()
+            ->get()
+            ->filter(fn (Artwork $artwork): bool => $artwork->hasAvailableImage())
+            ->values();
+    }
+
+    protected function eligibleGeneratedArtworkQuery(): Builder
+    {
         return Artwork::query()
-            ->published()
             ->where('ai_status', Artwork::AI_STATUS_APPLIED)
             ->whereNotNull('ai_analyzed_at')
-            ->whereHas('tags', fn ($query) => $query->whereKey($tagIds))
-            ->count();
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            });
+    }
+
+    protected function requiresSnapshot(Collection $collection): bool
+    {
+        return (bool) $collection->publishes_members
+            && ! (bool) data_get($collection->smart_rules, 'only_published', true);
+    }
+
+    /**
+     * @param  SupportCollection<int, int>  $ids
+     * @return SupportCollection<int, int>
+     */
+    protected function visibleArtworkIds(SupportCollection $ids, bool $collectionIsPublic): SupportCollection
+    {
+        if (! $collectionIsPublic || $ids->isEmpty()) {
+            return collect();
+        }
+
+        return Artwork::query()
+            ->publiclyAvailable()
+            ->whereKey($ids->all())
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values();
+    }
+
+    /**
+     * @param  SupportCollection<int, int>  $ids
+     * @return SupportCollection<int, int>
+     */
+    protected function standalonePublishedIds(SupportCollection $ids): SupportCollection
+    {
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return Artwork::query()
+            ->published()
+            ->whereKey($ids->all())
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values();
     }
 
     protected function tagMatchesKeyword(string $tag, string $keyword): bool

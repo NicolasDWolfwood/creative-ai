@@ -13,6 +13,7 @@ use App\Models\Collection as ArtworkCollection;
 use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
+use App\Services\ArtworkBulkEditorialService;
 use App\Services\JournalDraftAutomationService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -136,9 +137,15 @@ class ArtworkResource extends Resource
                 ->columnSpanFull(),
             TextInput::make('sort_order')->numeric()->default(0),
             Toggle::make('featured'),
-            Toggle::make('published')->default(true),
+            Toggle::make('published')
+                ->label('Publish as standalone artwork')
+                ->helperText('Artwork can also be available through a published collection without appearing separately in All artwork.')
+                ->default(true)
+                ->live(),
             DateTimePicker::make('generated_at'),
-            DateTimePicker::make('published_at'),
+            DateTimePicker::make('published_at')
+                ->label('Standalone publish date')
+                ->helperText('A future date also delays collection-only visibility until that time.'),
             JournalPlanningFields::make(PostMediaType::Artwork),
             Section::make('AI suggestions')
                 ->schema([
@@ -267,7 +274,28 @@ class ArtworkResource extends Resource
                     ->badge()
                     ->limitList(3)
                     ->toggleable(isToggledHiddenByDefault: true),
-                IconColumn::make('published')->boolean()->label('Live'),
+                TextColumn::make('published')
+                    ->label('Availability')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state, Artwork $record): string => match (true) {
+                        $record->isPubliclyPublished() => 'Standalone',
+                        $record->isPubliclyAvailable() => 'Via collection',
+                        $state => 'Standalone scheduled',
+                        $record->collections->contains(
+                            fn (ArtworkCollection $collection): bool => $collection->grantsMemberPublication()
+                                && (bool) $collection->published,
+                        ) => 'Collection scheduled',
+                        default => 'Draft',
+                    })
+                    ->color(fn (bool $state, Artwork $record): string => match (true) {
+                        $record->isPubliclyPublished() => 'success',
+                        $record->isPubliclyAvailable() => 'info',
+                        $state || $record->collections->contains(
+                            fn (ArtworkCollection $collection): bool => $collection->grantsMemberPublication()
+                                && (bool) $collection->published,
+                        ) => 'warning',
+                        default => 'gray',
+                    }),
                 TextColumn::make('sort_order')->sortable()->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('featured')->boolean()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('updated_at')->since()->sortable()->label('Updated')->toggleable(),
@@ -298,7 +326,7 @@ class ArtworkResource extends Resource
                     ))
                     ->searchable()
                     ->preload(),
-                TernaryFilter::make('published')->label('Published'),
+                TernaryFilter::make('published')->label('Standalone publication'),
                 TernaryFilter::make('featured')->label('Featured'),
             ])
             ->recordActions([
@@ -341,6 +369,89 @@ class ArtworkResource extends Resource
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('publishSelectedNow')
+                        ->label('Publish selected now')
+                        ->icon('heroicon-o-globe-alt')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->modalDescription('Makes selected artwork public now as standalone artwork in All artwork. Future dates are replaced with the current time; existing past publication dates and collection memberships are preserved.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records): void {
+                            $result = app(ArtworkBulkEditorialService::class)->publishNow($records);
+                            $unchanged = $result['selected'] - $result['changed'];
+                            $notification = Notification::make()
+                                ->title($result['changed'] > 0
+                                    ? 'Published '.$result['changed'].' selected item'.($result['changed'] === 1 ? '' : 's').' as standalone artwork'
+                                    : 'No standalone publication changes')
+                                ->body($unchanged > 0
+                                    ? $unchanged.' selected item'.($unchanged === 1 ? ' was' : 's were').' already public now.'
+                                    : 'All selected artwork is now available in All artwork.');
+
+                            ($result['changed'] > 0 ? $notification->success() : $notification->info())->send();
+                        }),
+                    BulkAction::make('unpublishSelected')
+                        ->label('Remove standalone publication')
+                        ->icon('heroicon-o-eye-slash')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalDescription('Removes selected artwork from standalone publication. Artwork may remain public through a published collection that grants member access; publication dates and collection memberships are preserved.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records): void {
+                            $result = app(ArtworkBulkEditorialService::class)->removeStandalonePublication($records);
+                            $unchanged = $result['selected'] - $result['changed'];
+                            $body = $result['still_available_via_collection'].' selected item'
+                                .($result['still_available_via_collection'] === 1 ? ' remains' : 's remain')
+                                .' available through published collections. Dates and memberships were preserved.';
+
+                            if ($unchanged > 0) {
+                                $body .= ' '.$unchanged.' selected item'.($unchanged === 1 ? ' was' : 's were').' already off standalone publication.';
+                            }
+
+                            $notification = Notification::make()
+                                ->title($result['changed'] > 0
+                                    ? 'Removed standalone publication from '.$result['changed'].' selected item'.($result['changed'] === 1 ? '' : 's')
+                                    : 'No standalone publication changes')
+                                ->body($body);
+
+                            ($result['changed'] > 0 ? $notification->success() : $notification->info())->send();
+                        }),
+                    BulkAction::make('featureSelected')
+                        ->label('Mark selected as Featured')
+                        ->icon('heroicon-o-star')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->modalDescription('Marks selected artwork as preferred for public highlights and collection covers when otherwise eligible. This does not publish drafts or change collection memberships.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records): void {
+                            $result = app(ArtworkBulkEditorialService::class)->setFeatured($records, true);
+                            $unchanged = $result['selected'] - $result['changed'];
+                            $notification = Notification::make()
+                                ->title($result['changed'] > 0
+                                    ? 'Marked '.$result['changed'].' selected item'.($result['changed'] === 1 ? '' : 's').' as Featured'
+                                    : 'No Featured changes')
+                                ->body('Publication is unchanged.'
+                                    .($unchanged > 0 ? ' '.$unchanged.' selected item'.($unchanged === 1 ? ' was' : 's were').' already Featured.' : ''));
+
+                            ($result['changed'] > 0 ? $notification->success() : $notification->info())->send();
+                        }),
+                    BulkAction::make('unfeatureSelected')
+                        ->label('Remove Featured from selected')
+                        ->icon('heroicon-o-minus-circle')
+                        ->requiresConfirmation()
+                        ->modalDescription('Removes Featured preference from selected artwork. Publication dates and collection memberships are unchanged, and collection covers use the next eligible candidate.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records): void {
+                            $result = app(ArtworkBulkEditorialService::class)->setFeatured($records, false);
+                            $unchanged = $result['selected'] - $result['changed'];
+                            $notification = Notification::make()
+                                ->title($result['changed'] > 0
+                                    ? 'Removed Featured from '.$result['changed'].' selected item'.($result['changed'] === 1 ? '' : 's')
+                                    : 'No Featured changes')
+                                ->body('Publication is unchanged.'
+                                    .($unchanged > 0 ? ' '.$unchanged.' selected item'.($unchanged === 1 ? ' was' : 's were').' already not Featured.' : ''));
+
+                            ($result['changed'] > 0 ? $notification->success() : $notification->info())->send();
+                        }),
                     BulkAction::make('createJournalBatch')
                         ->label('Create one Journal draft')
                         ->icon('heroicon-o-document-plus')
@@ -422,6 +533,11 @@ class ArtworkResource extends Resource
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with('collections');
     }
 
     public static function getPages(): array

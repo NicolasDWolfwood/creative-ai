@@ -112,7 +112,7 @@ class PostMedia extends Model
 
         return match ($this->type()) {
             PostMediaType::Track => $media instanceof Track && $media->isPubliclyAvailable(),
-            PostMediaType::Artwork,
+            PostMediaType::Artwork => $media instanceof Artwork && $media->isPubliclyAvailable(),
             PostMediaType::Collection,
             PostMediaType::Album,
             PostMediaType::Playlist => $media !== null && $media->isPubliclyPublished(),

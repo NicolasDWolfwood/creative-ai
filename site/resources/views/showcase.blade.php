@@ -115,7 +115,7 @@
             <div class="art-grid" data-gallery-results>
                 @forelse ($artworks as $artwork)
                     <article class="art-tile" data-gallery-artwork-id="{{ $artwork->getKey() }}">
-                        <a class="art-tile-link" href="{{ route('artworks.show', $artwork) }}" wire:navigate>
+                        <a class="art-tile-link" href="{{ route('artworks.show', $selectedCollection ? ['artwork' => $artwork, 'collection' => $selectedCollection->slug] : $artwork) }}" wire:navigate>
                             <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}">
                             <span><strong>{{ $artwork->title }}</strong><small>{{ $artwork->tags->take(2)->pluck('name')->implode(' · ') }}</small></span>
                         </a>

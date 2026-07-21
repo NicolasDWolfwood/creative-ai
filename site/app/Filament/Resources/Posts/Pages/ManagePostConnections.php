@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Posts\Pages;
 
 use App\Enums\PostMediaType;
 use App\Filament\Resources\Posts\PostResource;
+use App\Models\Artwork;
 use App\Models\Post;
 use App\Models\PostMedia;
 use App\Models\Tag;
@@ -339,9 +340,11 @@ class ManagePostConnections extends ManageRelatedRecords
 
     protected function sourceIsPublic(Model $source): bool
     {
-        return $source instanceof Track
-            ? $source->isPubliclyAvailable()
-            : (method_exists($source, 'isPubliclyPublished') && $source->isPubliclyPublished());
+        return match (true) {
+            $source instanceof Artwork => $source->isPubliclyAvailable(),
+            $source instanceof Track => $source->isPubliclyAvailable(),
+            default => method_exists($source, 'isPubliclyPublished') && $source->isPubliclyPublished(),
+        };
     }
 
     protected function tagSummary(): string
