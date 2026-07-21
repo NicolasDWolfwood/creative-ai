@@ -2,11 +2,11 @@
 
 namespace App\Filament\Resources\Collections\Pages;
 
+use App\Filament\Actions\CreateSourceWithJournalAction;
 use App\Filament\Resources\Collections\CollectionResource;
 use App\Models\Collection;
 use App\Services\AutomaticCollectionService;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -109,7 +109,7 @@ class ManageCollections extends ManageRecords
                         ->body($result['explanation'].' '.$result['count'].' artwork matched.')
                         ->send();
                 }),
-            CreateAction::make(),
+            CreateSourceWithJournalAction::make(),
         ];
     }
 }

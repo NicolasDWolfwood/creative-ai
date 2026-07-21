@@ -2,11 +2,11 @@
 
 namespace App\Filament\Resources\Playlists\Pages;
 
+use App\Filament\Actions\CreateSourceWithJournalAction;
 use App\Filament\Resources\Playlists\PlaylistResource;
 use App\Models\Playlist;
 use App\Services\AutomaticPlaylistService;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -86,7 +86,7 @@ class ManagePlaylists extends ManageRecords
                     Notification::make()->success()->title($result['playlist']->title.' created')
                         ->body($result['explanation'].' '.$result['count'].' tracks matched.')->send();
                 }),
-            CreateAction::make()->label('New playlist'),
+            CreateSourceWithJournalAction::make()->label('New playlist'),
         ];
     }
 }

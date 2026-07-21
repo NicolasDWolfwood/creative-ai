@@ -8,6 +8,8 @@ use App\Models\Post;
 use App\Models\PostMedia;
 use App\Models\Tag;
 use App\Models\Track;
+use App\Services\JournalPostCoverService;
+use App\Services\JournalSourceImageResolver;
 use App\Services\PostConnectionService;
 use DomainException;
 use Filament\Actions\Action;
@@ -171,6 +173,59 @@ class ManagePostConnections extends ManageRelatedRecords
                     ->color(fn (string $state): string => $state === 'Public' ? 'success' : 'warning'),
             ])
             ->recordActions([
+                Action::make('useAsJournalCover')
+                    ->label('Use as Journal cover')
+                    ->icon('heroicon-o-photo')
+                    ->color('info')
+                    ->authorize(fn (): bool => Gate::allows('manageConnections', $this->post()))
+                    ->visible(function (PostMedia $record): bool {
+                        $source = $record->media();
+
+                        return $source !== null
+                            && $record->mediaIsPublic()
+                            && app(JournalSourceImageResolver::class)->resolve($source) !== null;
+                    })
+                    ->fillForm(fn (): array => [
+                        'expected_cover_fingerprint' => app(JournalPostCoverService::class)
+                            ->coverFingerprint($this->post()),
+                    ])
+                    ->schema([
+                        Hidden::make('expected_cover_fingerprint')->required(),
+                    ])
+                    ->requiresConfirmation()
+                    ->modalHeading('Use this source artwork as the Journal cover?')
+                    ->modalDescription(fn (): string => filled($this->post()->cover_image_path)
+                        ? 'A private snapshot will replace the current cover. Existing cover bytes are retained for Journal history.'
+                        : 'A stable private snapshot will be copied into the Journal post. Later source changes will not replace it.')
+                    ->action(function (PostMedia $record, array $data, Action $action): void {
+                        try {
+                            app(JournalPostCoverService::class)->replaceFromConnection(
+                                post: $this->post(),
+                                connection: $record,
+                                expectedCoverFingerprint: (string) ($data['expected_cover_fingerprint'] ?? ''),
+                            );
+                        } catch (DomainException $exception) {
+                            Notification::make()->danger()
+                                ->title('Journal cover could not be changed')
+                                ->body($exception->getMessage())
+                                ->send();
+                            $action->failure();
+
+                            return;
+                        } catch (\Throwable $exception) {
+                            report($exception);
+                            Notification::make()->danger()
+                                ->title('Journal cover could not be changed')
+                                ->body('The existing cover is unchanged. Check the source artwork and try again.')
+                                ->send();
+                            $action->failure();
+
+                            return;
+                        }
+
+                        $this->post()->refresh();
+                        Notification::make()->success()->title('Journal cover updated.')->send();
+                    }),
                 Action::make('unlink')
                     ->label('Unlink')
                     ->icon('heroicon-o-link-slash')

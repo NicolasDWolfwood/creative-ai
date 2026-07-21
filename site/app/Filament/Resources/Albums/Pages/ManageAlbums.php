@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Albums\Pages;
 
+use App\Filament\Actions\CreateSourceWithJournalAction;
 use App\Filament\Resources\Albums\AlbumResource;
 use App\Services\AlbumOrganizationService;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 
@@ -28,7 +28,7 @@ class ManageAlbums extends ManageRecords
                         ->body($result['tracks_organized'].' tracks moved; '.$result['empty_imports_removed'].' empty import records removed.')
                         ->send();
                 }),
-            CreateAction::make()->label('New album'),
+            CreateSourceWithJournalAction::make()->label('New album'),
         ];
     }
 }

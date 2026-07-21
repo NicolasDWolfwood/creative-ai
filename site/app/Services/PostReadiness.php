@@ -40,6 +40,17 @@ class PostReadiness
             $warnings['seo_description'] = 'Add a page-specific SEO description.';
         }
 
+        $privateConnections = $post->mediaItems()
+            ->with(['artwork', 'collection', 'album', 'playlist', 'track'])
+            ->get()
+            ->reject(fn ($connection): bool => $connection->mediaIsPublic())
+            ->count();
+
+        if ($privateConnections > 0) {
+            $warnings['private_connections'] = $privateConnections.' connected media '.Str::plural('item', $privateConnections)
+                .' will stay hidden until its source is public.';
+        }
+
         return new PostReadinessReport($blockers, $warnings);
     }
 
