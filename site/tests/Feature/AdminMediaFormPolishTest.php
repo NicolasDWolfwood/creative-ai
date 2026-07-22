@@ -148,7 +148,31 @@ class AdminMediaFormPolishTest extends TestCase
         );
     }
 
-    public function test_artwork_editor_shows_applied_tags_and_only_edits_manual_collections(): void
+    public function test_artwork_availability_distinguishes_due_and_scheduled_homepage_features(): void
+    {
+        $due = Artwork::withoutEvents(fn (): Artwork => Artwork::query()->create([
+            'title' => 'Due homepage feature',
+            'slug' => 'due-homepage-feature',
+            'image_path' => 'artworks/originals/due-homepage-feature.jpg',
+            'featured' => true,
+            'published' => false,
+        ]));
+        $scheduled = Artwork::withoutEvents(fn (): Artwork => Artwork::query()->create([
+            'title' => 'Scheduled homepage feature',
+            'slug' => 'scheduled-homepage-feature',
+            'image_path' => 'artworks/originals/scheduled-homepage-feature.jpg',
+            'featured' => true,
+            'published' => false,
+            'published_at' => now()->addDay(),
+        ]));
+
+        Livewire::actingAs(User::factory()->admin()->create())
+            ->test(ManageArtworks::class)
+            ->assertTableColumnFormattedStateSet('published', 'Homepage only', $due)
+            ->assertTableColumnFormattedStateSet('published', 'Homepage scheduled', $scheduled);
+    }
+
+    public function test_artwork_editor_can_curate_applied_tags_and_only_edits_manual_collections(): void
     {
         Storage::fake('local');
         Queue::fake();
@@ -162,6 +186,7 @@ class AdminMediaFormPolishTest extends TestCase
         $subject = Tag::query()->create(['name' => 'antlered deer']);
         $glowing = Tag::query()->create(['name' => 'glowing']);
         $misty = Tag::query()->create(['name' => 'misty']);
+        $wildlife = Tag::query()->create(['name' => 'wildlife']);
         $artwork->tags()->attach($subject, ['category' => 'subject']);
         $artwork->tags()->attach($glowing, ['category' => 'mood']);
         $artwork->tags()->attach($misty, ['category' => 'mood']);
@@ -170,12 +195,26 @@ class AdminMediaFormPolishTest extends TestCase
         $smart = ArtworkCollection::query()->create([
             'title' => 'Rule-managed smart collection',
             'is_smart' => true,
+            'auto_sync' => false,
+        ]);
+        $liveSmart = ArtworkCollection::query()->create([
+            'title' => 'Live broad-tag collection',
+            'is_smart' => true,
+            'auto_sync' => true,
+            'smart_rules' => [
+                'tag_ids' => [$wildlife->id],
+                'match' => 'any',
+                'only_published' => false,
+            ],
         ]);
         $automatic = ArtworkCollection::query()->create([
             'title' => 'Generated automatic collection',
             'is_smart' => true,
             'is_auto_generated' => true,
             'auto_generation_key' => 'generated-automatic-test',
+            'publishes_members' => true,
+            'auto_sync' => false,
+            'smart_rules' => ['only_published' => false],
         ]);
         $artwork->collections()->attach([$manual->id, $smart->id, $automatic->id]);
 
@@ -187,6 +226,8 @@ class AdminMediaFormPolishTest extends TestCase
                 'Subject: antlered deer',
                 'Mood: glowing, misty',
                 'These persisted tags drive smart and automatic collection membership.',
+                'Add or remove tags',
+                'Prefer broad, reusable subjects and themes.',
                 'Manual collections',
             ]);
         $instance = $livewire->instance();
@@ -194,14 +235,29 @@ class AdminMediaFormPolishTest extends TestCase
         $collections = collect($schema->getFlatComponents(withHidden: true))
             ->first(fn ($component): bool => $component instanceof Select && $component->getName() === 'collections');
         $options = $collections->getOptions();
+        $tags = collect($schema->getFlatComponents(withHidden: true))
+            ->first(fn ($component): bool => $component instanceof Select && $component->getName() === 'tags');
 
         $this->assertSame('Curated by hand', $options[$manual->id]);
         $this->assertArrayNotHasKey($smart->id, $options);
         $this->assertArrayNotHasKey($automatic->id, $options);
         $this->assertSame([$manual->id], $collections->getState());
+        $this->assertEqualsCanonicalizing(
+            [$subject->id, $glowing->id, $misty->id],
+            array_map('intval', $tags->getState()),
+        );
 
         $livewire
-            ->setTableActionData(['collections' => []])
+            ->setTableActionData([
+                'collections' => [],
+            ])
+            // Filament's testing helper merges numeric array keys when a
+            // multi-select shrinks. Replace this field's state directly so
+            // the test matches the browser's complete array update.
+            ->set($schema->getStatePath().'.tags', [
+                (string) $subject->id,
+                (string) $wildlife->id,
+            ])
             ->callMountedTableAction()
             ->assertHasNoTableActionErrors();
 
@@ -217,10 +273,17 @@ class AdminMediaFormPolishTest extends TestCase
             'artwork_id' => $artwork->id,
             'collection_id' => $automatic->id,
         ]);
+        $this->assertDatabaseHas('artwork_collection', [
+            'artwork_id' => $artwork->id,
+            'collection_id' => $liveSmart->id,
+        ]);
         $this->assertEqualsCanonicalizing(
-            [$subject->id, $glowing->id, $misty->id],
+            [$subject->id, $wildlife->id],
             $artwork->fresh()->tags()->pluck('tags.id')->all(),
         );
+        $this->assertSame('subject', $artwork->fresh()->tags()->whereKey($subject)->firstOrFail()->pivot->category);
+        $this->assertSame('other', $artwork->fresh()->tags()->whereKey($wildlife)->firstOrFail()->pivot->category);
+        $this->assertSame(2, Tag::query()->whereKey([$glowing->id, $misty->id])->count());
     }
 
     public function test_track_editor_keeps_the_audio_preview_but_presents_the_original_filename(): void

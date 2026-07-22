@@ -408,7 +408,7 @@ PROMPT);
             ->whereKey($eligibleIds)
             ->join('artwork_tag', 'artworks.id', '=', 'artwork_tag.artwork_id')
             ->join('tags', 'tags.id', '=', 'artwork_tag.tag_id')
-            ->whereIn('artwork_tag.category', ['subject', 'style', 'mood'])
+            ->whereIn('artwork_tag.category', ['subject', 'style', 'mood', 'other'])
             ->select(['tags.id', 'tags.name', 'tags.slug'])
             ->selectRaw('COUNT(DISTINCT artworks.id) AS artwork_count')
             ->groupBy('tags.id', 'tags.name', 'tags.slug')

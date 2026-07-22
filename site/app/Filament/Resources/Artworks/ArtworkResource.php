@@ -10,11 +10,15 @@ use App\Filament\Resources\Posts\PostResource;
 use App\Jobs\GenerateArtworkVariants;
 use App\Models\Artwork;
 use App\Models\Collection as ArtworkCollection;
+use App\Models\Tag;
 use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkEditorialService;
+use App\Services\ArtworkCollectionCurationService;
+use App\Services\AutomaticCollectionService;
 use App\Services\JournalDraftAutomationService;
+use App\Services\SmartCollectionService;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -44,6 +48,8 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Js;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ArtworkResource extends Resource
@@ -118,9 +124,81 @@ class ArtworkResource extends Resource
                 ->downloadable()
                 ->required(),
             Section::make('Applied tags')
-                ->description('These persisted tags drive smart and automatic collection membership. Apply reviewed AI suggestions to replace them.')
+                ->description('These persisted tags drive smart and automatic collection membership. Prefer broad, reusable subjects and themes. Applying a new AI suggestion later replaces this curated list.')
                 ->schema([
                     Text::make(fn (?Artwork $record): string => static::formatAppliedTags($record)),
+                    Select::make('tags')
+                        ->label('Add or remove tags')
+                        ->relationship(
+                            'tags',
+                            'name',
+                            modifyQueryUsing: fn (Builder $query): Builder => $query
+                                ->select(['tags.id', 'tags.name'])
+                                ->reorder('tags.name'),
+                        )
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->createOptionForm([
+                            TextInput::make('name')
+                                ->label('New reusable tag')
+                                ->helperText('Use a broad lowercase word or short phrase that can apply to more than one artwork.')
+                                ->required()
+                                ->maxLength(80),
+                        ])
+                        ->createOptionUsing(function (array $data): int {
+                            $name = Str::of((string) ($data['name'] ?? ''))
+                                ->replace('#', '')
+                                ->squish()
+                                ->lower()
+                                ->toString();
+                            $slug = Str::slug($name);
+
+                            if ($name === '' || $slug === '') {
+                                throw ValidationException::withMessages([
+                                    'name' => 'Enter a tag containing letters or numbers.',
+                                ]);
+                            }
+
+                            return (int) Tag::query()->firstOrCreate(
+                                ['slug' => $slug],
+                                ['name' => $name],
+                            )->getKey();
+                        })
+                        ->saveRelationshipsUsing(function (Select $component): void {
+                            $record = $component->getRecord();
+
+                            if (! $record instanceof Artwork) {
+                                return;
+                            }
+
+                            $selectedIds = collect($component->getState() ?? [])
+                                ->map(fn (mixed $id): int => (int) $id)
+                                ->filter()
+                                ->unique()
+                                ->sort()
+                                ->values();
+                            $currentIds = $record->tags()
+                                ->pluck('tags.id')
+                                ->map(fn (mixed $id): int => (int) $id)
+                                ->sort()
+                                ->values();
+
+                            if ($selectedIds->all() === $currentIds->all()) {
+                                return;
+                            }
+
+                            // Existing AI categories are preserved by sync(). New
+                            // attachments use the pivot's "other" default and are
+                            // included in the automatic collection vocabulary.
+                            $record->tags()->sync($selectedIds->all());
+                            $record->unsetRelation('tags');
+
+                            app(AutomaticCollectionService::class)->refreshExisting(sync: false);
+                            app(SmartCollectionService::class)->syncAutomatic();
+                        })
+                        ->helperText('Existing AI categories are kept. New manual tags are treated as general collection tags. Live smart collections refresh when the artwork is saved; reviewed public snapshots still require an explicit refresh.')
+                        ->columnSpanFull(),
                 ])
                 ->columnSpanFull(),
             Textarea::make('description')->rows(3)->columnSpanFull(),
@@ -136,7 +214,8 @@ class ArtworkResource extends Resource
                 ->helperText('Public notes about the tools, iterations, and decisions behind this artwork.')
                 ->columnSpanFull(),
             TextInput::make('sort_order')->numeric()->default(0),
-            Toggle::make('featured'),
+            Toggle::make('featured')
+                ->helperText('Makes this artwork eligible for the public homepage frame once any future date is due. It does not add the artwork to All artwork, its detail page, collections, or the sitemap.'),
             Toggle::make('published')
                 ->label('Publish as standalone artwork')
                 ->helperText('Artwork can also be available through a published collection without appearing separately in All artwork.')
@@ -201,7 +280,7 @@ class ArtworkResource extends Resource
                             ->icon('heroicon-o-check-circle')
                             ->color('success')
                             ->visible(fn (?Artwork $record): bool => filled($record?->ai_suggestion)
-                                && $record->ai_status !== Artwork::AI_STATUS_APPLIED)
+                                && $record->ai_status === Artwork::AI_STATUS_READY)
                             ->requiresConfirmation()
                             ->modalDescription('This replaces the public title, description, alt text, and tags. The existing slug remains unchanged.')
                             ->action(function (?Artwork $record, Set $set): void {
@@ -285,6 +364,8 @@ class ArtworkResource extends Resource
                             fn (ArtworkCollection $collection): bool => $collection->grantsMemberPublication()
                                 && (bool) $collection->published,
                         ) => 'Collection scheduled',
+                        $record->featured && $record->published_at?->isFuture() => 'Homepage scheduled',
+                        $record->isHomepageHeroEligible() => 'Homepage only',
                         default => 'Draft',
                     })
                     ->color(fn (bool $state, Artwork $record): string => match (true) {
@@ -293,7 +374,8 @@ class ArtworkResource extends Resource
                         $state || $record->collections->contains(
                             fn (ArtworkCollection $collection): bool => $collection->grantsMemberPublication()
                                 && (bool) $collection->published,
-                        ) => 'warning',
+                        ) || ($record->featured && $record->published_at?->isFuture()) => 'warning',
+                        $record->isHomepageHeroEligible() => 'info',
                         default => 'gray',
                     }),
                 TextColumn::make('sort_order')->sortable()->toggleable(isToggledHiddenByDefault: true),
@@ -326,6 +408,15 @@ class ArtworkResource extends Resource
                     ))
                     ->searchable()
                     ->preload(),
+                TernaryFilter::make('collection_membership')
+                    ->label('Collection membership')
+                    ->placeholder('All artwork')
+                    ->trueLabel('In any collection')
+                    ->falseLabel('Not in any collection')
+                    ->queries(
+                        true: fn (Builder $query): Builder => $query->whereHas('collections'),
+                        false: fn (Builder $query): Builder => $query->whereDoesntHave('collections'),
+                    ),
                 TernaryFilter::make('published')->label('Standalone publication'),
                 TernaryFilter::make('featured')->label('Featured'),
             ])
@@ -356,7 +447,8 @@ class ArtworkResource extends Resource
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->visible(fn (Artwork $record): bool => filled($record->ai_suggestion))
+                        ->visible(fn (Artwork $record): bool => filled($record->ai_suggestion)
+                            && $record->ai_status === Artwork::AI_STATUS_READY)
                         ->action(function (Artwork $record): void {
                             app(ArtworkAiMetadataService::class)->applySuggestion($record);
 
@@ -369,6 +461,48 @@ class ArtworkResource extends Resource
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('createDraftCollectionFromSelected')
+                        ->label('Create draft collection from selected')
+                        ->icon('heroicon-o-rectangle-stack')
+                        ->color('info')
+                        ->schema([
+                            TextInput::make('title')
+                                ->label('Collection title')
+                                ->required()
+                                ->maxLength(255),
+                            Textarea::make('description')
+                                ->rows(3)
+                                ->maxLength(1000),
+                        ])
+                        ->requiresConfirmation()
+                        ->modalDescription('Creates one private manual collection from selected artwork that is still in no collection when this action runs. It never publishes the collection or its members, and skips records that gained a membership in the meantime.')
+                        ->modalSubmitActionLabel('Create draft collection')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records, array $data): void {
+                            $result = app(ArtworkCollectionCurationService::class)->createDraftFromUncollected(
+                                $records->modelKeys(),
+                                (string) $data['title'],
+                                $data['description'] ?? null,
+                            );
+
+                            if (! $result['collection']) {
+                                Notification::make()
+                                    ->title('No uncollected artwork remained')
+                                    ->body($result['skipped'].' selected item'.($result['skipped'] === 1 ? ' was' : 's were').' no longer eligible. Nothing was created.')
+                                    ->info()
+                                    ->send();
+
+                                return;
+                            }
+
+                            Notification::make()
+                                ->title('Draft collection created')
+                                ->body($result['attached'].' artwork added to “'.$result['collection']->title.'”.'
+                                    .($result['skipped'] > 0 ? ' '.$result['skipped'].' selected item'.($result['skipped'] === 1 ? ' was' : 's were').' skipped because no longer eligible.' : '')
+                                    .' Publication and Featured settings were left unchanged.')
+                                ->success()
+                                ->send();
+                        }),
                     BulkAction::make('publishSelectedNow')
                         ->label('Publish selected now')
                         ->icon('heroicon-o-globe-alt')
@@ -420,7 +554,7 @@ class ArtworkResource extends Resource
                         ->icon('heroicon-o-star')
                         ->color('info')
                         ->requiresConfirmation()
-                        ->modalDescription('Marks selected artwork as preferred for public highlights and collection covers when otherwise eligible. This does not publish drafts or change collection memberships.')
+                        ->modalDescription('Makes selected artwork eligible for the public homepage frame and preferred for collection covers once any future date is due. A Featured draft can appear on the homepage, but remains absent from All artwork, its detail page, collections, and the sitemap unless published separately. Publication fields and memberships are unchanged.')
                         ->deselectRecordsAfterCompletion()
                         ->action(function (EloquentCollection $records): void {
                             $result = app(ArtworkBulkEditorialService::class)->setFeatured($records, true);
@@ -429,7 +563,7 @@ class ArtworkResource extends Resource
                                 ->title($result['changed'] > 0
                                     ? 'Marked '.$result['changed'].' selected item'.($result['changed'] === 1 ? '' : 's').' as Featured'
                                     : 'No Featured changes')
-                                ->body('Publication is unchanged.'
+                                ->body('Standalone publication is unchanged; eligible artwork may now appear in the homepage frame.'
                                     .($unchanged > 0 ? ' '.$unchanged.' selected item'.($unchanged === 1 ? ' was' : 's were').' already Featured.' : ''));
 
                             ($result['changed'] > 0 ? $notification->success() : $notification->info())->send();
@@ -438,7 +572,7 @@ class ArtworkResource extends Resource
                         ->label('Remove Featured from selected')
                         ->icon('heroicon-o-minus-circle')
                         ->requiresConfirmation()
-                        ->modalDescription('Removes Featured preference from selected artwork. Publication dates and collection memberships are unchanged, and collection covers use the next eligible candidate.')
+                        ->modalDescription('Removes Featured homepage and collection-cover preference from selected artwork. Standalone publication dates and collection memberships are unchanged; published artwork remains eligible for the homepage frame.')
                         ->deselectRecordsAfterCompletion()
                         ->action(function (EloquentCollection $records): void {
                             $result = app(ArtworkBulkEditorialService::class)->setFeatured($records, false);

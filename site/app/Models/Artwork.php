@@ -139,6 +139,33 @@ class Artwork extends Model
         });
     }
 
+    /**
+     * Homepage hero visibility is deliberately narrower than general public
+     * availability. Featured drafts may supply the homepage display image, but
+     * they do not gain artwork-detail, archive, sitemap, or generic media access.
+     */
+    #[Scope]
+    protected function homepageHeroEligible(Builder $query): void
+    {
+        $query
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('featured', true)
+                    ->orWhere('published', true);
+            })
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            });
+    }
+
+    public function isHomepageHeroEligible(): bool
+    {
+        return ((bool) $this->featured || (bool) $this->published)
+            && (! $this->published_at || ! $this->published_at->isFuture());
+    }
+
     public function isPubliclyAvailable(): bool
     {
         if ($this->isPubliclyPublished()) {
@@ -218,6 +245,14 @@ class Artwork extends Model
         return route('media.artworks.show', [$this, 'variant' => 'display', 'v' => $this->mediaVersion($this->availableDisplayPath())]);
     }
 
+    public function getHomepageDisplayUrlAttribute(): string
+    {
+        return route('media.artworks.homepage-display', [
+            'artwork' => $this,
+            'v' => $this->mediaVersion($this->availableDisplayPath()),
+        ]);
+    }
+
     public function getThumbUrlAttribute(): string
     {
         return route('media.artworks.show', [$this, 'variant' => 'thumb', 'v' => $this->mediaVersion($this->availableThumbPath())]);
@@ -255,6 +290,23 @@ class Artwork extends Model
     public function hasAvailableImage(): bool
     {
         foreach ([$this->thumb_path, $this->display_path, $this->image_path] as $path) {
+            if (blank($path)) {
+                continue;
+            }
+
+            $disk = app(PrivateMediaService::class)->sourceDisk((string) $path);
+
+            if ($disk->exists($path)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function hasAvailableDisplayImage(): bool
+    {
+        foreach ([$this->display_path, $this->image_path] as $path) {
             if (blank($path)) {
                 continue;
             }

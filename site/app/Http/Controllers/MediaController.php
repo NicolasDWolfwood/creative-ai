@@ -14,6 +14,17 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class MediaController extends Controller
 {
+    public function homepageArtworkDisplay(Artwork $artwork, PrivateMediaService $media): BinaryFileResponse
+    {
+        abort_unless($artwork->isHomepageHeroEligible(), 404);
+        $path = $artwork->availableDisplayPath();
+        abort_if(blank($path), 404);
+
+        // Homepage eligibility can be withdrawn independently of standalone
+        // publication. Always revalidate this narrow public grant.
+        return $this->file($media, $path, public: true, revalidatePublic: true);
+    }
+
     public function artwork(Artwork $artwork, string $variant, Request $request, PrivateMediaService $media): BinaryFileResponse
     {
         $public = $artwork->isPubliclyAvailable();

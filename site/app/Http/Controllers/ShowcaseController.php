@@ -9,6 +9,7 @@ use App\Models\SiteSetting;
 use App\Models\Tag;
 use App\Models\Track;
 use App\Services\CollectionCoverService;
+use App\Services\HomepageHeroArtworkService;
 use App\Services\PublicMediaService;
 use App\Services\PublicStoryConnections;
 use Illuminate\Contracts\View\View;
@@ -21,11 +22,17 @@ class ShowcaseController extends Controller
         protected PublicMediaService $media,
         protected CollectionCoverService $collectionCovers,
         protected PublicStoryConnections $storyConnections,
+        protected HomepageHeroArtworkService $homepageHeroArtwork,
     ) {}
 
     public function index(Request $request): View
     {
-        return $this->renderShowcase(selectedTagSlug: $request->query('tag'));
+        $selectedTagSlug = $request->query('tag');
+
+        return $this->renderShowcase(
+            selectedTagSlug: $selectedTagSlug,
+            useHomepageHero: blank($selectedTagSlug),
+        );
     }
 
     public function gallery(Request $request): View
@@ -45,6 +52,7 @@ class ShowcaseController extends Controller
         int $limit = 72,
         ?string $selectedTagSlug = null,
         bool $paginateArtwork = false,
+        bool $useHomepageHero = false,
     ): View {
         $intro = SiteSetting::query()->where('key', 'home_intro')->first()?->value ?: [
             'title' => 'Creative-Ai',
@@ -89,8 +97,13 @@ class ShowcaseController extends Controller
         $artworks = $paginateArtwork
             ? $artworksQuery->cursorPaginate($limit)->withQueryString()
             : $artworksQuery->limit($limit)->get();
-        $heroArtwork = $artworks->first()
-            ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
+        $heroArtwork = $useHomepageHero
+            ? $this->homepageHeroArtwork->select()
+            : ($artworks->first()
+                ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first());
+        $heroImageUrl = $heroArtwork
+            ? ($useHomepageHero ? $heroArtwork->homepage_display_url : $heroArtwork->display_url)
+            : null;
         $collections = Collection::query()
             ->published()
             ->withCount(['artworks' => fn ($query) => $query->publiclyAvailable()])
@@ -161,6 +174,7 @@ class ShowcaseController extends Controller
         return view('showcase', [
             'intro' => $intro,
             'heroArtwork' => $heroArtwork,
+            'heroImageUrl' => $heroImageUrl,
             'collections' => $collections,
             'collectionCovers' => $collectionCovers,
             'collectionCoverPlaceholder' => asset(CollectionCoverService::PLACEHOLDER_PATH),
@@ -182,7 +196,7 @@ class ShowcaseController extends Controller
             'seo' => [
                 'title' => $pageTitle === 'Creative-Ai' ? 'Creative-Ai | Generative Art and Original Music' : $pageTitle.' | Creative-Ai',
                 'description' => str($description)->squish()->limit(200, '')->toString(),
-                'image' => $heroArtwork ? url($heroArtwork->display_url) : null,
+                'image' => $heroImageUrl ? url($heroImageUrl) : null,
                 'canonical' => $selectedCollection ? route('collections.show', $selectedCollection) : request()->url(),
                 'type' => 'website',
             ],

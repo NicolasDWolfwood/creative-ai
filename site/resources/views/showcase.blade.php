@@ -3,7 +3,7 @@
 @section('body-class', 'showcase-page')
 
 @section('content')
-    <section class="hero" @if ($heroArtwork) style="--hero-image: url('{{ $heroArtwork->display_url }}')" @endif>
+    <section class="hero" @if ($heroArtwork) style="--hero-image: url('{{ $heroImageUrl }}')" @endif>
         <div class="hero-shade" aria-hidden="true"></div>
         <div class="hero-copy" data-reveal>
             <p class="eyebrow">Generative artwork · original sound · experiments</p>
@@ -18,7 +18,7 @@
             </div>
         </div>
         @if ($heroArtwork)
-            <button class="hero-credit" type="button" data-lightbox data-title="{{ $heroArtwork->title }}" data-description="{{ $heroArtwork->description }}" data-alt="{{ $heroArtwork->image_alt }}" data-full="{{ $heroArtwork->display_url }}">
+            <button class="hero-credit" type="button" data-lightbox data-title="{{ $heroArtwork->title }}" data-description="{{ $heroArtwork->description }}" data-alt="{{ $heroArtwork->image_alt }}" data-full="{{ $heroImageUrl }}">
                 <span>Featured frame</span><strong>{{ $heroArtwork->title }}</strong>
             </button>
         @endif

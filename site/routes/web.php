@@ -20,6 +20,7 @@ Route::get('/music/playlists/{playlist:slug}', [MusicController::class, 'playlis
 Route::get('/music/tracks/{track:slug}', [MusicController::class, 'track'])->name('music.tracks.show');
 Route::get('/artworks/{artwork:slug}', [ArtworkController::class, 'show'])->name('artworks.show');
 Route::get('/artworks/{artwork:slug}/image', [MediaController::class, 'artwork'])->defaults('variant', 'original')->name('artworks.image');
+Route::get('/media/artworks/{artwork}/homepage-display', [MediaController::class, 'homepageArtworkDisplay'])->whereNumber('artwork')->name('media.artworks.homepage-display');
 Route::get('/media/artworks/{artwork}/{variant}', [MediaController::class, 'artwork'])->whereIn('variant', ['original', 'display', 'thumb'])->name('media.artworks.show');
 Route::get('/media/tracks/{track}/audio', [MediaController::class, 'trackAudio'])->name('media.tracks.audio');
 Route::get('/media/albums/{album}/embedded-cover', [MediaController::class, 'albumEmbeddedCover'])->name('media.albums.embedded-cover');
