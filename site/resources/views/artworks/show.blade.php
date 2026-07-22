@@ -4,28 +4,93 @@
 
 @section('content')
 <article class="section-shell artwork-page">
-    @if ($collectionContext)
-        <a class="text-link artwork-back-link" href="{{ route('collections.show', $collectionContext) }}#gallery" wire:navigate>Back to {{ $collectionContext->title }}</a>
-    @else
-        <a class="text-link artwork-back-link" href="{{ route('gallery') }}#gallery" wire:navigate>All artwork</a>
-    @endif
+    <div class="artwork-viewer-intro">
+        <div class="artwork-context-row">
+            @if ($collectionContext)
+                <a class="text-link artwork-back-link" href="{{ route('collections.show', $collectionContext) }}#gallery" wire:navigate>Back to {{ $collectionContext->title }}</a>
+                <span class="artwork-sequence-label">Browsing {{ $collectionContext->title }} · Use ← → keys</span>
+            @else
+                <a class="text-link artwork-back-link" href="{{ route('gallery') }}#gallery" wire:navigate>Back to all artwork</a>
+                <span class="artwork-sequence-label">Browsing all published artwork · Use ← → keys</span>
+            @endif
+        </div>
 
-    <header class="artwork-header">
-        <span class="eyebrow">Artwork</span>
-        <h1>{{ $artwork->title }}</h1>
-        @if ($artwork->description)
-            <p>{{ $artwork->description }}</p>
-        @endif
-    </header>
-
-    <figure class="artwork-figure">
-        <img
-            src="{{ $artwork->display_url }}"
-            alt="{{ $artwork->image_alt }}"
-            @if ($artwork->width) width="{{ $artwork->width }}" @endif
-            @if ($artwork->height) height="{{ $artwork->height }}" @endif
+        <section
+            class="artwork-viewer"
+            id="artwork-viewer"
+            data-artwork-viewer
+            tabindex="-1"
+            aria-label="Artwork viewer for {{ $artwork->title }}"
         >
-        <figcaption>
+            <div class="artwork-browser-grid">
+                <figure class="artwork-figure">
+                    <img
+                        src="{{ $artwork->display_url }}"
+                        alt="{{ $artwork->image_alt }}"
+                        @if ($artwork->width) width="{{ $artwork->width }}" @endif
+                        @if ($artwork->height) height="{{ $artwork->height }}" @endif
+                    >
+                </figure>
+
+                <nav class="artwork-browser-navigation" aria-label="{{ $collectionContext ? 'Browse '.$collectionContext->title : 'Browse all published artwork' }}">
+                    @if ($previousArtwork)
+                        <a
+                            class="artwork-browser-control artwork-browser-previous"
+                            href="{{ route('artworks.show', $collectionContext ? ['artwork' => $previousArtwork, 'collection' => $collectionContext->slug] : $previousArtwork) }}"
+                            rel="prev"
+                            data-artwork-previous
+                            aria-label="Previous artwork: {{ $previousArtwork->title }}"
+                            aria-keyshortcuts="ArrowLeft"
+                            wire:navigate
+                        >
+                            <i data-lucide="chevron-left" aria-hidden="true"></i>
+                            <span>Previous artwork</span>
+                            <strong>{{ $previousArtwork->title }}</strong>
+                        </a>
+                    @else
+                        <div class="artwork-browser-control artwork-browser-previous is-unavailable" data-artwork-boundary="start" aria-disabled="true">
+                            <i data-lucide="chevron-left" aria-hidden="true"></i>
+                            <span>Start of {{ $collectionContext ? 'collection' : 'published archive' }}</span>
+                            <strong>No previous artwork</strong>
+                        </div>
+                    @endif
+
+                    @if ($nextArtwork)
+                        <a
+                            class="artwork-browser-control artwork-browser-next"
+                            href="{{ route('artworks.show', $collectionContext ? ['artwork' => $nextArtwork, 'collection' => $collectionContext->slug] : $nextArtwork) }}"
+                            rel="next"
+                            data-artwork-next
+                            aria-label="Next artwork: {{ $nextArtwork->title }}"
+                            aria-keyshortcuts="ArrowRight"
+                            wire:navigate
+                        >
+                            <i data-lucide="chevron-right" aria-hidden="true"></i>
+                            <span>Next artwork</span>
+                            <strong>{{ $nextArtwork->title }}</strong>
+                        </a>
+                    @else
+                        <div class="artwork-browser-control artwork-browser-next is-unavailable" data-artwork-boundary="end" aria-disabled="true">
+                            <i data-lucide="chevron-right" aria-hidden="true"></i>
+                            <span>End of {{ $collectionContext ? 'collection' : 'published archive' }}</span>
+                            <strong>No next artwork</strong>
+                        </div>
+                    @endif
+                </nav>
+            </div>
+        </section>
+    </div>
+
+    <div class="artwork-detail-copy">
+        <header class="artwork-header" data-artwork-details>
+            <span class="eyebrow">Artwork</span>
+            <h1>{{ $artwork->title }}</h1>
+            @if ($artwork->description)
+                <p>{{ $artwork->description }}</p>
+            @endif
+        </header>
+
+        <div class="artwork-technical-meta" aria-label="Artwork image details">
             <span>
                 @if ($artwork->generated_at)
                     Created {{ $artwork->generated_at->format('F j, Y') }}
@@ -38,8 +103,8 @@
                 @endif
             </span>
             <a class="text-link" href="{{ $artwork->public_image_url }}">View full resolution</a>
-        </figcaption>
-    </figure>
+        </div>
+    </div>
 
     @if ($artwork->collections->isNotEmpty() || $artwork->prompt || $artwork->process_notes || $artwork->tags->isNotEmpty())
         <div class="artwork-story-grid">
@@ -86,21 +151,6 @@
             </div>
         </div>
     @endif
-
-    <nav class="artwork-neighbors" aria-label="Artwork archive navigation">
-        @if ($previousArtwork)
-            <a class="artwork-neighbor artwork-neighbor-previous" href="{{ route('artworks.show', $collectionContext ? ['artwork' => $previousArtwork, 'collection' => $collectionContext->slug] : $previousArtwork) }}" rel="prev" wire:navigate>
-                <span>Previous artwork</span>
-                <strong>{{ $previousArtwork->title }}</strong>
-            </a>
-        @endif
-        @if ($nextArtwork)
-            <a class="artwork-neighbor artwork-neighbor-next" href="{{ route('artworks.show', $collectionContext ? ['artwork' => $nextArtwork, 'collection' => $collectionContext->slug] : $nextArtwork) }}" rel="next" wire:navigate>
-                <span>Next artwork</span>
-                <strong>{{ $nextArtwork->title }}</strong>
-            </a>
-        @endif
-    </nav>
 
     @if ($tracks->isNotEmpty())
         <section class="artwork-music-section" aria-labelledby="artwork-music-title">

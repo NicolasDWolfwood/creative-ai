@@ -101,7 +101,8 @@ class CollectionMemberPublicationTest extends TestCase
             $renderedGraph->get('VisualArtwork')['datePublished'] ?? null,
         );
 
-        $this->get($contextUrl)
+        $contextResponse = $this->get($contextUrl);
+        $contextResponse
             ->assertOk()
             ->assertSee('<link rel="canonical" href="'.route('artworks.show', $inherited).'">', false)
             ->assertSee(route('collections.show', $collection).'#gallery', false)
@@ -109,6 +110,27 @@ class CollectionMemberPublicationTest extends TestCase
                 'artwork' => $collectionNeighbor,
                 'collection' => $collection->slug,
             ]), false);
+        $contextMain = $this->mainContent($contextResponse->getContent());
+        $previousLink = $this->navigationAnchor($contextMain, 'data-artwork-previous');
+        $this->assertStringContainsString('href="'.route('artworks.show', [
+            'artwork' => $collectionNeighbor,
+            'collection' => $collection->slug,
+        ]).'"', $previousLink);
+        $this->assertStringContainsString('rel="prev"', $previousLink);
+        $this->assertStringContainsString('aria-keyshortcuts="ArrowLeft"', $previousLink);
+        $this->assertStringNotContainsString('data-artwork-next', $contextMain);
+        $this->assertStringContainsString('data-artwork-boundary="end"', $contextMain);
+        $this->assertStringContainsString('End of collection', $contextMain);
+
+        $contextGraph = collect($this->decodeStructuredData($contextResponse)['@graph'] ?? [])->keyBy('@type');
+        $this->assertSame(
+            route('artworks.show', $inherited),
+            $contextGraph->get('VisualArtwork')['url'] ?? null,
+        );
+        $this->assertSame(
+            route('artworks.show', $inherited).'#artwork',
+            $contextGraph->get('VisualArtwork')['@id'] ?? null,
+        );
 
         $this->get(route('artworks.show', [
             'artwork' => $inherited,
@@ -167,6 +189,112 @@ class CollectionMemberPublicationTest extends TestCase
         $this->get($artwork->thumb_url)->assertOk();
     }
 
+    public function test_multiple_collection_contexts_isolate_neighbors_and_keep_the_canonical_identity_query_free(): void
+    {
+        $alpha = $this->collection('Alpha sequence');
+        $beta = $this->collection('Beta sequence');
+        $current = $this->orderedArtwork('Shared collection frame', 20);
+        $alphaPrevious = $this->orderedArtwork('Alpha previous frame', 30);
+        $alphaNext = $this->orderedArtwork('Alpha next frame', 10);
+        $betaPrevious = $this->orderedArtwork('Beta previous frame', 40);
+        $betaNext = $this->orderedArtwork('Beta next frame', 5);
+        $outside = $this->orderedArtwork('Published outside frame', 25, published: true);
+        $scheduled = $this->orderedArtwork('Scheduled alpha frame', 25);
+        $scheduled->forceFill(['published_at' => now()->addDay()])->saveQuietly();
+
+        $alpha->artworks()->attach([
+            $alphaPrevious->id,
+            $scheduled->id,
+            $current->id,
+            $alphaNext->id,
+        ]);
+        $beta->artworks()->attach([
+            $betaPrevious->id,
+            $current->id,
+            $betaNext->id,
+        ]);
+
+        $nonMember = $this->collection('Unrelated sequence');
+        $privateContext = Collection::query()->create([
+            'title' => 'Private sequence',
+            'slug' => 'private-sequence',
+            'published' => false,
+            'publishes_members' => true,
+        ]);
+        $privateContext->artworks()->attach($current);
+
+        $canonical = route('artworks.show', $current);
+        $alphaUrl = route('artworks.show', [
+            'artwork' => $current,
+            'collection' => $alpha->slug,
+        ]);
+        $alphaResponse = $this->get($alphaUrl);
+        $alphaResponse
+            ->assertOk()
+            ->assertViewHas('collectionContext', fn (?Collection $context): bool => $context?->is($alpha) === true)
+            ->assertViewHas('previousArtwork', fn (?Artwork $artwork): bool => $artwork?->is($alphaPrevious) === true)
+            ->assertViewHas('nextArtwork', fn (?Artwork $artwork): bool => $artwork?->is($alphaNext) === true)
+            ->assertSee('<link rel="canonical" href="'.$canonical.'">', false);
+
+        $alphaMain = $this->mainContent($alphaResponse->getContent());
+        $alphaPreviousLink = $this->navigationAnchor($alphaMain, 'data-artwork-previous');
+        $alphaNextLink = $this->navigationAnchor($alphaMain, 'data-artwork-next');
+        $this->assertStringContainsString('href="'.route('artworks.show', [
+            'artwork' => $alphaPrevious,
+            'collection' => $alpha->slug,
+        ]).'"', $alphaPreviousLink);
+        $this->assertStringContainsString('href="'.route('artworks.show', [
+            'artwork' => $alphaNext,
+            'collection' => $alpha->slug,
+        ]).'"', $alphaNextLink);
+
+        foreach ([$betaPrevious, $betaNext, $outside, $scheduled] as $excludedArtwork) {
+            $this->assertStringNotContainsString(route('artworks.show', $excludedArtwork), $alphaMain);
+        }
+
+        $alphaGraph = collect($this->decodeStructuredData($alphaResponse)['@graph'] ?? [])->keyBy('@type');
+        $this->assertSame($canonical, $alphaGraph->get('VisualArtwork')['url'] ?? null);
+        $this->assertSame($canonical.'#artwork', $alphaGraph->get('VisualArtwork')['@id'] ?? null);
+
+        $betaUrl = route('artworks.show', [
+            'artwork' => $current,
+            'collection' => $beta->slug,
+        ]);
+        $betaResponse = $this->get($betaUrl);
+        $betaResponse
+            ->assertOk()
+            ->assertViewHas('collectionContext', fn (?Collection $context): bool => $context?->is($beta) === true)
+            ->assertViewHas('previousArtwork', fn (?Artwork $artwork): bool => $artwork?->is($betaPrevious) === true)
+            ->assertViewHas('nextArtwork', fn (?Artwork $artwork): bool => $artwork?->is($betaNext) === true)
+            ->assertSee('<link rel="canonical" href="'.$canonical.'">', false);
+
+        $betaMain = $this->mainContent($betaResponse->getContent());
+        $this->assertStringContainsString('href="'.route('artworks.show', [
+            'artwork' => $betaPrevious,
+            'collection' => $beta->slug,
+        ]).'"', $this->navigationAnchor($betaMain, 'data-artwork-previous'));
+        $this->assertStringContainsString('href="'.route('artworks.show', [
+            'artwork' => $betaNext,
+            'collection' => $beta->slug,
+        ]).'"', $this->navigationAnchor($betaMain, 'data-artwork-next'));
+
+        foreach ([$alphaPrevious, $alphaNext, $outside, $scheduled] as $excludedArtwork) {
+            $this->assertStringNotContainsString(route('artworks.show', $excludedArtwork), $betaMain);
+        }
+
+        $this->get($canonical)
+            ->assertOk()
+            ->assertViewHas('collectionContext', fn (?Collection $context): bool => $context?->is($alpha) === true);
+        $this->get(route('artworks.show', [
+            'artwork' => $current,
+            'collection' => $nonMember->slug,
+        ]))->assertNotFound();
+        $this->get(route('artworks.show', [
+            'artwork' => $current,
+            'collection' => $privateContext->slug,
+        ]))->assertNotFound();
+    }
+
     public function test_collection_cover_prefers_featured_artwork_and_falls_back_to_any_usable_visible_member(): void
     {
         $collection = $this->collection('Cover room');
@@ -207,6 +335,14 @@ class CollectionMemberPublicationTest extends TestCase
         ]));
     }
 
+    private function orderedArtwork(string $title, int $sortOrder, bool $published = false): Artwork
+    {
+        $artwork = $this->artwork($title, published: $published);
+        $artwork->forceFill(['sort_order' => $sortOrder])->saveQuietly();
+
+        return $artwork;
+    }
+
     private function collection(
         string $title,
         bool $publishesMembers = true,
@@ -219,5 +355,27 @@ class CollectionMemberPublicationTest extends TestCase
             'published_at' => $publishedAt ?: now()->subMinute(),
             'publishes_members' => $publishesMembers,
         ]);
+    }
+
+    private function mainContent(string $html): string
+    {
+        $matched = preg_match('/<main\b[^>]*>(.*?)<\/main>/s', $html, $matches);
+
+        $this->assertSame(1, $matched, 'Expected the response to contain the public main element.');
+
+        return $matches[1] ?? '';
+    }
+
+    private function navigationAnchor(string $html, string $hook): string
+    {
+        $matched = preg_match(
+            '/<a\b(?=[^>]*\b'.preg_quote($hook, '/').'\b)[^>]*>/',
+            $html,
+            $matches,
+        );
+
+        $this->assertSame(1, $matched, 'Expected an artwork navigation anchor with '.$hook.'.');
+
+        return $matches[0] ?? '';
     }
 }

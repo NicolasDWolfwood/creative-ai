@@ -64,6 +64,48 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString('preferredPlaylistId', $source);
     }
 
+    public function test_artwork_keyboard_navigation_is_scoped_guarded_and_rebound_after_livewire_navigation(): void
+    {
+        $source = file_get_contents(resource_path('js/app.js'));
+        $navigationStart = strpos($source, 'function setupArtworkNavigation(signal)');
+        $followingFunction = strpos($source, 'function focusArtworkViewer()', $navigationStart ?: 0);
+
+        $this->assertNotFalse($navigationStart, 'Expected a dedicated artwork navigation setup function.');
+        $this->assertNotFalse($followingFunction, 'Expected artwork navigation to hand off to the viewer focus helper.');
+        $navigationSource = substr($source, $navigationStart, $followingFunction - $navigationStart);
+
+        $this->assertStringContainsString("document.querySelector('[data-artwork-viewer]')", $navigationSource);
+        $this->assertStringContainsString('a[data-artwork-previous][href]', $navigationSource);
+        $this->assertStringContainsString('a[data-artwork-next][href]', $navigationSource);
+        $this->assertStringContainsString("event.key !== 'ArrowLeft' && event.key !== 'ArrowRight'", $navigationSource);
+        $this->assertStringContainsString('event.defaultPrevented || event.repeat || event.isComposing', $navigationSource);
+        $this->assertStringContainsString('event.altKey || event.ctrlKey || event.metaKey || event.shiftKey', $navigationSource);
+        $this->assertStringContainsString('input, textarea, select, option, button', $navigationSource);
+        $this->assertStringContainsString('[role="textbox"]', $navigationSource);
+        $this->assertStringContainsString('[role="slider"]', $navigationSource);
+        $this->assertStringContainsString('audio, video', $navigationSource);
+        $this->assertStringContainsString('target.isContentEditable', $navigationSource);
+        $this->assertStringContainsString('dialog[open]', $navigationSource);
+        $this->assertStringContainsString("classList.contains('lightbox-open')", $navigationSource);
+        $this->assertStringContainsString('event.preventDefault()', $navigationSource);
+        $this->assertStringContainsString('artworkNavigationPending = true', $navigationSource);
+        $this->assertStringContainsString('link.click()', $navigationSource);
+        $this->assertMatchesRegularExpression(
+            "/document\\.addEventListener\\('keydown',[\\s\\S]*?\\}, \\{ signal \\}\\);/",
+            $navigationSource,
+        );
+
+        $this->assertStringContainsString('setupArtworkNavigation(signal);', $source);
+        $this->assertStringContainsString('shouldFocusArtworkViewer = artworkNavigationPending && !restoringHistory', $source);
+        $this->assertStringContainsString('artworkNavigationPending = false', $source);
+        $this->assertMatchesRegularExpression(
+            '/else if \(shouldFocusArtworkViewer\) \{\s*focusArtworkViewer\(\);\s*\}/',
+            $source,
+        );
+        $this->assertStringContainsString("viewer.scrollIntoView({ behavior: 'instant', block: 'start' })", $source);
+        $this->assertStringContainsString('viewer.focus({ preventScroll: true })', $source);
+    }
+
     public function test_music_search_has_an_accessible_name_feedback_and_empty_states(): void
     {
         $this->get(route('music.index', ['q' => 'nothing']))
