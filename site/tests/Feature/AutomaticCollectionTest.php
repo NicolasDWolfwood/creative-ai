@@ -76,6 +76,28 @@ class AutomaticCollectionTest extends TestCase
         $this->assertTrue(Collection::query()->whereKey($manual->id)->exists());
     }
 
+    public function test_manual_general_tags_can_supply_a_broad_automatic_collection_theme(): void
+    {
+        $wildlife = Tag::query()->create(['name' => 'wildlife']);
+        $artworks = collect([
+            $this->taggedArtwork('silver antlers', Artwork::AI_STATUS_APPLIED),
+            $this->taggedArtwork('moonlit paws', Artwork::AI_STATUS_APPLIED),
+            $this->taggedArtwork('woodland gaze', Artwork::AI_STATUS_APPLIED),
+        ]);
+
+        $artworks->each(fn (Artwork $artwork) => $artwork->tags()->attach($wildlife, ['category' => 'other']));
+
+        $result = app(AutomaticCollectionService::class)->maintain(target: 1, minimumArtwork: 3);
+        $collection = Collection::query()->where('auto_generation_key', 'animals')->firstOrFail();
+
+        $this->assertSame(1, $result['collection_count']);
+        $this->assertEqualsCanonicalizing(
+            $artworks->pluck('id')->all(),
+            $collection->artworks()->pluck('artworks.id')->all(),
+        );
+        $this->assertContains($wildlife->id, data_get($collection->smart_rules, 'tag_ids'));
+    }
+
     public function test_ai_can_create_a_persistent_custom_smart_collection_from_approved_tags(): void
     {
         app(AiSettings::class)->save([

@@ -28,6 +28,10 @@ return [
         'max_source_pixels' => 20_000_000,
     ],
     'ai' => [
-        'prompt_version' => 'artwork-metadata-v1',
+        'prompt_version' => 'artwork-metadata-v2',
+        'artwork_tag_vocabulary' => [
+            'minimum_artwork' => 2,
+            'limit' => 48,
+        ],
     ],
 ];
