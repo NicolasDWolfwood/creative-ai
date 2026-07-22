@@ -36,16 +36,38 @@ class ArtworkDetailPageTest extends TestCase
             $record->forceFill(['created_at' => $archiveTime, 'updated_at' => $archiveTime])->saveQuietly();
         }
 
-        $this->artwork([
+        $draftNeighbor = $this->artwork([
             'title' => 'Draft Neighbor',
             'slug' => 'draft-neighbor',
             'published' => false,
-        ])->forceFill(['created_at' => $archiveTime])->saveQuietly();
-        $this->artwork([
+        ]);
+        $draftNeighbor->forceFill(['created_at' => $archiveTime])->saveQuietly();
+        $scheduledNeighbor = $this->artwork([
             'title' => 'Scheduled Neighbor',
             'slug' => 'scheduled-neighbor',
             'published_at' => now()->addDay(),
-        ])->forceFill(['created_at' => $archiveTime])->saveQuietly();
+        ]);
+        $scheduledNeighbor->forceFill(['created_at' => $archiveTime])->saveQuietly();
+        $collectionOnly = $this->artwork([
+            'title' => 'Collection-only Neighbor',
+            'slug' => 'collection-only-neighbor',
+            'published' => false,
+        ]);
+        $collectionOnly->forceFill(['created_at' => $archiveTime])->saveQuietly();
+        $featuredOnly = $this->artwork([
+            'title' => 'Featured-only Neighbor',
+            'slug' => 'featured-only-neighbor',
+            'published' => false,
+            'featured' => true,
+        ]);
+        $featuredOnly->forceFill(['created_at' => $archiveTime])->saveQuietly();
+        $publicationGrant = Collection::query()->create([
+            'title' => 'Collection Publication Grant',
+            'slug' => 'collection-publication-grant',
+            'published' => true,
+            'publishes_members' => true,
+        ]);
+        $publicationGrant->artworks()->attach($collectionOnly);
 
         $collection = Collection::query()->create([
             'title' => 'Color Studies',
@@ -94,6 +116,95 @@ class ArtworkDetailPageTest extends TestCase
             ->assertSee('data-playlist-id="artwork-'.$artwork->id.'-recommendations"', false)
             ->assertSee('data-play-track-id="'.$track->id.'"', false)
             ->assertSee('data-queue-track-id="'.$track->id.'"', false);
+
+        $main = $this->mainContent($response->getContent());
+        $viewerMatched = preg_match(
+            '/<section\b(?=[^>]*\bdata-artwork-viewer\b)[^>]*>/',
+            $main,
+            $viewerMatches,
+            PREG_OFFSET_CAPTURE,
+        );
+        $detailsPosition = strpos($main, 'data-artwork-details');
+
+        $this->assertSame(1, $viewerMatched, 'The detail page must expose a stable artwork viewer element.');
+        $this->assertNotFalse($detailsPosition, 'The below-image title and description need a stable details hook.');
+        $viewerPosition = $viewerMatches[0][1] ?? false;
+        $this->assertNotFalse($viewerPosition, 'The artwork viewer needs a stable position in the page.');
+        $this->assertLessThan($detailsPosition, $viewerPosition, 'The artwork viewer must render before its title and description.');
+
+        $viewerMarkup = substr($main, $viewerPosition, $detailsPosition - $viewerPosition);
+        $viewerOpeningTag = $viewerMatches[0][0] ?? '';
+        $technicalMetaPosition = strpos($main, 'class="artwork-technical-meta"', $detailsPosition);
+        $this->assertNotFalse($technicalMetaPosition, 'Expected technical metadata after the artwork title and description.');
+        $detailsMarkup = substr($main, $detailsPosition, $technicalMetaPosition - $detailsPosition);
+        $this->assertStringContainsString('id="artwork-viewer"', $viewerOpeningTag);
+        $this->assertStringContainsString('tabindex="-1"', $viewerOpeningTag);
+        $this->assertStringContainsString('aria-label="Artwork viewer for Chromatic Memory"', $viewerOpeningTag);
+        $this->assertStringContainsString($artwork->display_url, $viewerMarkup);
+        $this->assertStringContainsString('<nav class="artwork-browser-navigation" aria-label="Browse all published artwork">', $viewerMarkup);
+        $this->assertStringContainsString('<h1>Chromatic Memory</h1>', $detailsMarkup);
+        $this->assertStringContainsString('A layered study in blue and gold.', $detailsMarkup);
+
+        $previousLink = $this->navigationAnchor($viewerMarkup, 'data-artwork-previous');
+        $this->assertStringContainsString('href="'.route('artworks.show', $previous).'"', $previousLink);
+        $this->assertStringContainsString('rel="prev"', $previousLink);
+        $this->assertStringContainsString('aria-label="Previous artwork: Archive Previous"', $previousLink);
+        $this->assertStringContainsString('aria-keyshortcuts="ArrowLeft"', $previousLink);
+        $this->assertStringContainsString('wire:navigate', $previousLink);
+
+        $nextLink = $this->navigationAnchor($viewerMarkup, 'data-artwork-next');
+        $this->assertStringContainsString('href="'.route('artworks.show', $next).'"', $nextLink);
+        $this->assertStringContainsString('rel="next"', $nextLink);
+        $this->assertStringContainsString('aria-label="Next artwork: Archive Next"', $nextLink);
+        $this->assertStringContainsString('aria-keyshortcuts="ArrowRight"', $nextLink);
+        $this->assertStringContainsString('wire:navigate', $nextLink);
+
+        foreach ([$draftNeighbor, $scheduledNeighbor, $collectionOnly, $featuredOnly] as $excludedArtwork) {
+            $this->assertStringNotContainsString(route('artworks.show', $excludedArtwork), $main);
+        }
+    }
+
+    public function test_artwork_navigation_has_explicit_non_wrapping_archive_boundaries(): void
+    {
+        Queue::fake();
+        $first = $this->artwork([
+            'title' => 'First Published Frame',
+            'slug' => 'first-published-frame',
+            'sort_order' => 20,
+        ]);
+        $last = $this->artwork([
+            'title' => 'Last Published Frame',
+            'slug' => 'last-published-frame',
+            'sort_order' => 10,
+        ]);
+
+        $firstResponse = $this->get(route('artworks.show', $first));
+        $firstResponse
+            ->assertOk()
+            ->assertViewHas('previousArtwork', fn (?Artwork $record): bool => $record === null)
+            ->assertViewHas('nextArtwork', fn (?Artwork $record): bool => $record?->is($last) === true);
+        $firstMain = $this->mainContent($firstResponse->getContent());
+        $this->assertStringNotContainsString('data-artwork-previous', $firstMain);
+        $this->assertSame(1, substr_count($firstMain, 'data-artwork-next'));
+        $this->assertMatchesRegularExpression(
+            '/<div\b(?=[^>]*\bdata-artwork-boundary="start")(?=[^>]*\baria-disabled="true")[^>]*>/',
+            $firstMain,
+        );
+        $this->assertStringContainsString('Start of published archive', $firstMain);
+
+        $lastResponse = $this->get(route('artworks.show', $last));
+        $lastResponse
+            ->assertOk()
+            ->assertViewHas('previousArtwork', fn (?Artwork $record): bool => $record?->is($first) === true)
+            ->assertViewHas('nextArtwork', fn (?Artwork $record): bool => $record === null);
+        $lastMain = $this->mainContent($lastResponse->getContent());
+        $this->assertSame(1, substr_count($lastMain, 'data-artwork-previous'));
+        $this->assertStringNotContainsString('data-artwork-next', $lastMain);
+        $this->assertMatchesRegularExpression(
+            '/<div\b(?=[^>]*\bdata-artwork-boundary="end")(?=[^>]*\baria-disabled="true")[^>]*>/',
+            $lastMain,
+        );
+        $this->assertStringContainsString('End of published archive', $lastMain);
     }
 
     public function test_draft_and_scheduled_artwork_pages_are_not_public(): void
@@ -178,5 +289,27 @@ class ArtworkDetailPageTest extends TestCase
             'sort_order' => 10,
             'published' => true,
         ], $attributes));
+    }
+
+    private function mainContent(string $html): string
+    {
+        $matched = preg_match('/<main\b[^>]*>(.*?)<\/main>/s', $html, $matches);
+
+        $this->assertSame(1, $matched, 'Expected the response to contain the public main element.');
+
+        return $matches[1] ?? '';
+    }
+
+    private function navigationAnchor(string $html, string $hook): string
+    {
+        $matched = preg_match(
+            '/<a\b(?=[^>]*\b'.preg_quote($hook, '/').'\b)[^>]*>/',
+            $html,
+            $matches,
+        );
+
+        $this->assertSame(1, $matched, 'Expected an artwork navigation anchor with '.$hook.'.');
+
+        return $matches[0] ?? '';
     }
 }

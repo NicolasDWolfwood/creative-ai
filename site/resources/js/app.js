@@ -544,6 +544,64 @@ function setupLightbox(signal) {
     signal.addEventListener('abort', () => close(false), { once: true });
 }
 
+let artworkNavigationPending = false;
+
+function setupArtworkNavigation(signal) {
+    const viewer = document.querySelector('[data-artwork-viewer]');
+
+    if (!viewer) return;
+
+    viewer.addEventListener('click', (event) => {
+        const link = event.target instanceof Element
+            ? event.target.closest('a[data-artwork-previous][href], a[data-artwork-next][href]')
+            : null;
+
+        if (!link || !viewer.contains(link)) return;
+        if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+        artworkNavigationPending = true;
+    }, { capture: true, signal });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        if (event.defaultPrevented || event.repeat || event.isComposing) return;
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+        const target = event.target instanceof Element ? event.target : null;
+        const formControl = target?.closest('input, textarea, select, option, button, [role="textbox"], [role="slider"], audio, video');
+
+        if (formControl || (target instanceof HTMLElement && target.isContentEditable)) return;
+
+        const openDialog = document.querySelector('dialog[open], [role="dialog"][aria-hidden="false"], [role="dialog"].open');
+
+        if (document.body.classList.contains('lightbox-open') || openDialog) return;
+
+        const selector = event.key === 'ArrowLeft'
+            ? 'a[data-artwork-previous][href]'
+            : 'a[data-artwork-next][href]';
+        const link = viewer.querySelector(selector);
+
+        if (!link || link.getAttribute('aria-disabled') === 'true') return;
+
+        event.preventDefault();
+        artworkNavigationPending = true;
+        link.click();
+    }, { signal });
+}
+
+function focusArtworkViewer() {
+    const viewer = document.querySelector('[data-artwork-viewer]');
+
+    if (!viewer) return;
+
+    requestAnimationFrame(() => {
+        if (!viewer.isConnected) return;
+
+        viewer.scrollIntoView({ behavior: 'instant', block: 'start' });
+        viewer.focus({ preventScroll: true });
+    });
+}
+
 function setupGalleryPagination(signal) {
     const results = document.querySelector('[data-gallery-results]');
     const pagination = document.querySelector('[data-gallery-pagination]');
@@ -789,6 +847,7 @@ function setupPage({ handleHash = true } = {}) {
     setupGalleryPagination(signal);
     setupReveal(signal);
     setupLightbox(signal);
+    setupArtworkNavigation(signal);
     setupCollectionSwitcher();
     setupTagFilters();
 
@@ -811,9 +870,16 @@ document.addEventListener('livewire:navigate', (event) => {
 });
 document.addEventListener('livewire:navigating', () => pageController?.abort());
 document.addEventListener('livewire:navigated', () => {
+    const shouldFocusArtworkViewer = artworkNavigationPending && !restoringHistory;
+
+    artworkNavigationPending = false;
     setupPage({ handleHash: !restoringHistory });
 
-    if (restoringHistory) restoreHistoryFocus();
+    if (restoringHistory) {
+        restoreHistoryFocus();
+    } else if (shouldFocusArtworkViewer) {
+        focusArtworkViewer();
+    }
 
     restoringHistory = false;
 });
