@@ -110,7 +110,7 @@ class StoryOpportunityService
         /** @var EloquentBuilder $query */
         $query = match ($type) {
             PostMediaType::Track => Track::query()->publiclyAvailable(),
-            PostMediaType::Artwork => Artwork::query()->published(),
+            PostMediaType::Artwork => Artwork::query()->published()->withPublicRenditions(),
             PostMediaType::Collection => Collection::query()->published(),
             PostMediaType::Album => Album::query()->published(),
             PostMediaType::Playlist => Playlist::query()->published(),

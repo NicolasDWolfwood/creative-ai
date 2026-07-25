@@ -12,10 +12,16 @@ class AlbumCoverService
     {
         abort_unless(filled($album->embedded_cover_path) && app(PrivateMediaService::class)->sourceDisk($album->embedded_cover_path)->exists($album->embedded_cover_path), 422, 'No embedded cover is available.');
         $extension = pathinfo($album->embedded_cover_path, PATHINFO_EXTENSION) ?: 'jpg';
-        $path = 'artworks/originals/album-'.$album->id.'-'.bin2hex(random_bytes(5)).'.'.$extension;
+        $path = 'artworks/masters/album-'.$album->id.'-'.bin2hex(random_bytes(5)).'.'.$extension;
         $contents = app(PrivateMediaService::class)->sourceDisk($album->embedded_cover_path)->get($album->embedded_cover_path);
         Storage::disk('local')->put($path, $contents);
-        $artwork = Artwork::create(['title' => $album->title.' cover', 'image_path' => $path, 'original_filename' => basename($album->embedded_cover_path), 'published' => false]);
+        $artwork = Artwork::create([
+            'title' => $album->title.' cover',
+            'master_path' => $path,
+            'signature_mode' => Artwork::SIGNATURE_MODE_AUTOMATIC,
+            'original_filename' => basename($album->embedded_cover_path),
+            'published' => false,
+        ]);
         $album->update(['cover_artwork_id' => $artwork->id, 'cover_preference' => 'artwork']);
 
         return $artwork;

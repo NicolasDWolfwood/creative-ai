@@ -27,6 +27,14 @@ class MediaController extends Controller
 
     public function artwork(Artwork $artwork, string $variant, Request $request, PrivateMediaService $media): BinaryFileResponse
     {
+        if ($variant === 'master') {
+            abort_unless($this->isAdministrator($request), 404);
+            $path = $artwork->masterPath();
+            abort_if(blank($path), 404);
+
+            return $this->file($media, $path, public: false);
+        }
+
         $public = $artwork->isPubliclyAvailable();
         abort_unless($public || $this->isAdministrator($request), 404);
         $path = match ($variant) {

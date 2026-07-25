@@ -141,9 +141,32 @@ class ArtworkDetailPageTest extends TestCase
         $this->assertStringContainsString('tabindex="-1"', $viewerOpeningTag);
         $this->assertStringContainsString('aria-label="Artwork viewer for Chromatic Memory"', $viewerOpeningTag);
         $this->assertStringContainsString($artwork->display_url, $viewerMarkup);
+        $this->assertStringContainsString('data-artwork-preview-image', $viewerMarkup);
+        $this->assertStringContainsString('draggable="false"', $viewerMarkup);
         $this->assertStringContainsString('<nav class="artwork-browser-navigation" aria-label="Browse all published artwork">', $viewerMarkup);
         $this->assertStringContainsString('<h1>Chromatic Memory</h1>', $detailsMarkup);
         $this->assertStringContainsString('A layered study in blue and gold.', $detailsMarkup);
+
+        $largerImageMatched = preg_match(
+            '/<a\b(?=[^>]*\bdata-lightbox\b)[^>]*>View larger image<\/a>/',
+            $main,
+            $largerImageMatches,
+        );
+        $this->assertSame(1, $largerImageMatched, 'The larger rendition should open through the site lightbox.');
+        $largerImageLink = $largerImageMatches[0] ?? '';
+        $this->assertStringContainsString('href="'.$artwork->public_image_url.'"', $largerImageLink);
+        $this->assertStringContainsString('data-full="'.$artwork->public_image_url.'"', $largerImageLink);
+        $this->assertStringContainsString('data-title="Chromatic Memory"', $largerImageLink);
+        $this->assertStringContainsString('data-description="A layered study in blue and gold."', $largerImageLink);
+        $this->assertStringContainsString('data-alt="Blue and gold geometric forms overlap on a dark field."', $largerImageLink);
+        $this->assertStringContainsString('aria-haspopup="dialog"', $largerImageLink);
+        $this->assertStringContainsString('aria-controls="artwork-lightbox"', $largerImageLink);
+        $this->assertStringNotContainsString('target="_blank"', $largerImageLink);
+        $this->assertStringContainsString('id="artwork-lightbox"', $response->getContent());
+        $this->assertMatchesRegularExpression(
+            '/<img\b(?=[^>]*\bdata-lightbox-image\b)(?=[^>]*\bdata-artwork-preview-image\b)(?=[^>]*\bdraggable="false")[^>]*>/',
+            $response->getContent(),
+        );
 
         $previousLink = $this->navigationAnchor($viewerMarkup, 'data-artwork-previous');
         $this->assertStringContainsString('href="'.route('artworks.show', $previous).'"', $previousLink);

@@ -299,7 +299,9 @@ class StudioWorkQueueService
                     ->where(function (Builder $query): void {
                         $query
                             ->where('cover_preference', 'artwork')
-                            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query->published());
+                            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query
+                                ->published()
+                                ->withPublicRenditions());
                     })
                     ->orWhere(function (Builder $query): void {
                         $query
@@ -307,15 +309,21 @@ class StudioWorkQueueService
                             ->where(function (Builder $query): void {
                                 $query->whereNull('embedded_cover_path')->orWhere('embedded_cover_path', '');
                             })
-                            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query->published());
+                            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query
+                                ->published()
+                                ->withPublicRenditions());
                     });
             });
         $playlists = Playlist::query()
             ->published()
-            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query->published());
+            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query
+                ->published()
+                ->withPublicRenditions());
         $tracks = Track::query()
             ->published()
-            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query->published())
+            ->whereDoesntHave('coverArtwork', fn (Builder $query) => $query
+                ->published()
+                ->withPublicRenditions())
             ->whereDoesntHave('album', function (Builder $query): void {
                 $query->published()->where(function (Builder $query): void {
                     $query
@@ -323,7 +331,9 @@ class StudioWorkQueueService
                         ->orWhere(function (Builder $query): void {
                             $query
                                 ->where('cover_preference', 'artwork')
-                                ->whereHas('coverArtwork', fn (Builder $query) => $query->published());
+                                ->whereHas('coverArtwork', fn (Builder $query) => $query
+                                    ->published()
+                                    ->withPublicRenditions());
                         })
                         ->orWhere(function (Builder $query): void {
                             $query
@@ -332,7 +342,9 @@ class StudioWorkQueueService
                                     $query
                                         ->whereNotNull('embedded_cover_path')
                                         ->where('embedded_cover_path', '!=', '')
-                                        ->orWhereHas('coverArtwork', fn (Builder $query) => $query->published());
+                                        ->orWhereHas('coverArtwork', fn (Builder $query) => $query
+                                            ->published()
+                                            ->withPublicRenditions());
                                 });
                         });
                 });

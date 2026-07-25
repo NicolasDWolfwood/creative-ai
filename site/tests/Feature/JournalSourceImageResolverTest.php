@@ -203,6 +203,50 @@ class JournalSourceImageResolverTest extends TestCase
         $this->assertSame($artwork->display_path, $directCandidate->sourcePath);
     }
 
+    public function test_music_sources_never_snapshot_an_inactive_unsigned_artwork_cover(): void
+    {
+        $artwork = $this->artwork('Formerly unsigned cover', true, [
+            'display_path' => 'artworks/display/formerly-unsigned.jpg',
+            'thumb_path' => 'artworks/thumbs/formerly-unsigned.jpg',
+            'signature_mode' => Artwork::SIGNATURE_MODE_AUTOMATIC,
+            'signature_active_treatment' => 'unsigned',
+        ]);
+        $this->store($artwork->image_path);
+        $this->store($artwork->display_path);
+        $this->store($artwork->thumb_path);
+        $this->store('albums/embedded/safe-fallback.png');
+        $album = Album::query()->create([
+            'title' => 'Fallback Album',
+            'cover_artwork_id' => $artwork->getKey(),
+            'embedded_cover_path' => 'albums/embedded/safe-fallback.png',
+            'cover_preference' => 'auto',
+            'published' => true,
+        ]);
+        $playlist = Playlist::query()->create([
+            'title' => 'Closed Cover Playlist',
+            'cover_artwork_id' => $artwork->getKey(),
+            'published' => true,
+        ]);
+        $track = Track::withoutEvents(fn (): Track => Track::query()->create([
+            'album_id' => $album->getKey(),
+            'cover_artwork_id' => $artwork->getKey(),
+            'title' => 'Fallback Track',
+            'slug' => 'fallback-track',
+            'audio_path' => 'tracks/fallback.mp3',
+            'standalone_published' => false,
+        ]));
+        $resolver = app(JournalSourceImageResolver::class);
+
+        $albumCandidate = $resolver->resolve($album);
+        $this->assertNotNull($albumCandidate);
+        $this->assertSame('albums/embedded/safe-fallback.png', $albumCandidate->sourcePath);
+        $this->assertNull($resolver->resolve($playlist));
+
+        $trackCandidate = $resolver->resolve($track);
+        $this->assertNotNull($trackCandidate);
+        $this->assertSame('albums/embedded/safe-fallback.png', $trackCandidate->sourcePath);
+    }
+
     public function test_missing_or_non_public_source_bytes_fail_closed(): void
     {
         $missing = $this->artwork('Missing artwork', true);

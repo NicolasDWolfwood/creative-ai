@@ -47,6 +47,7 @@ class Album extends Model
         }
 
         $artworkCover = $this->coverArtwork?->isPubliclyPublished()
+            && $this->coverArtwork->hasPublicRenditions()
             ? $this->coverArtwork->thumb_url
             : null;
 

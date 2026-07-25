@@ -73,7 +73,9 @@ class JournalSourceImageResolver
         }
 
         $coverArtwork = $album->coverArtwork()->first();
-        $publicArtwork = $coverArtwork?->isPubliclyPublished() ? $coverArtwork : null;
+        $publicArtwork = $this->publishedArtworkHasActiveRenditions($coverArtwork)
+            ? $coverArtwork
+            : null;
 
         // Preserve Album::cover_url precedence exactly. If a configured source
         // exists but its bytes are missing, fail closed instead of silently
@@ -108,7 +110,7 @@ class JournalSourceImageResolver
     {
         $artwork = $playlist->coverArtwork()->first();
 
-        if (! $artwork?->isPubliclyPublished()) {
+        if (! $this->publishedArtworkHasActiveRenditions($artwork)) {
             return null;
         }
 
@@ -123,7 +125,7 @@ class JournalSourceImageResolver
     {
         $artwork = $track->coverArtwork()->first();
 
-        if ($artwork?->isPubliclyPublished()) {
+        if ($this->publishedArtworkHasActiveRenditions($artwork)) {
             return $this->artworkCandidate(
                 $artwork,
                 PostMediaType::Track,
@@ -167,6 +169,12 @@ class JournalSourceImageResolver
     private function pathExists(string $path): bool
     {
         return filled($path) && $this->media->sourceDisk($path)->exists($path);
+    }
+
+    private function publishedArtworkHasActiveRenditions(?Artwork $artwork): bool
+    {
+        return $artwork?->isPubliclyPublished() === true
+            && $artwork->hasPublicRenditions();
     }
 
     private function altText(mixed $value, string $fallback): string

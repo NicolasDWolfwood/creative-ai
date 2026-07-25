@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 class ImageVariantService
@@ -11,13 +10,30 @@ class ImageVariantService
     public function __construct(
         protected AiSettings $aiSettings,
         protected PrivateMediaService $privateMedia,
+        protected ArtworkSignatureRenderer $signatureRenderer,
     ) {}
 
     /**
-     * @return array{display_path:string, thumb_path:string, width:int, height:int}
+     * @param  array<string, mixed>  $recipe
+     * @return array{
+     *     image_path:string,
+     *     display_path:string,
+     *     thumb_path:string,
+     *     width:int,
+     *     height:int,
+     *     public_width:int,
+     *     public_height:int,
+     *     signature_resolved_tone:string|null,
+     *     signature_review_recommended:bool
+     * }
      */
-    public function createVariants(string $sourcePath, int $artworkId, string $generationToken): array
-    {
+    public function createVariants(
+        string $sourcePath,
+        int $artworkId,
+        string $generationToken,
+        array $recipe,
+        string $recipeFingerprint,
+    ): array {
         $sourceDisk = $this->privateMedia->sourceDisk($sourcePath);
         $disk = Storage::disk('local');
 
@@ -34,59 +50,62 @@ class ImageVariantService
 
         $this->guardSourcePixels($width, $height, $sourcePath);
 
-        ['display_path' => $displayPath, 'thumb_path' => $thumbPath] = $this->variantPaths(
-            $sourcePath,
+        $paths = $this->variantPaths(
             $artworkId,
             $generationToken,
+            $recipeFingerprint,
         );
 
-        $displayJpeg = $this->resizeToJpegString(
-            $absoluteSource,
-            $type,
-            config('creative_ai.image_variants.display', 1600),
-            86,
-        );
-        $thumbJpeg = $this->resizeToJpegString(
-            $absoluteSource,
-            $type,
-            config('creative_ai.image_variants.thumb', 720),
-            86,
-        );
+        if (in_array($recipe['treatment'] ?? null, ['automatic', 'black', 'white'], true)) {
+            $signaturePath = (string) ($recipe['signature_path'] ?? '');
+
+            if ($signaturePath !== '') {
+                $signatureDisk = $this->privateMedia->sourceDisk($signaturePath);
+                $recipe['signature_path'] = $signatureDisk->path($signaturePath);
+            }
+        } else {
+            $recipe['signature_path'] = null;
+        }
+
+        $rendered = $this->signatureRenderer->render($absoluteSource, $recipe);
 
         try {
-            $this->writeAtomically($disk->path($displayPath), $displayJpeg);
-            $this->writeAtomically($disk->path($thumbPath), $thumbJpeg);
+            $this->writeAtomically($disk->path($paths['image_path']), $rendered['large_jpeg']);
+            $this->writeAtomically($disk->path($paths['display_path']), $rendered['display_jpeg']);
+            $this->writeAtomically($disk->path($paths['thumb_path']), $rendered['thumb_jpeg']);
         } catch (\Throwable $exception) {
-            $disk->delete([$displayPath, $thumbPath]);
+            $disk->delete(array_values($paths));
 
             throw $exception;
         }
 
+        [$publicWidth, $publicHeight] = getimagesizefromstring($rendered['large_jpeg']) ?: [0, 0];
+
         return [
-            'display_path' => $displayPath,
-            'thumb_path' => $thumbPath,
-            'width' => $width,
-            'height' => $height,
+            ...$paths,
+            'width' => $rendered['width'],
+            'height' => $rendered['height'],
+            'public_width' => $publicWidth,
+            'public_height' => $publicHeight,
+            'signature_resolved_tone' => $rendered['resolved_tone'],
+            'signature_review_recommended' => $rendered['review_recommended'],
         ];
     }
 
     /**
-     * Use both the artwork id and source path so a stale replacement job can
-     * never overwrite the variants generated for the current source image.
+     * The active recipe and attempt token make every output immutable. A stale
+     * job can write only its own unreachable candidates.
      *
-     * @return array{display_path:string, thumb_path:string}
+     * @return array{image_path:string, display_path:string, thumb_path:string}
      */
-    public function variantPaths(string $sourcePath, int $artworkId, string $generationToken): array
+    public function variantPaths(int $artworkId, string $generationToken, string $recipeFingerprint): array
     {
-        $baseName = Str::of(pathinfo($sourcePath, PATHINFO_FILENAME))
-            ->slug()
-            ->limit(80, '')
-            ->value() ?: 'image';
-        $sourceKey = substr(hash('sha256', $sourcePath), 0, 12);
+        $recipeKey = substr($recipeFingerprint, 0, 16);
         $tokenKey = str_replace('-', '', $generationToken);
-        $filename = "{$artworkId}-{$baseName}-{$sourceKey}-{$tokenKey}.jpg";
+        $filename = "{$artworkId}-{$recipeKey}-{$tokenKey}.jpg";
 
         return [
+            'image_path' => "artworks/large/{$filename}",
             'display_path' => "artworks/display/{$filename}",
             'thumb_path' => "artworks/thumbs/{$filename}",
         ];

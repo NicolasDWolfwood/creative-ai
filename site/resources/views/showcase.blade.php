@@ -43,7 +43,7 @@
                         @php($coverArtwork = $collectionCovers->get($collection->getKey()))
                         @php($cover = $coverArtwork?->thumb_url ?: $collectionCoverPlaceholder)
                         <a class="collection-tile {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}#gallery" @if ($selectedCollection?->is($collection)) aria-current="page" @endif data-navigation-focus-key="collection-tile-{{ $collection->getKey() }}" data-reveal wire:navigate>
-                            <img src="{{ $cover }}" alt="" loading="lazy" @if ($coverArtwork) data-cover-artwork-id="{{ $coverArtwork->getKey() }}" @else data-collection-cover-placeholder @endif>
+                            <img src="{{ $cover }}" alt="" loading="lazy" @if ($coverArtwork) data-cover-artwork-id="{{ $coverArtwork->getKey() }}" data-artwork-preview-image draggable="false" @else data-collection-cover-placeholder @endif>
                             <span><strong>{{ $collection->title }}</strong><small>{{ $collection->artworks_count }} works</small></span>
                         </a>
                     @endforeach
@@ -92,7 +92,7 @@
                             @php($coverArtwork = $collectionCovers->get($collection->getKey()))
                             @php($cover = $coverArtwork?->thumb_url ?: $collectionCoverPlaceholder)
                             <a class="collection-switcher-link {{ $selectedCollection?->is($collection) ? 'active' : '' }}" href="{{ route('collections.show', $collection) }}#gallery" @if ($selectedCollection?->is($collection)) aria-current="page" @endif data-collection-switcher-item data-navigation-focus-key="collection-switcher-{{ $collection->getKey() }}" wire:navigate>
-                                <img class="collection-switcher-thumbnail" src="{{ $cover }}" alt="" loading="lazy">
+                                <img class="collection-switcher-thumbnail" src="{{ $cover }}" alt="" loading="lazy" @if ($coverArtwork) data-artwork-preview-image draggable="false" @endif>
                                 <span>
                                     <span class="collection-switcher-title"><strong>{{ $collection->title }}</strong>@if ($selectedCollection?->is($collection))<span class="collection-switcher-current" aria-hidden="true">Current</span>@endif</span>
                                     <small>{{ $collection->artworks_count }} works</small>
@@ -116,7 +116,7 @@
                 @forelse ($artworks as $artwork)
                     <article class="art-tile" data-gallery-artwork-id="{{ $artwork->getKey() }}">
                         <a class="art-tile-link" href="{{ route('artworks.show', $selectedCollection ? ['artwork' => $artwork, 'collection' => $selectedCollection->slug] : $artwork) }}" wire:navigate>
-                            <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}">
+                            <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}" data-artwork-preview-image draggable="false">
                             <span><strong>{{ $artwork->title }}</strong><small>{{ $artwork->tags->take(2)->pluck('name')->implode(' · ') }}</small></span>
                         </a>
                         <button class="art-quick-view" type="button" data-lightbox data-title="{{ $artwork->title }}" data-description="{{ $artwork->description }}" data-alt="{{ $artwork->image_alt }}" data-full="{{ $artwork->display_url }}" aria-label="Quick view {{ $artwork->title }}">

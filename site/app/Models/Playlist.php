@@ -73,6 +73,7 @@ class Playlist extends Model
     public function getCoverUrlAttribute(): ?string
     {
         return $this->coverArtwork?->isPubliclyPublished()
+            && $this->coverArtwork->hasPublicRenditions()
             ? $this->coverArtwork->thumb_url
             : null;
     }

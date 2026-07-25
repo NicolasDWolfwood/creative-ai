@@ -71,8 +71,8 @@ class ArtworkController extends Controller
             'contentUrl' => $imageUrl,
             'thumbnailUrl' => url($artwork->thumb_url),
             'caption' => $artwork->image_alt,
-            'width' => $artwork->width,
-            'height' => $artwork->height,
+            'width' => $artwork->public_width ?: $artwork->width,
+            'height' => $artwork->public_height ?: $artwork->height,
         ], fn (mixed $value): bool => $value !== null && $value !== '');
 
         $structuredData = [
@@ -166,7 +166,7 @@ class ArtworkController extends Controller
                 ->publiclyAvailable()
                 ->whereHas('collections', fn (Builder $query) => $query->whereKey($collection->getKey()));
         } else {
-            $query->published();
+            $query->published()->withPublicRenditions();
         }
 
         return $query

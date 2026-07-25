@@ -23,8 +23,11 @@ return [
         ],
     ],
     'image_variants' => [
+        'large' => 2560,
         'thumb' => 720,
         'display' => 1600,
+        'jpeg_quality' => 86,
+        'matte_rgb' => [12, 13, 16],
         'max_source_pixels' => 20_000_000,
     ],
     'ai' => [

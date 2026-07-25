@@ -30,9 +30,14 @@ class ArtworkAiMetadataService
      *     content_warning:string
      * }
      */
-    public function analyze(Artwork $artwork): array
+    public function analyze(Artwork $artwork, ?string $masterPath = null): array
     {
-        $sourcePath = $artwork->availableDisplayPath();
+        $sourcePath = $masterPath ?: $artwork->masterPath();
+
+        if (blank($sourcePath)) {
+            throw new RuntimeException('This artwork has no private master image to analyze.');
+        }
+
         $analysisImage = $this->imageVariantService->createAnalysisImageData($sourcePath);
         $prompt = $this->prompt($artwork, $analysisImage);
         $schema = $this->schema();

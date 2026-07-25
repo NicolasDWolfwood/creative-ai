@@ -467,6 +467,8 @@ function setupLightbox(signal) {
     const image = panel.querySelector('[data-lightbox-image]');
     const title = panel.querySelector('[data-lightbox-title]');
     const description = panel.querySelector('[data-lightbox-description]');
+    const previous = panel.querySelector('[data-lightbox-prev]');
+    const next = panel.querySelector('[data-lightbox-next]');
 
     const items = () => [...document.querySelectorAll('[data-lightbox]')]
         .filter((trigger, index, triggers) => triggers.findIndex((candidate) => candidate.dataset.full === trigger.dataset.full) === index);
@@ -478,8 +480,14 @@ function setupLightbox(signal) {
     const show = (index) => {
         const availableItems = items();
         if (!availableItems.length) return;
+        const hasMultipleItems = availableItems.length > 1;
         activeIndex = (index + availableItems.length) % availableItems.length;
         const button = availableItems[activeIndex];
+        [previous, next].forEach((control) => {
+            if (!control) return;
+            control.hidden = !hasMultipleItems;
+            control.disabled = !hasMultipleItems;
+        });
         image.src = button.dataset.full;
         image.alt = button.dataset.alt || button.dataset.title || '';
         title.textContent = button.dataset.title || '';
@@ -489,6 +497,10 @@ function setupLightbox(signal) {
     document.addEventListener('click', (event) => {
         const trigger = event.target instanceof Element ? event.target.closest('[data-lightbox]') : null;
         if (!trigger) return;
+        if (trigger instanceof HTMLAnchorElement) {
+            if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+            event.preventDefault();
+        }
 
         opener = trigger;
         const availableItems = items();
@@ -517,8 +529,8 @@ function setupLightbox(signal) {
     };
 
     panel.querySelector('[data-lightbox-close]')?.addEventListener('click', close, { signal });
-    panel.querySelector('[data-lightbox-prev]')?.addEventListener('click', () => show(activeIndex - 1), { signal });
-    panel.querySelector('[data-lightbox-next]')?.addEventListener('click', () => show(activeIndex + 1), { signal });
+    previous?.addEventListener('click', () => show(activeIndex - 1), { signal });
+    next?.addEventListener('click', () => show(activeIndex + 1), { signal });
     panel.addEventListener('click', (event) => {
         if (event.target === panel) close();
     }, { signal });
@@ -542,6 +554,21 @@ function setupLightbox(signal) {
     }, { signal });
 
     signal.addEventListener('abort', () => close(false), { once: true });
+}
+
+function setupArtworkPreviewDeterrence(signal) {
+    const preventCasualCopy = (event) => {
+        const image = event.target instanceof Element
+            ? event.target.closest('[data-artwork-preview-image]')
+            : null;
+
+        if (!image) return;
+
+        event.preventDefault();
+    };
+
+    document.addEventListener('contextmenu', preventCasualCopy, { signal });
+    document.addEventListener('dragstart', preventCasualCopy, { signal });
 }
 
 let artworkNavigationPending = false;
@@ -847,6 +874,7 @@ function setupPage({ handleHash = true } = {}) {
     setupGalleryPagination(signal);
     setupReveal(signal);
     setupLightbox(signal);
+    setupArtworkPreviewDeterrence(signal);
     setupArtworkNavigation(signal);
     setupCollectionSwitcher();
     setupTagFilters();

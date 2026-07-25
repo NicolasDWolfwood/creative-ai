@@ -47,7 +47,7 @@
             <div class="track-artwork-grid">
                 @foreach ($artworks as $artwork)
                     <a class="track-artwork-card" href="{{ route('artworks.show', $artwork) }}" wire:navigate>
-                        <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy">
+                        <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" data-artwork-preview-image draggable="false">
                         <span><strong>{{ $artwork->title }}</strong><small>View artwork</small></span>
                     </a>
                 @endforeach

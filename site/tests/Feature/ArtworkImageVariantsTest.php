@@ -60,7 +60,7 @@ class ArtworkImageVariantsTest extends TestCase
         $this->assertSame(800, $artwork->height);
     }
 
-    public function test_replacement_clears_paths_stale_job_cannot_overwrite_and_old_files_are_removed(): void
+    public function test_replacement_keeps_active_paths_until_stale_job_is_rejected_and_new_set_is_ready(): void
     {
         Storage::fake('public');
         Queue::fake();
@@ -73,17 +73,17 @@ class ArtworkImageVariantsTest extends TestCase
         $oldThumb = $artwork->thumb_path;
         $newSource = $this->storeImage('new.jpg', 600, 900);
 
-        $artwork->image_path = $newSource;
+        $artwork->master_path = $newSource;
         $artwork->save();
         $artwork->refresh();
 
-        $this->assertNull($artwork->display_path);
-        $this->assertNull($artwork->thumb_path);
+        $this->assertSame($oldDisplay, $artwork->display_path);
+        $this->assertSame($oldThumb, $artwork->thumb_path);
         $this->assertStringContainsString(route('media.artworks.show', [$artwork, 'variant' => 'thumb']), $artwork->thumb_url);
 
         $this->runGeneration($oldJob);
         $this->assertSame(Artwork::VARIANT_STATUS_QUEUED, $artwork->refresh()->variant_status);
-        $this->assertNull($artwork->display_path);
+        $this->assertSame($oldDisplay, $artwork->display_path);
 
         $newJob = $this->queuedGenerationFor($newSource);
         $this->runGeneration($newJob);
@@ -137,11 +137,11 @@ class ArtworkImageVariantsTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('safe pixel limit');
 
-        app(ImageVariantService::class)->createVariants(
-            $sourcePath,
-            999,
-            '00000000-0000-4000-8000-000000000999',
-        );
+        $artwork = $this->createWithoutObservers($sourcePath);
+        $job = GenerateArtworkVariants::prepareFor($artwork);
+        $this->assertInstanceOf(GenerateArtworkVariants::class, $job);
+
+        $this->runGeneration($job);
     }
 
     public function test_upload_validation_uses_the_same_safe_pixel_limit(): void
@@ -262,7 +262,7 @@ class ArtworkImageVariantsTest extends TestCase
             ->expectsOutputToContain('1 generated')
             ->assertSuccessful();
         $artwork->refresh();
-        $firstPaths = [$artwork->display_path, $artwork->thumb_path];
+        $firstPaths = [$artwork->image_path, $artwork->display_path, $artwork->thumb_path];
         $generatedAt = $artwork->variants_generated_at;
 
         $this->artisan('creative-ai:artwork-variants:regenerate --sync')
@@ -270,8 +270,30 @@ class ArtworkImageVariantsTest extends TestCase
             ->assertSuccessful();
         $artwork->refresh();
 
-        $this->assertSame($firstPaths, [$artwork->display_path, $artwork->thumb_path]);
+        $this->assertSame($firstPaths, [
+            $artwork->image_path,
+            $artwork->display_path,
+            $artwork->thumb_path,
+        ]);
         $this->assertTrue($generatedAt->equalTo($artwork->variants_generated_at));
+
+        Storage::disk('local')->delete($artwork->image_path);
+
+        $this->artisan('creative-ai:artwork-variants:regenerate --sync')
+            ->expectsOutputToContain('1 generated')
+            ->assertSuccessful();
+        $artwork->refresh();
+
+        $this->assertNotSame($firstPaths, [
+            $artwork->image_path,
+            $artwork->display_path,
+            $artwork->thumb_path,
+        ]);
+        Storage::disk('local')->assertExists([
+            $artwork->image_path,
+            $artwork->display_path,
+            $artwork->thumb_path,
+        ]);
 
         $stuckSource = $this->storeImage('stuck.jpg', 700, 500);
         $stuck = $this->createWithoutObservers($stuckSource, [
@@ -296,7 +318,7 @@ class ArtworkImageVariantsTest extends TestCase
         $this->artisan('creative-ai:artwork-variants:regenerate --sync')->assertFailed();
         $missing->refresh();
         $this->assertSame(Artwork::VARIANT_STATUS_FAILED, $missing->variant_status);
-        $this->assertSame('The original artwork image is missing from public storage.', $missing->variant_error);
+        $this->assertSame('The private artwork master is missing from media storage.', $missing->variant_error);
         $this->assertFalse($missing->hasAvailableImage());
         $updatedAt = $missing->updated_at;
 

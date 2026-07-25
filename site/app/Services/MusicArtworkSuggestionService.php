@@ -34,6 +34,7 @@ class MusicArtworkSuggestionService
 
         return Artwork::query()
             ->published()
+            ->withPublicRenditions()
             ->whereHas('tags', fn ($query) => $query->whereKey($tagIds))
             ->with(['tags' => fn ($query) => $query->whereKey($tagIds)])
             ->get()

@@ -24,7 +24,7 @@ class PostController extends Controller
     public function index(): View
     {
         $posts = Post::query()->latestPublished()->paginate(12);
-        $heroArtwork = Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first();
+        $heroArtwork = Artwork::query()->published()->withPublicRenditions()->orderByDesc('featured')->orderByDesc('sort_order')->first();
 
         return view('posts.index', [
             'posts' => $posts,

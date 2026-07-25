@@ -522,6 +522,7 @@ PROMPT);
 
         return Artwork::query()
             ->published()
+            ->withPublicRenditions()
             ->whereKey($ids->all())
             ->pluck('id')
             ->map(fn (mixed $id): int => (int) $id)
