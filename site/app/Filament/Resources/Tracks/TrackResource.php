@@ -46,11 +46,11 @@ class TrackResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-musical-note';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Music Library';
+    protected static string|\UnitEnum|null $navigationGroup = 'Music';
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Track library';
+    protected static ?string $navigationLabel = 'Tracks';
 
     protected static ?string $recordTitleAttribute = 'title';
 

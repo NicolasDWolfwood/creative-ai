@@ -34,9 +34,9 @@ class ArtworkSignatureConfiguration extends Page
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-pencil';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Publishing';
+    protected static string|\UnitEnum|null $navigationGroup = 'Showcase';
 
-    protected static ?int $navigationSort = 15;
+    protected static ?int $navigationSort = 30;
 
     protected static ?string $slug = 'artwork-signatures';
 

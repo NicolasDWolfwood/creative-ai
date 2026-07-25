@@ -36,9 +36,9 @@ class AlbumResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-circle-stack';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Music Library';
+    protected static string|\UnitEnum|null $navigationGroup = 'Music';
 
-    protected static ?int $navigationSort = 15;
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $recordTitleAttribute = 'title';
 

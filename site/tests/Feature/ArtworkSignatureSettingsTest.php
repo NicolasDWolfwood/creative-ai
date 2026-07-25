@@ -3,8 +3,6 @@
 namespace Tests\Feature;
 
 use App\Filament\Pages\ArtworkSignatureConfiguration;
-use App\Filament\Resources\SiteSettings\SiteSettingResource;
-use App\Models\SiteSetting;
 use App\Models\User;
 use App\Rules\ValidArtworkSignatureMask;
 use App\Services\ArtworkSignatureSettings;
@@ -96,17 +94,8 @@ class ArtworkSignatureSettingsTest extends TestCase
         ]);
     }
 
-    public function test_configuration_is_admin_only_and_reserved_from_generic_site_settings(): void
+    public function test_configuration_is_admin_only(): void
     {
-        SiteSetting::query()->create([
-            'key' => ArtworkSignatureSettings::SETTING_KEY,
-            'value' => ['default_mode' => 'automatic'],
-        ]);
-        SiteSetting::query()->create([
-            'key' => 'home_intro',
-            'value' => ['title' => 'Home'],
-        ]);
-
         $this->actingAs(User::factory()->create());
         $this->assertFalse(ArtworkSignatureConfiguration::canAccess());
 
@@ -116,11 +105,6 @@ class ArtworkSignatureSettingsTest extends TestCase
             ->assertOk()
             ->assertSee('Artwork signatures')
             ->assertSee('No validated signature asset is saved yet.');
-
-        $this->assertSame(
-            ['home_intro'],
-            SiteSettingResource::getEloquentQuery()->pluck('key')->all(),
-        );
     }
 
     protected function storeMask(

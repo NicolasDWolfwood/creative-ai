@@ -42,10 +42,9 @@ class AdminPanelProvider extends PanelProvider
             ->maxContentWidth(Width::Full)
             ->navigationGroups([
                 'Showcase',
-                'Music Library',
-                'Publishing',
+                'Music',
+                'Journal',
                 'AI & Automation',
-                'System',
             ])
             ->colors([
                 'primary' => Color::Teal,

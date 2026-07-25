@@ -138,13 +138,15 @@ The final administrator is protected unless `--allow-no-admin` is supplied delib
 
 Users, administrator status, content, AI provider selection, models, timeouts, and encrypted provider API keys are stored in PostgreSQL. `APP_KEY` encrypts saved credentials and must remain stable for the life of that environment.
 
+The public introduction is edited in **Showcase → Homepage** in the administrator panel. That dedicated page explains every public surface affected by the text and publishes changes immediately; administrators never need to create or remember a database setting key.
+
 Only bootstrap and infrastructure values stay outside the database: image digest, `APP_KEY`, canonical URL, indexing policy, trusted hosts/proxies, PostgreSQL/Redis connections, storage mount, Docker network, and container address.
 
 ## Artwork signatures and public renditions
 
 New artwork uploads are stored as untouched private masters and queue an immutable public rendition set on the `default` queue: a large image, display image, and thumbnail. The clean master is available only to administrators and the AI analysis pipeline; anonymous artwork routes never deliver it. Public and Featured eligibility requires one complete active rendition set. A first render therefore fails closed, while regeneration keeps the previous complete set live until all replacement files have been generated and activated together.
 
-Configure the renderer in **Publishing → Artwork signatures** before uploading clean masters. Upload one monochrome PNG alpha mask; the renderer uses its alpha channel to derive both black and white signatures, so separate color files are unnecessary. The page controls the new-artwork default, corner, relative size, inset, and opacity, and previews the saved private asset on transparent, light, and dark backgrounds. Automatic treatment samples the selected corner and chooses the contrasting tone. An artwork can override the tone, corner, select **No signature** for an intentionally unsigned public derivative, or select **Already embedded** for a source that is already signed.
+Configure the renderer in **Showcase → Artwork signatures** before uploading clean masters. Upload one monochrome PNG alpha mask; the renderer uses its alpha channel to derive both black and white signatures, so separate color files are unnecessary. The page controls the new-artwork default, corner, relative size, inset, and opacity, and previews the saved private asset on transparent, light, and dark backgrounds. Automatic treatment samples the selected corner and chooses the contrasting tone. An artwork can override the tone, corner, select **No signature** for an intentionally unsigned public derivative, or select **Already embedded** for a source that is already signed.
 
 Existing artwork is migrated as **Already embedded**: its current image and variant paths remain unchanged and no second signature is applied. New clean uploads use the configured default. Saving global settings does not rewrite the catalog; **Queue stale renditions**, the artwork row retry/regenerate action, or the artwork bulk treatment action is the explicit regeneration gate. Generated filenames include the immutable recipe fingerprint, which covers the master bytes, signature bytes, rendering settings, and output contract.
 
