@@ -233,6 +233,32 @@ class MusicStructuredDataTest extends TestCase
         $service->forAlbum($album);
     }
 
+    public function test_schema_omits_an_inactive_unsigned_artwork_cover(): void
+    {
+        $cover = $this->artwork('Inactive unsigned cover');
+        $cover->forceFill([
+            'signature_mode' => Artwork::SIGNATURE_MODE_AUTOMATIC,
+            'signature_active_treatment' => 'unsigned',
+        ])->saveQuietly();
+        $album = Album::query()->create([
+            'cover_artwork_id' => $cover->id,
+            'title' => 'Waiting for a signed cover',
+            'slug' => 'waiting-for-a-signed-cover',
+            'cover_preference' => 'artwork',
+            'published' => true,
+            'published_at' => now()->subDay(),
+        ]);
+
+        $schema = app(MusicStructuredData::class)->forAlbum($album);
+        $albumNode = collect($schema['@graph'])->firstWhere('@type', 'MusicAlbum');
+
+        $this->assertArrayNotHasKey('image', $albumNode);
+        $this->assertStringNotContainsString(
+            $cover->thumb_url,
+            json_encode($schema, JSON_THROW_ON_ERROR),
+        );
+    }
+
     /** @param array<string, mixed> $attributes */
     private function track(?Album $album, array $attributes): Track
     {

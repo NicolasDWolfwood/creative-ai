@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ArtworkSignatureMode;
 use App\Models\Artwork;
 use App\Models\Collection as ArtworkCollection;
 use Illuminate\Database\Eloquent\Collection;
@@ -21,7 +22,10 @@ class ArtworkBulkUploadService
         array $collectionIds = [],
         bool $published = true,
         bool $analyze = false,
+        string $signatureMode = Artwork::SIGNATURE_MODE_AUTOMATIC,
     ): Collection {
+        $signatureMode = ArtworkSignatureMode::tryFrom($signatureMode)?->value
+            ?? Artwork::SIGNATURE_MODE_AUTOMATIC;
         $created = new Collection;
         $nextSortOrder = ((int) Artwork::query()->max('sort_order')) + 1;
         $requestedCollectionIds = collect($collectionIds)
@@ -52,7 +56,8 @@ class ArtworkBulkUploadService
             $artwork = new Artwork([
                 'collection_id' => $collectionIds[0] ?? null,
                 'title' => $title ?: 'Untitled Artwork',
-                'image_path' => $path,
+                'master_path' => $path,
+                'signature_mode' => $signatureMode,
                 'original_filename' => $originalName,
                 'sort_order' => $nextSortOrder++,
                 'published' => $published,

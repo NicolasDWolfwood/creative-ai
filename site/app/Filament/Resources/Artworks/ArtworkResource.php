@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Artworks;
 
+use App\Enums\ArtworkSignatureMode;
+use App\Enums\ArtworkSignaturePosition;
 use App\Enums\PostMediaType;
 use App\Filament\Actions\CreateJournalDraftAction;
 use App\Filament\Forms\JournalPlanningFields;
@@ -16,6 +18,7 @@ use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkEditorialService;
 use App\Services\ArtworkCollectionCurationService;
+use App\Services\ArtworkSignatureSettings;
 use App\Services\AutomaticCollectionService;
 use App\Services\JournalDraftAutomationService;
 use App\Services\SmartCollectionService;
@@ -108,21 +111,60 @@ class ArtworkResource extends Resource
                 ->searchable()
                 ->preload()
                 ->helperText('Only manual memberships are editable here. Smart and automatic collection memberships are derived from their rules and remain unchanged.'),
-            FileUpload::make('image_path')
-                ->label('Image')
+            FileUpload::make('master_path')
+                ->label('Private master image')
                 ->disk('local')
-                ->directory('artworks/originals')
+                ->directory('artworks/masters')
                 ->visibility('private')
                 ->image()
-                ->imageEditor()
                 ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                 ->maxSize(25600)
                 ->rules([new SafeArtworkImageDimensions])
-                ->helperText('JPEG, PNG, or WebP up to 25 MiB and 20 megapixels.')
+                ->helperText('Clean JPEG, PNG, or WebP up to 25 MiB and 20 megapixels. This private master is used for AI and future print workflows; it is never delivered anonymously.')
                 ->storeFileNamesIn('original_filename')
                 ->openable()
                 ->downloadable()
-                ->required(),
+                ->required(fn (string $operation): bool => $operation === 'create'),
+            Section::make('Public signature')
+                ->description('Public large, display, and thumbnail files are generated from the private master. Existing safe renditions remain live during an update; a first automatic render fails closed.')
+                ->columns(2)
+                ->schema([
+                    Select::make('signature_mode')
+                        ->label('Treatment')
+                        ->options(ArtworkSignatureMode::options())
+                        ->default(fn (): string => app(ArtworkSignatureSettings::class)->defaultMode()->value)
+                        ->required()
+                        ->native(false)
+                        ->helperText('Use Already embedded for a master that already contains the signature. No signature intentionally creates an unsigned public derivative, never a route to the clean master.'),
+                    Select::make('signature_position')
+                        ->label('Corner override')
+                        ->options(ArtworkSignaturePosition::options())
+                        ->placeholder('Use the global default')
+                        ->native(false),
+                    Text::make(fn (?Artwork $record): string => static::signatureSummary($record))
+                        ->columnSpanFull(),
+                    Actions::make([
+                        Action::make('regeneratePublicRenditionFromEdit')
+                            ->label('Regenerate public rendition')
+                            ->icon('heroicon-o-arrow-path')
+                            ->visible(fn (?Artwork $record): bool => filled($record?->masterPath()))
+                            ->requiresConfirmation()
+                            ->modalDescription('Queues a new immutable large, display, and thumbnail set. Publication, Featured state, dates, tags, and collections are unchanged.')
+                            ->action(function (?Artwork $record): void {
+                                if (! $record) {
+                                    return;
+                                }
+
+                                GenerateArtworkVariants::dispatchFor($record);
+
+                                Notification::make()
+                                    ->title('Public rendition queued for regeneration.')
+                                    ->success()
+                                    ->send();
+                            }),
+                    ])->columnSpanFull(),
+                ])
+                ->columnSpanFull(),
             Section::make('Applied tags')
                 ->description('These persisted tags drive smart and automatic collection membership. Prefer broad, reusable subjects and themes. Applying a new AI suggestion later replaces this curated list.')
                 ->schema([
@@ -325,18 +367,21 @@ class ArtworkResource extends Resource
                     ->description(fn (Artwork $record): string => $record->collections->pluck('title')->implode(' · ') ?: 'Uncollected')
                     ->wrap(),
                 TextColumn::make('variant_status')
-                    ->label('Image')
+                    ->label('Signature')
+                    ->getStateUsing(fn (Artwork $record): string => $record->signatureStatus(
+                        app(ArtworkSignatureSettings::class)->revision(),
+                    ))
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => ucfirst($state ?: Artwork::VARIANT_STATUS_PENDING))
                     ->color(fn (?string $state): string => match ($state) {
                         Artwork::VARIANT_STATUS_READY => 'success',
-                        Artwork::VARIANT_STATUS_QUEUED, Artwork::VARIANT_STATUS_PROCESSING => 'warning',
+                        Artwork::VARIANT_STATUS_QUEUED, Artwork::VARIANT_STATUS_PROCESSING, 'updating', 'stale' => 'warning',
                         Artwork::VARIANT_STATUS_FAILED => 'danger',
                         default => 'gray',
                     })
-                    ->description(fn (Artwork $record): ?string => $record->variant_status === Artwork::VARIANT_STATUS_FAILED
+                    ->description(fn (Artwork $record): string => $record->variant_status === Artwork::VARIANT_STATUS_FAILED
                         ? str($record->variant_error)->limit(80)->toString()
-                        : null),
+                        : static::signatureSummary($record, compact: true)),
                 TextColumn::make('ai_status')
                     ->label('AI')
                     ->badge()
@@ -383,6 +428,38 @@ class ArtworkResource extends Resource
                 TextColumn::make('updated_at')->since()->sortable()->label('Updated')->toggleable(),
             ])
             ->filters([
+                SelectFilter::make('signature_mode')
+                    ->label('Signature treatment')
+                    ->options(ArtworkSignatureMode::options()),
+                SelectFilter::make('signature_status')
+                    ->label('Signature status')
+                    ->options([
+                        Artwork::VARIANT_STATUS_READY => 'Ready',
+                        Artwork::VARIANT_STATUS_QUEUED => 'Queued',
+                        Artwork::VARIANT_STATUS_PROCESSING => 'Processing',
+                        Artwork::VARIANT_STATUS_FAILED => 'Failed',
+                        'stale' => 'Stale settings',
+                        'review' => 'Review recommended',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $state = $data['value'] ?? null;
+
+                        return match ($state) {
+                            'stale' => $query
+                                ->where('signature_mode', '!=', Artwork::SIGNATURE_MODE_EMBEDDED)
+                                ->where(function (Builder $query): void {
+                                    $query
+                                        ->whereNull('signature_settings_revision')
+                                        ->orWhere('signature_settings_revision', '!=', app(ArtworkSignatureSettings::class)->revision());
+                                }),
+                            'review' => $query->where('signature_review_recommended', true),
+                            Artwork::VARIANT_STATUS_READY,
+                            Artwork::VARIANT_STATUS_QUEUED,
+                            Artwork::VARIANT_STATUS_PROCESSING,
+                            Artwork::VARIANT_STATUS_FAILED => $query->where('variant_status', $state),
+                            default => $query,
+                        };
+                    }),
                 SelectFilter::make('ai_status')
                     ->label('AI status')
                     ->options([
@@ -423,14 +500,14 @@ class ArtworkResource extends Resource
             ->recordActions([
                 ActionGroup::make([
                     Action::make('retryImageVariants')
-                        ->label('Retry image sizes')
+                        ->label('Regenerate public rendition')
                         ->icon('heroicon-o-arrow-path')
                         ->color('warning')
-                        ->visible(fn (Artwork $record): bool => $record->variant_status !== Artwork::VARIANT_STATUS_READY)
+                        ->visible(fn (Artwork $record): bool => filled($record->masterPath()))
                         ->action(function (Artwork $record): void {
                             GenerateArtworkVariants::dispatchFor($record);
 
-                            Notification::make()->title('Image sizes queued for regeneration.')->success()->send();
+                            Notification::make()->title('Public rendition queued for regeneration.')->success()->send();
                         }),
                     Action::make('analyzeWithAi')
                         ->label('Analyze with AI')
@@ -461,6 +538,65 @@ class ArtworkResource extends Resource
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('setSignatureTreatment')
+                        ->label('Set signature treatment')
+                        ->icon('heroicon-o-pencil')
+                        ->color('info')
+                        ->schema([
+                            Select::make('signature_mode')
+                                ->label('Treatment')
+                                ->options(ArtworkSignatureMode::options())
+                                ->required()
+                                ->native(false),
+                            Select::make('signature_position')
+                                ->label('Corner override')
+                                ->options(ArtworkSignaturePosition::options())
+                                ->placeholder('Use the global default')
+                                ->native(false),
+                        ])
+                        ->requiresConfirmation()
+                        ->modalDescription('Updates only signature treatment and corner. Every changed artwork queues a replacement rendition; publication, Featured state, dates, tags, and collections stay unchanged.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records, array $data): void {
+                            $changed = 0;
+
+                            foreach ($records as $record) {
+                                $record->fill([
+                                    'signature_mode' => $data['signature_mode'],
+                                    'signature_position' => $data['signature_position'] ?: null,
+                                ]);
+
+                                if (! $record->isDirty(['signature_mode', 'signature_position'])) {
+                                    continue;
+                                }
+
+                                $record->save();
+                                $changed++;
+                            }
+
+                            Notification::make()
+                                ->title($changed.' treatment'.($changed === 1 ? '' : 's').' changed')
+                                ->body($changed.' replacement rendition'.($changed === 1 ? ' was' : 's were').' queued. Publication and editorial metadata were unchanged.')
+                                ->success()
+                                ->send();
+                        }),
+                    BulkAction::make('regenerateSignatures')
+                        ->label('Regenerate public renditions')
+                        ->icon('heroicon-o-arrow-path')
+                        ->color('warning')
+                        ->requiresConfirmation()
+                        ->modalDescription('Queues new immutable large, display, and thumbnail files for the selected artwork. Current safe files remain live until each replacement succeeds.')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(function (EloquentCollection $records): void {
+                            $queued = $records
+                                ->filter(fn (Artwork $record): bool => GenerateArtworkVariants::dispatchFor($record) !== null)
+                                ->count();
+
+                            Notification::make()
+                                ->title($queued.' public rendition'.($queued === 1 ? '' : 's').' queued')
+                                ->success()
+                                ->send();
+                        }),
                     BulkAction::make('createDraftCollectionFromSelected')
                         ->label('Create draft collection from selected')
                         ->icon('heroicon-o-rectangle-stack')
@@ -679,6 +815,34 @@ class ArtworkResource extends Resource
         return [
             'index' => ManageArtworks::route('/'),
         ];
+    }
+
+    protected static function signatureSummary(?Artwork $record, bool $compact = false): string
+    {
+        if (! $record?->exists) {
+            return 'A private master will be rendered after this artwork is saved.';
+        }
+
+        $mode = ArtworkSignatureMode::tryFrom((string) $record->signature_mode);
+        $position = ArtworkSignaturePosition::tryFrom(
+            (string) ($record->signature_resolved_position
+                ?: $record->signature_position
+                ?: app(ArtworkSignatureSettings::class)->defaultPosition()->value),
+        );
+        $details = collect([
+            $mode?->label() ?: str((string) $record->signature_mode)->headline()->toString(),
+            filled($record->signature_resolved_tone)
+                ? ucfirst((string) $record->signature_resolved_tone)
+                : null,
+            $compact ? null : $position?->label(),
+            $record->signature_review_recommended ? 'Review recommended' : null,
+        ])->filter()->implode(' · ');
+
+        if (! $record->hasPublicRenditions()) {
+            return $details.' · Public delivery is waiting for a safe rendition';
+        }
+
+        return $details;
     }
 
     protected static function formatAiTags(?Artwork $record): string

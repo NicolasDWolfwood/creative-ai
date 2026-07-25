@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SiteSettings;
 use App\Filament\Resources\SiteSettings\Pages\ManageSiteSettings;
 use App\Models\SiteSetting;
 use App\Services\AiSettings;
+use App\Services\ArtworkSignatureSettings;
 use App\Services\JournalPlanningSettings;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -81,6 +82,7 @@ class SiteSettingResource extends Resource
     {
         return [
             AiSettings::SETTING_KEY,
+            ArtworkSignatureSettings::SETTING_KEY,
             JournalPlanningSettings::SETTING_KEY,
         ];
     }

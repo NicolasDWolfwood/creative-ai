@@ -365,7 +365,9 @@ class MusicStructuredData
 
     private function publicArtworkImage(?Artwork $artwork): ?string
     {
-        return $artwork?->isPubliclyPublished() ? $artwork->thumb_url : null;
+        return $artwork?->isPubliclyPublished() && $artwork->hasPublicRenditions()
+            ? $artwork->thumb_url
+            : null;
     }
 
     private function duration(?int $seconds): ?string

@@ -27,6 +27,8 @@
                     <img
                         src="{{ $artwork->display_url }}"
                         alt="{{ $artwork->image_alt }}"
+                        data-artwork-preview-image
+                        draggable="false"
                         @if ($artwork->width) width="{{ $artwork->width }}" @endif
                         @if ($artwork->height) height="{{ $artwork->height }}" @endif
                     >
@@ -91,18 +93,32 @@
         </header>
 
         <div class="artwork-technical-meta" aria-label="Artwork image details">
+            @php
+                $publicImageWidth = $artwork->public_width ?: $artwork->width;
+                $publicImageHeight = $artwork->public_height ?: $artwork->height;
+            @endphp
             <span>
                 @if ($artwork->generated_at)
                     Created {{ $artwork->generated_at->format('F j, Y') }}
                 @endif
-                @if ($artwork->generated_at && $artwork->width && $artwork->height)
+                @if ($artwork->generated_at && $publicImageWidth && $publicImageHeight)
                     ·
                 @endif
-                @if ($artwork->width && $artwork->height)
-                    {{ number_format($artwork->width) }} × {{ number_format($artwork->height) }} px
+                @if ($publicImageWidth && $publicImageHeight)
+                    {{ number_format($publicImageWidth) }} × {{ number_format($publicImageHeight) }} px
                 @endif
             </span>
-            <a class="text-link" href="{{ $artwork->public_image_url }}">View full resolution</a>
+            <a
+                class="text-link"
+                href="{{ $artwork->public_image_url }}"
+                data-lightbox
+                data-title="{{ $artwork->title }}"
+                data-description="{{ $artwork->description }}"
+                data-alt="{{ $artwork->image_alt }}"
+                data-full="{{ $artwork->public_image_url }}"
+                aria-haspopup="dialog"
+                aria-controls="artwork-lightbox"
+            >View larger image</a>
         </div>
     </div>
 

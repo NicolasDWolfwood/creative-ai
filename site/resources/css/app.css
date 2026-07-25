@@ -745,6 +745,12 @@ img {
     max-width: 100%;
 }
 
+[data-artwork-preview-image] {
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
 h1,
 h2,
 h3,

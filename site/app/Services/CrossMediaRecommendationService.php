@@ -12,7 +12,7 @@ class CrossMediaRecommendationService
     {
         $ids = $track->tags()->pluck('tags.id');
 
-        return Artwork::query()->published()->with('tags')->withCount(['tags as match_count' => fn ($q) => $q->whereIn('tags.id', $ids)])
+        return Artwork::query()->published()->withPublicRenditions()->with('tags')->withCount(['tags as match_count' => fn ($q) => $q->whereIn('tags.id', $ids)])
             ->when($ids->isNotEmpty(), fn ($q) => $q->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $ids)))
             ->orderByDesc('match_count')->orderByDesc('featured')->limit($limit)->get();
     }

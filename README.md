@@ -140,17 +140,24 @@ Users, administrator status, content, AI provider selection, models, timeouts, a
 
 Only bootstrap and infrastructure values stay outside the database: image digest, `APP_KEY`, canonical URL, indexing policy, trusted hosts/proxies, PostgreSQL/Redis connections, storage mount, Docker network, and container address.
 
-## Artwork image variants
+## Artwork signatures and public renditions
 
-New artwork uploads queue display and thumbnail generation on the `default` queue. Until that job completes, public and administrator previews fall back to the original image. Failed jobs are visible in the artwork table and can be retried there.
+New artwork uploads are stored as untouched private masters and queue an immutable public rendition set on the `default` queue: a large image, display image, and thumbnail. The clean master is available only to administrators and the AI analysis pipeline; anonymous artwork routes never deliver it. Public and Featured eligibility requires one complete active rendition set. A first render therefore fails closed, while regeneration keeps the previous complete set live until all replacement files have been generated and activated together.
 
-After deploying the variant-tracking migration to an environment that already contains artwork, queue an idempotent backfill from the website container:
+Configure the renderer in **Publishing → Artwork signatures** before uploading clean masters. Upload one monochrome PNG alpha mask; the renderer uses its alpha channel to derive both black and white signatures, so separate color files are unnecessary. The page controls the new-artwork default, corner, relative size, inset, and opacity, and previews the saved private asset on transparent, light, and dark backgrounds. Automatic treatment samples the selected corner and chooses the contrasting tone. An artwork can override the tone, corner, select **No signature** for an intentionally unsigned public derivative, or select **Already embedded** for a source that is already signed.
+
+Existing artwork is migrated as **Already embedded**: its current image and variant paths remain unchanged and no second signature is applied. New clean uploads use the configured default. Saving global settings does not rewrite the catalog; **Queue stale renditions**, the artwork row retry/regenerate action, or the artwork bulk treatment action is the explicit regeneration gate. Generated filenames include the immutable recipe fingerprint, which covers the master bytes, signature bytes, rendering settings, and output contract.
+
+The normal worker consumes rendition jobs. To inspect every record and queue missing, failed, or abandoned queued/processing work from the website container, use the first command below. The settings page's **Queue stale renditions** action handles saved recipe changes; `--all` deliberately regenerates the complete catalog.
 
 ```bash
 gosu www-data php artisan creative-ai:artwork-variants:regenerate
+gosu www-data php artisan creative-ai:artwork-variants:regenerate --all
 ```
 
-Artwork originals, generated variants, track audio, embedded album covers, and journal covers are stored privately. Media is streamed through publication-aware application routes; administrators can preview drafts, while generic anonymous draft-media requests receive `404` responses. The deliberately narrow Featured-only homepage-display exception is documented below. Track audio uses ordinary progressive HTTP byte-range delivery through those routes: the native player preloads metadata, then downloads and buffers the requested parts of the file as playback or seeking requires. This is not adaptive HLS delivery, and the publication check is repeated for full, partial, and invalid-range requests.
+Private artwork masters, private signature assets, generated public-safe renditions, track audio, embedded album covers, and journal covers are stored outside the web root. Media is streamed through publication-aware application routes; administrators can preview drafts and masters, while generic anonymous draft-media and every anonymous master request receive `404` responses. The deliberately narrow Featured-only homepage-display exception is documented below. Track audio uses ordinary progressive HTTP byte-range delivery through those routes: the native player preloads metadata, then downloads and buffers the requested parts of the file as playback or seeking requires. This is not adaptive HLS delivery, and the publication check is repeated for full, partial, and invalid-range requests.
+
+On an artwork detail page, **View larger image** opens the signed large rendition in the site's accessible lightbox rather than replacing the page with a bare image. The modal closes through its visible close control, backdrop, or Escape and restores focus to the link. Public artwork previews also suppress the ordinary image context menu, dragging, and mobile touch callout as a casual copying deterrent. This is not a security boundary: any image a browser can display can still be recovered through browser tools or a screenshot. The meaningful safeguards are the baked signature, capped public renditions, and the clean master's administrator-only route.
 
 After first deploying this storage change to an environment with existing media, back up storage and run the idempotent migration command from the website container:
 
@@ -161,7 +168,9 @@ gosu www-data php artisan creative-ai:media:privatize
 
 The command copies each referenced file, verifies its SHA-256 hash, and only then removes the old public copy. A conflicting private/public pair is left untouched and reported as a failure.
 
-The normal worker consumes those jobs. Run the command with `--sync` only for deliberate foreground maintenance. It exits unsuccessfully when an original file is missing and records that failure on the artwork row; rerunning it leaves completed variants unchanged and recovers queued or processing work after the configurable stale interval.
+Run the rendition command with `--sync` only for deliberate foreground maintenance. It exits unsuccessfully when a private master is missing and records that failure on the artwork row; rerunning it leaves complete current renditions unchanged unless `--all` is supplied and recovers queued or processing work after the configurable stale interval.
+
+The signature migration is expand-compatible for an image-only rollback. Leave it applied and do not run `migrate:rollback`: an older image ignores the master/signature columns and continues using `image_path`, which always points to a public-safe rendition, while dropping `master_path` would lose the database references needed to resume clean-master rendering. Drain rendition jobs first and keep artwork upload, deletion, signature, and variant administration read-only until the current image returns.
 
 ## Collection-first artwork publication
 

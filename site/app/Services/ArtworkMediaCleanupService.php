@@ -10,6 +10,8 @@ class ArtworkMediaCleanupService
     /** @var array<int, string> */
     protected const MANAGED_PREFIXES = [
         'artworks/originals/',
+        'artworks/masters/',
+        'artworks/large/',
         'artworks/display/',
         'artworks/thumbs/',
     ];
@@ -49,7 +51,8 @@ class ArtworkMediaCleanupService
     protected function isReferenced(string $path): bool
     {
         return Artwork::query()
-            ->where('image_path', $path)
+            ->where('master_path', $path)
+            ->orWhere('image_path', $path)
             ->orWhere('display_path', $path)
             ->orWhere('thumb_path', $path)
             ->exists();

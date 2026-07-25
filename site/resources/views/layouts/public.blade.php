@@ -150,11 +150,11 @@
             <span>&copy; {{ date('Y') }}</span>
         </footer>
 
-        <div class="lightbox" data-lightbox-panel aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" aria-describedby="lightbox-description">
+        <div class="lightbox" id="artwork-lightbox" data-lightbox-panel aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" aria-describedby="lightbox-description">
             <button type="button" class="icon-button lightbox-close" data-lightbox-close aria-label="Close artwork"><i data-lucide="x"></i></button>
             <button type="button" class="icon-button lightbox-prev" data-lightbox-prev aria-label="Previous artwork"><i data-lucide="chevron-left"></i></button>
             <figure>
-                <img src="" alt="" data-lightbox-image>
+                <img src="" alt="" data-lightbox-image data-artwork-preview-image draggable="false">
                 <figcaption><strong id="lightbox-title" data-lightbox-title></strong><span id="lightbox-description" data-lightbox-description></span></figcaption>
             </figure>
             <button type="button" class="icon-button lightbox-next" data-lightbox-next aria-label="Next artwork"><i data-lucide="chevron-right"></i></button>

@@ -13,12 +13,12 @@ use Throwable;
 class RegenerateArtworkVariants extends Command
 {
     protected $signature = 'creative-ai:artwork-variants:regenerate
-        {--all : Regenerate artwork even when both current variants exist}
+        {--all : Regenerate artwork even when a complete current rendition set exists}
         {--sync : Generate variants in this process instead of queueing jobs}
         {--stale-after=15 : Requeue missing queued or processing variants after this many minutes}
         {--chunk=100 : Number of artwork records to inspect at a time}';
 
-    protected $description = 'Idempotently generate missing display and thumbnail variants for existing artwork';
+    protected $description = 'Idempotently generate missing large, display, and thumbnail renditions for artwork';
 
     public function handle(
         ImageVariantService $variants,
@@ -45,7 +45,10 @@ class RegenerateArtworkVariants extends Command
             &$skipped,
         ): void {
             foreach ($artworks as $artwork) {
-                if (! app(PrivateMediaService::class)->sourceDisk($artwork->image_path)->exists($artwork->image_path)) {
+                $masterPath = $artwork->masterPath();
+
+                if (blank($masterPath)
+                    || ! app(PrivateMediaService::class)->sourceDisk($masterPath)->exists($masterPath)) {
                     $this->markMissingOriginal($artwork);
                     $failed++;
 
@@ -126,7 +129,7 @@ class RegenerateArtworkVariants extends Command
 
     protected function markMissingOriginal(Artwork $artwork): void
     {
-        $message = 'The original artwork image is missing from public storage.';
+        $message = 'The private artwork master is missing from media storage.';
 
         if (
             $artwork->variant_status === Artwork::VARIANT_STATUS_FAILED

@@ -35,6 +35,7 @@ class SharedTagPageService
                 ->withQueryString(),
             'artworks' => Artwork::query()
                 ->published()
+                ->withPublicRenditions()
                 ->whereHas('tags', fn (Builder $query) => $query->whereKey($tag->getKey()))
                 ->orderByDesc('sort_order')
                 ->orderByDesc('created_at')

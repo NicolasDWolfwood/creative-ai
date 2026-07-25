@@ -106,6 +106,39 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString('viewer.focus({ preventScroll: true })', $source);
     }
 
+    public function test_lightbox_enhances_image_links_and_copy_deterrence_stays_scoped_to_artwork_previews(): void
+    {
+        $source = file_get_contents(resource_path('js/app.js'));
+        $lightboxStart = strpos($source, 'function setupLightbox(signal)');
+        $deterrenceStart = strpos($source, 'function setupArtworkPreviewDeterrence(signal)');
+        $navigationStart = strpos($source, 'let artworkNavigationPending', $deterrenceStart ?: 0);
+
+        $this->assertNotFalse($lightboxStart);
+        $this->assertNotFalse($deterrenceStart);
+        $this->assertNotFalse($navigationStart);
+
+        $lightboxSource = substr($source, $lightboxStart, $deterrenceStart - $lightboxStart);
+        $this->assertStringContainsString('trigger instanceof HTMLAnchorElement', $lightboxSource);
+        $this->assertStringContainsString('event.altKey || event.ctrlKey || event.metaKey || event.shiftKey', $lightboxSource);
+        $this->assertStringContainsString('event.preventDefault()', $lightboxSource);
+        $this->assertStringContainsString('availableItems.length > 1', $lightboxSource);
+        $this->assertStringContainsString('control.hidden = !hasMultipleItems', $lightboxSource);
+        $this->assertStringContainsString('control.disabled = !hasMultipleItems', $lightboxSource);
+
+        $deterrenceSource = substr($source, $deterrenceStart, $navigationStart - $deterrenceStart);
+        $this->assertStringContainsString("closest('[data-artwork-preview-image]')", $deterrenceSource);
+        $this->assertStringContainsString("document.addEventListener('contextmenu'", $deterrenceSource);
+        $this->assertStringContainsString("document.addEventListener('dragstart'", $deterrenceSource);
+        $this->assertStringContainsString('event.preventDefault()', $deterrenceSource);
+        $this->assertStringContainsString('setupArtworkPreviewDeterrence(signal);', $source);
+
+        $styles = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('[data-artwork-preview-image]', $styles);
+        $this->assertStringContainsString('-webkit-touch-callout: none', $styles);
+        $this->assertStringContainsString('-webkit-user-drag: none', $styles);
+        $this->assertStringContainsString('user-select: none', $styles);
+    }
+
     public function test_music_search_has_an_accessible_name_feedback_and_empty_states(): void
     {
         $this->get(route('music.index', ['q' => 'nothing']))

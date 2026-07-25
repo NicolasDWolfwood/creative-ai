@@ -14,12 +14,17 @@ class PrivatizeMedia extends Command
 {
     protected $signature = 'creative-ai:media:privatize {--dry-run : Report candidate files without moving them}';
 
-    protected $description = 'Move artwork originals and track audio from public to private persistent storage.';
+    protected $description = 'Move referenced artwork, music, and Journal media into private persistent storage.';
 
     public function handle(PrivateMediaService $media): int
     {
-        $paths = Artwork::query()->get(['image_path', 'display_path', 'thumb_path'])
-            ->flatMap(fn (Artwork $artwork): array => [$artwork->image_path, $artwork->display_path, $artwork->thumb_path])
+        $paths = Artwork::query()->get(['master_path', 'image_path', 'display_path', 'thumb_path'])
+            ->flatMap(fn (Artwork $artwork): array => [
+                $artwork->master_path,
+                $artwork->image_path,
+                $artwork->display_path,
+                $artwork->thumb_path,
+            ])
             ->concat(Track::query()->whereNotNull('audio_path')->pluck('audio_path'))
             ->concat(Album::query()->whereNotNull('embedded_cover_path')->pluck('embedded_cover_path'))
             ->concat(Post::query()->whereNotNull('cover_image_path')->pluck('cover_image_path'))

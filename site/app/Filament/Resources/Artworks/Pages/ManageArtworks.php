@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Artworks\Pages;
 
+use App\Enums\ArtworkSignatureMode;
 use App\Filament\Actions\CreateSourceWithJournalAction;
 use App\Filament\Forms\JournalPlanningFields;
 use App\Filament\Resources\Artworks\ArtworkResource;
@@ -11,6 +12,7 @@ use App\Rules\SafeArtworkImageDimensions;
 use App\Services\ArtworkAiMetadataService;
 use App\Services\ArtworkAiQueueService;
 use App\Services\ArtworkBulkUploadService;
+use App\Services\ArtworkSignatureSettings;
 use App\Services\JournalDraftAutomationService;
 use App\Services\JournalPlanningSettings;
 use Filament\Actions\Action;
@@ -103,7 +105,7 @@ class ManageArtworks extends ManageRecords
                     FileUpload::make('images')
                         ->label('Artwork files')
                         ->disk('local')
-                        ->directory('artworks/originals')
+                        ->directory('artworks/masters')
                         ->visibility('private')
                         ->image()
                         ->multiple()
@@ -113,9 +115,16 @@ class ManageArtworks extends ManageRecords
                         ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                         ->maxSize(25600)
                         ->rules([new SafeArtworkImageDimensions])
-                        ->helperText('Each JPEG, PNG, or WebP may be up to 25 MiB and 20 megapixels.')
+                        ->helperText('Each clean private master may be up to 25 MiB and 20 megapixels. Public files are generated after upload.')
                         ->required()
                         ->columnSpanFull(),
+                    Select::make('signature_mode')
+                        ->label('Signature treatment')
+                        ->options(ArtworkSignatureMode::options())
+                        ->default(fn (): string => app(ArtworkSignatureSettings::class)->defaultMode()->value)
+                        ->helperText('Choose Already embedded for a batch whose masters already contain the signature.')
+                        ->native(false)
+                        ->required(),
                     Select::make('collection_ids')
                         ->label('Add to manual collections')
                         ->options(fn (): array => Collection::query()
@@ -144,6 +153,7 @@ class ManageArtworks extends ManageRecords
                         collectionIds: $data['collection_ids'] ?? [],
                         published: (bool) ($data['published'] ?? false),
                         analyze: (bool) ($data['analyze_after_upload'] ?? false),
+                        signatureMode: (string) ($data['signature_mode'] ?? Artwork::SIGNATURE_MODE_AUTOMATIC),
                     );
 
                     Notification::make()

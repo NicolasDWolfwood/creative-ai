@@ -4,9 +4,11 @@ namespace App\Jobs;
 
 use App\Models\Artwork;
 use App\Services\ArtworkAiMetadataService;
+use App\Services\PrivateMediaService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class AnalyzeArtworkWithAi implements ShouldQueue
@@ -23,6 +25,8 @@ class AnalyzeArtworkWithAi implements ShouldQueue
         public bool $force = false,
         public bool $applyAfterAnalysis = false,
         string $queue = 'ai',
+        public string $sourcePath = '',
+        public string $sourceSha256 = '',
     ) {
         $this->onQueue($queue);
     }
@@ -33,6 +37,24 @@ class AnalyzeArtworkWithAi implements ShouldQueue
         bool $applyAfterAnalysis = false,
         string $queue = 'ai',
     ): string {
+        $sourcePath = $artwork->masterPath();
+
+        if (blank($sourcePath)) {
+            throw new RuntimeException('The private artwork master is unavailable for AI analysis.');
+        }
+
+        $disk = app(PrivateMediaService::class)->sourceDisk($sourcePath);
+
+        if (! $disk->exists($sourcePath)) {
+            throw new RuntimeException('The private artwork master is unavailable for AI analysis.');
+        }
+
+        $sourceSha256 = hash_file('sha256', $disk->path($sourcePath));
+
+        if (! is_string($sourceSha256)) {
+            throw new RuntimeException('Unable to fingerprint the private artwork master.');
+        }
+
         $queueToken = (string) Str::uuid();
 
         $artwork->forceFill([
@@ -44,7 +66,15 @@ class AnalyzeArtworkWithAi implements ShouldQueue
             'ai_started_at' => null,
         ])->saveQuietly();
 
-        self::dispatch($artwork->getKey(), $queueToken, $force, $applyAfterAnalysis, $queue);
+        self::dispatch(
+            $artwork->getKey(),
+            $queueToken,
+            $force,
+            $applyAfterAnalysis,
+            $queue,
+            $sourcePath,
+            $sourceSha256,
+        );
 
         return $queueToken;
     }
@@ -54,6 +84,17 @@ class AnalyzeArtworkWithAi implements ShouldQueue
         $artwork = Artwork::query()->findOrFail($this->artworkId);
 
         if (! hash_equals((string) $artwork->ai_queue_token, $this->queueToken)) {
+            return;
+        }
+
+        // Jobs serialized before source snapshots were introduced still rely
+        // on the queue token. A master replacement clears that token, so it is
+        // safe to hydrate the missing snapshot for an otherwise-current job.
+        if ($this->sourcePath === '' && $this->sourceSha256 === '') {
+            $this->captureCurrentSource($artwork);
+        }
+
+        if (! $this->isCurrentSource($artwork)) {
             return;
         }
 
@@ -82,11 +123,12 @@ class AnalyzeArtworkWithAi implements ShouldQueue
             'ai_started_at' => $artwork->ai_started_at ?: now(),
         ])->saveQuietly();
 
-        $suggestion = $service->analyze($artwork);
+        $suggestion = $service->analyze($artwork, $this->sourcePath);
 
         $artwork->refresh();
 
-        if (! hash_equals((string) $artwork->ai_queue_token, $this->queueToken)) {
+        if (! hash_equals((string) $artwork->ai_queue_token, $this->queueToken)
+            || ! $this->isCurrentSource($artwork)) {
             return;
         }
 
@@ -136,5 +178,48 @@ class AnalyzeArtworkWithAi implements ShouldQueue
             'ai_apply_after_analysis' => false,
             'ai_started_at' => null,
         ])->saveQuietly();
+    }
+
+    protected function isCurrentSource(Artwork $artwork): bool
+    {
+        if ($this->sourcePath === '' || $this->sourceSha256 === '') {
+            return false;
+        }
+
+        if (! hash_equals($artwork->masterPath(), $this->sourcePath)) {
+            return false;
+        }
+
+        $disk = app(PrivateMediaService::class)->sourceDisk($this->sourcePath);
+
+        return $disk->exists($this->sourcePath)
+            && hash_equals(
+                $this->sourceSha256,
+                (string) hash_file('sha256', $disk->path($this->sourcePath)),
+            );
+    }
+
+    protected function captureCurrentSource(Artwork $artwork): void
+    {
+        $sourcePath = $artwork->masterPath();
+
+        if (blank($sourcePath)) {
+            return;
+        }
+
+        $disk = app(PrivateMediaService::class)->sourceDisk($sourcePath);
+
+        if (! $disk->exists($sourcePath)) {
+            return;
+        }
+
+        $sourceSha256 = hash_file('sha256', $disk->path($sourcePath));
+
+        if (! is_string($sourceSha256)) {
+            return;
+        }
+
+        $this->sourcePath = $sourcePath;
+        $this->sourceSha256 = $sourceSha256;
     }
 }

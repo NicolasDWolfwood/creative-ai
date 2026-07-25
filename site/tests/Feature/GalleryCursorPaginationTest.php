@@ -78,7 +78,11 @@ class GalleryCursorPaginationTest extends TestCase
         $response = $this->get(route('collections.show', $collection).'?tag='.$tag->slug);
         $nextPageUrl = $this->nextPageUrl($response->getContent());
 
-        $response->assertOk()->assertSee('48 of 49 frames loaded');
+        $response
+            ->assertOk()
+            ->assertSee('48 of 49 frames loaded')
+            ->assertSee('data-artwork-preview-image', false)
+            ->assertSee('draggable="false"', false);
         $this->assertStringStartsWith(route('collections.show', $collection), $nextPageUrl);
         $this->assertStringContainsString('tag=quiet', $nextPageUrl);
         $this->assertStringEndsWith('#gallery', $nextPageUrl);
@@ -94,6 +98,7 @@ class GalleryCursorPaginationTest extends TestCase
         $this->assertStringContainsString('results.append(...nextItems)', $source);
         $this->assertStringContainsString("document.addEventListener('click', (event) => {", $source);
         $this->assertStringContainsString("event.target.closest('[data-lightbox]')", $source);
+        $this->assertStringContainsString("closest('[data-artwork-preview-image]')", $source);
         $this->assertStringContainsString("firstNewItem.querySelector('.art-tile-link')?.focus", $source);
     }
 

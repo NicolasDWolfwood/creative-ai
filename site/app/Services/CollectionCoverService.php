@@ -216,7 +216,7 @@ class CollectionCoverService
 
     protected function mediaIdentity(Artwork $artwork): string
     {
-        return (string) ($artwork->image_path ?: $artwork->availableThumbPath());
+        return (string) ($artwork->masterPath() ?: $artwork->image_path ?: $artwork->availableThumbPath());
     }
 
     /** @param  SupportCollection<int, string>  $media */

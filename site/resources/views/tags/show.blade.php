@@ -31,7 +31,7 @@
                 <header class="section-heading"><p class="eyebrow">Visual archive</p><h2 id="tag-artworks-title">Artwork</h2></header>
                 <div class="tag-card-grid">
                     @foreach ($artworks as $artwork)
-                        <a class="tag-media-card" href="{{ route('artworks.show', $artwork) }}" wire:navigate><img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy"><span><small>Artwork</small><strong>{{ $artwork->title }}</strong></span></a>
+                        <a class="tag-media-card" href="{{ route('artworks.show', $artwork) }}" wire:navigate><img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" data-artwork-preview-image draggable="false"><span><small>Artwork</small><strong>{{ $artwork->title }}</strong></span></a>
                     @endforeach
                 </div>
                 @include('tags.partials.pagination', ['paginator' => $artworks, 'label' => 'Artwork'])

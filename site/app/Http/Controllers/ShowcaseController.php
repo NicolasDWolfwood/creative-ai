@@ -67,7 +67,7 @@ class ShowcaseController extends Controller
                 return;
             }
 
-            $query->published();
+            $query->published()->withPublicRenditions();
         };
         $selectedTag = $selectedTagSlug
             ? Tag::query()
@@ -86,7 +86,7 @@ class ShowcaseController extends Controller
                 ->publiclyAvailable()
                 ->whereHas('collections', fn (Builder $query) => $query->whereKey($selectedCollection->getKey()));
         } else {
-            $artworksQuery->published();
+            $artworksQuery->published()->withPublicRenditions();
         }
 
         if ($selectedTag) {
@@ -100,7 +100,7 @@ class ShowcaseController extends Controller
         $heroArtwork = $useHomepageHero
             ? $this->homepageHeroArtwork->select()
             : ($artworks->first()
-                ?: Artwork::query()->published()->orderByDesc('featured')->orderByDesc('sort_order')->first());
+                ?: Artwork::query()->published()->withPublicRenditions()->orderByDesc('featured')->orderByDesc('sort_order')->first());
         $heroImageUrl = $heroArtwork
             ? ($useHomepageHero ? $heroArtwork->homepage_display_url : $heroArtwork->display_url)
             : null;
@@ -184,7 +184,7 @@ class ShowcaseController extends Controller
             'artworks' => $artworks,
             'archiveArtworkCount' => $archiveArtworkCount,
             'paginateArtwork' => $paginateArtwork,
-            'totalArtworkCount' => Artwork::query()->published()->count(),
+            'totalArtworkCount' => Artwork::query()->published()->withPublicRenditions()->count(),
             'publicTrackCount' => Track::query()->publiclyAvailable()->count(),
             'playlists' => $playlists,
             'albums' => $albums,
