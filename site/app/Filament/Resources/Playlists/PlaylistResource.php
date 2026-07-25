@@ -39,11 +39,11 @@ class PlaylistResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-queue-list';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Music Library';
+    protected static string|\UnitEnum|null $navigationGroup = 'Music';
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'Listening playlists';
+    protected static ?string $navigationLabel = 'Playlists';
 
     protected static ?string $recordTitleAttribute = 'title';
 

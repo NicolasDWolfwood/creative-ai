@@ -21,9 +21,9 @@ class PlaylistTrackResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-bars-arrow-down';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Music Library';
+    protected static string|\UnitEnum|null $navigationGroup = 'Music';
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 40;
 
     protected static ?string $modelLabel = 'playlist entry';
 

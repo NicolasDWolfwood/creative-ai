@@ -29,7 +29,7 @@ class AiConfiguration extends Page
 
     protected static string|\UnitEnum|null $navigationGroup = 'AI & Automation';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 30;
 
     protected static ?string $slug = 'ai-configuration';
 

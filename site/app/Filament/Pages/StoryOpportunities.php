@@ -31,9 +31,9 @@ class StoryOpportunities extends Page
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-light-bulb';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Publishing';
+    protected static string|\UnitEnum|null $navigationGroup = 'Journal';
 
-    protected static ?int $navigationSort = 25;
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $slug = 'story-opportunities';
 

@@ -11,7 +11,7 @@
             @if ($selectedCollection || $selectedTag)
                 <p class="hero-edition">{{ $selectedCollection?->title ?? ucfirst($selectedTag->name) }}</p>
             @endif
-            <p class="hero-intro">{{ $selectedCollection?->description ?? ($intro['body'] ?? 'A living archive of generated art and experimental music.') }}</p>
+            <p class="hero-intro">{{ $selectedCollection?->description ?: $intro }}</p>
             <div class="hero-actions">
                 <a href="#gallery" class="button button-primary"><i data-lucide="move-down"></i>View artwork</a>
                 <button class="button button-secondary" type="button" data-player-focus><i data-lucide="audio-lines"></i>Listening room</button>

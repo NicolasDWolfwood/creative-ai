@@ -5,13 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Artwork;
 use App\Models\Collection;
 use App\Models\Post;
-use App\Models\SiteSetting;
 use App\Models\Tag;
 use App\Models\Track;
 use App\Services\CollectionCoverService;
 use App\Services\HomepageHeroArtworkService;
 use App\Services\PublicMediaService;
 use App\Services\PublicStoryConnections;
+use App\Services\SiteContentSettings;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -23,6 +23,7 @@ class ShowcaseController extends Controller
         protected CollectionCoverService $collectionCovers,
         protected PublicStoryConnections $storyConnections,
         protected HomepageHeroArtworkService $homepageHeroArtwork,
+        protected SiteContentSettings $siteContent,
     ) {}
 
     public function index(Request $request): View
@@ -54,10 +55,7 @@ class ShowcaseController extends Controller
         bool $paginateArtwork = false,
         bool $useHomepageHero = false,
     ): View {
-        $intro = SiteSetting::query()->where('key', 'home_intro')->first()?->value ?: [
-            'title' => 'Creative-Ai',
-            'body' => 'A living archive of generative artwork, visual experiments, and original sound.',
-        ];
+        $intro = $this->siteContent->homeIntro();
         $publicArtworkForContext = function (Builder $query) use ($selectedCollection): void {
             if ($selectedCollection) {
                 $query
@@ -125,7 +123,7 @@ class ShowcaseController extends Controller
         $homePlaylists = $playlists->take(max(0, 6 - $homeAlbums->count()));
         $posts = Post::query()->latestPublished()->limit(3)->get();
         $pageTitle = $selectedCollection?->title ?? ($selectedTag ? ucfirst($selectedTag->name) : 'Creative-Ai');
-        $description = $selectedCollection?->description ?: ($intro['body'] ?? 'Generative art and original music by John Reijmer.');
+        $description = $selectedCollection?->description ?: $intro;
         $collectionStories = $selectedCollection
             ? $this->storyConnections->postsForMedia($selectedCollection)
             : collect();

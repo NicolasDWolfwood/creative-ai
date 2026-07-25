@@ -25,13 +25,13 @@ class AiQueueResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'AI & Automation';
 
-    protected static ?string $navigationLabel = 'AI Queue';
+    protected static ?string $navigationLabel = 'Artwork AI queue';
 
     protected static ?string $modelLabel = 'AI queue item';
 
     protected static ?string $pluralModelLabel = 'AI queue';
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 10;
 
     public static function getEloquentQuery(): Builder
     {

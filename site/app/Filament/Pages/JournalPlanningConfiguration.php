@@ -20,13 +20,13 @@ class JournalPlanningConfiguration extends Page
 
     protected static ?string $title = 'Journal planning defaults';
 
-    protected static ?string $navigationLabel = 'Journal planning';
+    protected static ?string $navigationLabel = 'Planning defaults';
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-plus';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Publishing';
+    protected static string|\UnitEnum|null $navigationGroup = 'Journal';
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 40;
 
     protected static ?string $slug = 'journal-planning';
 

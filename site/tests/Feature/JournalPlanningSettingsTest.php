@@ -5,12 +5,9 @@ namespace Tests\Feature;
 use App\Enums\JournalPlanningMode;
 use App\Enums\PostMediaType;
 use App\Filament\Pages\JournalPlanningConfiguration;
-use App\Filament\Resources\SiteSettings\Pages\ManageSiteSettings;
-use App\Filament\Resources\SiteSettings\SiteSettingResource;
 use App\Models\PostTemplate;
 use App\Models\SiteSetting;
 use App\Models\User;
-use App\Services\AiSettings;
 use App\Services\JournalPlanningSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
@@ -157,29 +154,5 @@ class JournalPlanningSettingsTest extends TestCase
         $this->assertSame(JournalPlanningMode::Automatic->value, $stored['album_import_mode']);
         $this->assertSame($template->getKey(), $stored['post_template_id']);
         $this->assertTrue($stored['copy_shared_tags']);
-    }
-
-    public function test_reserved_configuration_keys_are_hidden_and_rejected_by_generic_settings(): void
-    {
-        SiteSetting::query()->create(['key' => AiSettings::SETTING_KEY, 'value' => []]);
-        SiteSetting::query()->create(['key' => JournalPlanningSettings::SETTING_KEY, 'value' => []]);
-        SiteSetting::query()->create(['key' => 'home_intro', 'value' => ['title' => 'Welcome']]);
-
-        $this->assertSame(
-            ['home_intro'],
-            SiteSettingResource::getEloquentQuery()->orderBy('key')->pluck('key')->all(),
-        );
-
-        SiteSetting::query()->where('key', JournalPlanningSettings::SETTING_KEY)->delete();
-
-        Livewire::actingAs(User::factory()->admin()->create())
-            ->test(ManageSiteSettings::class)
-            ->callAction('create', [
-                'key' => JournalPlanningSettings::SETTING_KEY,
-                'value' => ['unexpected' => 'replacement'],
-            ])
-            ->assertHasActionErrors(['key']);
-
-        $this->assertDatabaseMissing('site_settings', ['key' => JournalPlanningSettings::SETTING_KEY]);
     }
 }

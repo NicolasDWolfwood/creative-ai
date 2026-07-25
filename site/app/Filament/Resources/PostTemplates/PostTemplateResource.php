@@ -29,11 +29,11 @@ class PostTemplateResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-duplicate';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Publishing';
+    protected static string|\UnitEnum|null $navigationGroup = 'Journal';
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'Journal templates';
+    protected static ?string $navigationLabel = 'Templates';
 
     protected static ?string $modelLabel = 'Journal template';
 
