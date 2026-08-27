@@ -134,9 +134,13 @@ class MusicLibraryTest extends TestCase
     {
         Storage::fake('public');
         Queue::fake();
-        $album = Album::query()->create(['title' => 'Ordered Album', 'published' => false]);
-        $second = Track::query()->create(['album_id' => $album->id, 'title' => 'Second', 'audio_path' => 'tracks/audio/2.mp3', 'track_number' => 2, 'published' => false]);
-        $first = Track::query()->create(['album_id' => $album->id, 'title' => 'First', 'audio_path' => 'tracks/audio/1.mp3', 'track_number' => 1, 'published' => false]);
+        $album = Album::query()->create([
+            'title' => 'Ordered Album',
+            'embedded_cover_path' => 'albums/embedded/ordered.jpg',
+            'published' => false,
+        ]);
+        $second = Track::query()->create(['album_id' => $album->id, 'title' => 'Second', 'artist' => 'Second Artist', 'audio_path' => 'tracks/audio/2.mp3', 'track_number' => 2, 'published' => false]);
+        $first = Track::query()->create(['album_id' => $album->id, 'title' => 'First', 'artist' => 'First Artist', 'audio_path' => 'tracks/audio/1.mp3', 'track_number' => 1, 'published' => false]);
         $draftAlbum = Album::query()->create(['title' => 'Draft Album', 'published' => false]);
         $draftTrack = Track::query()->create(['album_id' => $draftAlbum->id, 'title' => 'Draft Track', 'audio_path' => 'tracks/audio/draft.mp3', 'track_number' => 1, 'published' => false]);
         $playlist = Playlist::query()->create(['title' => 'Manual order', 'published' => true]);
@@ -155,11 +159,21 @@ class MusicLibraryTest extends TestCase
         $this->assertSame(['album-'.$album->id, 'playlist-'.$playlist->id], array_column($payload, 'id'));
         $this->assertSame(['album', 'playlist'], array_column($payload, 'type'));
         $sources = collect($payload)->keyBy('id');
-        $this->assertSame(['First', 'Second'], collect($sources['album-'.$album->id]['tracks'])->pluck('title')->all());
+        $this->assertSame('First Artist', $sources['album-'.$album->id]['artist']);
+        $this->assertSame($album->cover_url, $sources['album-'.$album->id]['cover']);
+        $this->assertArrayNotHasKey('artist', $sources['playlist-'.$playlist->id]);
+        $albumTracks = collect($sources['album-'.$album->id]['tracks']);
+        $this->assertSame([$first->id, $second->id], $albumTracks->pluck('id')->all());
+        $this->assertSame(['First', 'Second'], $albumTracks->pluck('title')->all());
+        $this->assertSame(['First Artist', 'Second Artist'], $albumTracks->pluck('artist')->all());
+        $this->assertSame([1, 2], $albumTracks->pluck('track_number')->all());
+        $this->assertSame([$album->cover_url, $album->cover_url], $albumTracks->pluck('cover')->all());
         $this->assertSame(['Second', 'First'], collect($sources['playlist-'.$playlist->id]['tracks'])->pluck('title')->all());
         $playerSource = file_get_contents(resource_path('js/app.js'));
         $this->assertStringContainsString("album: 'Albums', playlist: 'Playlists'", $playerSource);
-        $this->assertStringContainsString("document.createElement('optgroup')", $playerSource);
+        $this->assertStringContainsString("document.createElement('img')", $playerSource);
+        $this->assertStringContainsString('`${artist} - ${title}`', $playerSource);
+        $this->assertStringNotContainsString("document.createElement('optgroup')", $playerSource);
     }
 
     public function test_music_admin_pages_render_the_import_album_and_playlist_workflows(): void
