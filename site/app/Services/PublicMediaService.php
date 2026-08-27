@@ -73,6 +73,7 @@ class PublicMediaService
             'id' => 'album-'.$album->id,
             'type' => 'album',
             'title' => $album->title,
+            'artist' => $this->albumArtist($album),
             'description' => $album->description,
             'cover' => $album->cover_url,
             'tracks' => $album->tracks->map(fn (Track $track) => [...$this->trackPayload($track), 'cover' => $track->cover_url ?: $album->cover_url])->values(),
@@ -96,6 +97,13 @@ class PublicMediaService
 
     public function trackPayload(Track $track): array
     {
-        return ['id' => $track->id, 'title' => $track->title, 'artist' => $track->artist, 'url' => $track->audio_url, 'cover' => $track->cover_url, 'waveform' => $track->waveform ?? [], 'href' => route('music.tracks.show', $track)];
+        return ['id' => $track->id, 'title' => $track->title, 'artist' => $track->artist, 'disc_number' => $track->disc_number, 'track_number' => $track->track_number, 'url' => $track->audio_url, 'cover' => $track->cover_url, 'waveform' => $track->waveform ?? [], 'href' => route('music.tracks.show', $track)];
+    }
+
+    protected function albumArtist(Album $album): ?string
+    {
+        return collect([$album->artist, $album->album_artist])
+            ->concat($album->tracks->pluck('artist'))
+            ->first(fn (mixed $artist): bool => filled($artist));
     }
 }

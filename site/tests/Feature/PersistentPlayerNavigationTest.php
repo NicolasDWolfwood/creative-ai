@@ -31,6 +31,12 @@ class PersistentPlayerNavigationTest extends TestCase
             ->assertSee('aria-controls="primary-navigation"', false)
             ->assertSee('data-shuffle aria-label="Shuffle" aria-pressed="false"', false)
             ->assertSee('data-player-status aria-live="polite"', false)
+            ->assertSee('data-playlist-trigger aria-label="Choose an album, playlist, or track" aria-expanded="false" aria-controls="player-library-options"', false)
+            ->assertSee('data-playlist-menu role="region" aria-label="Albums, playlists, and tracks"', false)
+            ->assertSee('data-track-trigger aria-label="Choose a track" aria-expanded="false" aria-controls="player-track-options"', false)
+            ->assertSee('data-track-menu role="region" aria-label="Tracks in the selected music source"', false)
+            ->assertSeeInOrder(['data-playlist-picker', 'data-track-picker', 'data-visualizer'], false)
+            ->assertDontSee('data-playlist-select', false)
             ->assertSee('href="'.route('collections.show', $collection).'#gallery"', false)
             ->assertSee('data-reveal wire:navigate', false);
     }
@@ -62,6 +68,32 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString("localStorage.removeItem('creative-ai-player')", $source);
         $this->assertStringContainsString('this.loadTrack(false);', $source);
         $this->assertStringContainsString('preferredPlaylistId', $source);
+        $this->assertStringContainsString("document.addEventListener('click'", $source);
+        $this->assertStringContainsString("event.key === 'Escape'", $source);
+        $this->assertStringContainsString("['ArrowDown', 'ArrowUp', 'Home', 'End']", $source);
+        $this->assertStringContainsString("image.addEventListener('error', () => image.remove()", $source);
+        $this->assertStringContainsString('if (index === this.playlistIndex)', $source);
+        $this->assertStringContainsString('renderTracks()', $source);
+        $this->assertStringContainsString('option.dataset.trackIndex = String(index)', $source);
+        $this->assertStringContainsString('this.syncTrackSelection();', $source);
+        $this->assertStringContainsString('this.elements.trackPicker.hidden = !isAlbum', $source);
+        $this->assertStringContainsString('trackSequence(track, index)', $source);
+        $this->assertStringContainsString("copy.className = 'player-track-copy'", $source);
+        $this->assertStringContainsString('const restoreFocus = this.elements.trackMenu.contains(document.activeElement)', $source);
+        $this->assertStringContainsString('const trackPickerHadFocus = this.elements.trackPicker.contains(document.activeElement)', $source);
+        $this->assertStringContainsString('const activeTrackWasRemoved = hadTrack', $source);
+        $this->assertStringContainsString('if (!points.length) { this.drawIdleVisualizer(); return; }', $source);
+
+        $selectTrackStart = strpos($source, '    selectTrack(index) {');
+        $selectPlaylistStart = strpos($source, '    selectPlaylist(index) {', $selectTrackStart ?: 0);
+        $this->assertNotFalse($selectTrackStart);
+        $this->assertNotFalse($selectPlaylistStart);
+        $selectTrackSource = substr($source, $selectTrackStart, $selectPlaylistStart - $selectTrackStart);
+        $guard = strpos($selectTrackSource, 'if (index === this.trackIndex)');
+        $load = strpos($selectTrackSource, 'this.loadTrack(false);');
+        $this->assertNotFalse($guard);
+        $this->assertNotFalse($load);
+        $this->assertStringContainsString('return;', substr($selectTrackSource, $guard, $load - $guard));
     }
 
     public function test_artwork_keyboard_navigation_is_scoped_guarded_and_rebound_after_livewire_navigation(): void
@@ -135,6 +167,16 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString('detail.href = detailUrl', $lightboxSource);
         $this->assertStringContainsString("detail.removeAttribute('href')", $lightboxSource);
 
+        $layout = file_get_contents(resource_path('views/layouts/public.blade.php'));
+        $this->assertMatchesRegularExpression(
+            '/<button\b(?=[^>]*\bdata-lightbox-prev\b)(?=[^>]*\bhidden\b)(?=[^>]*\bdisabled\b)[^>]*>/',
+            $layout,
+        );
+        $this->assertMatchesRegularExpression(
+            '/<button\b(?=[^>]*\bdata-lightbox-next\b)(?=[^>]*\bhidden\b)(?=[^>]*\bdisabled\b)[^>]*>/',
+            $layout,
+        );
+
         $deterrenceSource = substr($source, $deterrenceStart, $navigationStart - $deterrenceStart);
         $this->assertStringContainsString("closest('[data-artwork-preview-image]')", $deterrenceSource);
         $this->assertStringContainsString("document.addEventListener('contextmenu'", $deterrenceSource);
@@ -143,6 +185,10 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString('setupArtworkPreviewDeterrence(signal);', $source);
 
         $styles = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('.lightbox-prev[hidden]', $styles);
+        $this->assertStringContainsString('.lightbox-next[hidden]', $styles);
+        $this->assertMatchesRegularExpression('/\.lightbox figure \{[^}]*grid-column: 2;/s', $styles);
+        $this->assertMatchesRegularExpression('/@media \(max-width: 760px\).*?\.lightbox figure \{[^}]*grid-column: 1;/s', $styles);
         $this->assertStringContainsString('[data-artwork-preview-image]', $styles);
         $this->assertStringContainsString('-webkit-touch-callout: none', $styles);
         $this->assertStringContainsString('-webkit-user-drag: none', $styles);

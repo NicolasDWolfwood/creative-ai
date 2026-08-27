@@ -58,14 +58,23 @@ class CreativePlayer {
         this.restoreState();
         this.bind();
         this.renderPlaylists();
-        this.loadTrack(false);
         this.drawIdleVisualizer();
+        this.loadTrack(false);
     }
 
     collectElements() {
         return {
             player: document.querySelector('[data-player]'),
-            playlistSelect: document.querySelector('[data-playlist-select]'),
+            playlistPicker: document.querySelector('[data-playlist-picker]'),
+            playlistTrigger: document.querySelector('[data-playlist-trigger]'),
+            playlistTriggerCover: document.querySelector('[data-playlist-trigger-cover]'),
+            playlistTriggerLabel: document.querySelector('[data-playlist-trigger-label]'),
+            playlistMenu: document.querySelector('[data-playlist-menu]'),
+            trackPicker: document.querySelector('[data-track-picker]'),
+            trackTrigger: document.querySelector('[data-track-trigger]'),
+            trackTriggerCover: document.querySelector('[data-track-trigger-cover]'),
+            trackTriggerLabel: document.querySelector('[data-track-trigger-label]'),
+            trackMenu: document.querySelector('[data-track-menu]'),
             title: document.querySelector('[data-track-title]'),
             artist: document.querySelector('[data-track-artist]'),
             art: document.querySelector('[data-player-art]'),
@@ -93,12 +102,58 @@ class CreativePlayer {
         this.elements.seek?.addEventListener('input', () => this.seek());
         this.elements.volume?.addEventListener('input', () => this.setVolume());
         this.elements.collapses.forEach((button) => button.addEventListener('click', () => this.setCollapsed(!this.elements.player.classList.contains('collapsed'))));
-        this.elements.playlistSelect?.addEventListener('change', () => {
-            this.playlistIndex = Number(this.elements.playlistSelect.value);
-            this.trackIndex = 0;
-            this.loadTrack(false);
-            const track = this.currentTrack();
-            if (track) this.announce(`Selected ${track.title}. Press play to start.`);
+        this.elements.playlistTrigger?.addEventListener('click', () => {
+            this.setLibraryOpen(this.elements.playlistMenu?.hidden ?? true);
+        });
+        this.elements.playlistTrigger?.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                this.setLibraryOpen(false);
+                return;
+            }
+            if (event.key === 'Tab' && event.shiftKey && !this.elements.playlistMenu?.hidden) {
+                requestAnimationFrame(() => this.setLibraryOpen(false));
+                return;
+            }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+            event.preventDefault();
+            const targetIndex = event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                    ? Math.max(0, this.playlists.length - 1)
+                    : this.playlistIndex;
+            this.setLibraryOpen(true, targetIndex);
+        });
+        this.elements.playlistMenu?.addEventListener('click', (event) => this.chooseLibraryOption(event));
+        this.elements.playlistMenu?.addEventListener('keydown', (event) => this.handleLibraryKeydown(event));
+        this.elements.trackTrigger?.addEventListener('click', () => {
+            this.setTrackMenuOpen(this.elements.trackMenu?.hidden ?? true);
+        });
+        this.elements.trackTrigger?.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                this.setTrackMenuOpen(false);
+                return;
+            }
+            if (event.key === 'Tab' && event.shiftKey && !this.elements.trackMenu?.hidden) {
+                requestAnimationFrame(() => this.setTrackMenuOpen(false));
+                return;
+            }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+            event.preventDefault();
+            const targetIndex = event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                    ? Math.max(0, (this.currentPlaylist()?.tracks?.length || 1) - 1)
+                    : this.trackIndex;
+            this.setTrackMenuOpen(true, targetIndex);
+        });
+        this.elements.trackMenu?.addEventListener('click', (event) => this.chooseTrackOption(event));
+        this.elements.trackMenu?.addEventListener('keydown', (event) => this.handleTrackMenuKeydown(event));
+        document.addEventListener('click', (event) => {
+            if (!(event.target instanceof Node)) return;
+            if (!this.elements.playlistPicker?.contains(event.target)) this.setLibraryOpen(false);
+            if (!this.elements.trackPicker?.contains(event.target)) this.setTrackMenuOpen(false);
         });
 
         this.audio.addEventListener('timeupdate', () => { this.updateProgress(); this.saveState(); });
@@ -161,9 +216,15 @@ class CreativePlayer {
     }
 
     renderPlaylists(preferredPlaylistId = this.restoredPlaylistId, preferredTrackId = this.restoredTrackId) {
-        if (!this.elements.playlistSelect) return;
+        if (!this.elements.playlistMenu) return;
 
-        this.elements.playlistSelect.innerHTML = '';
+        this.playlistIndex = Math.max(0, Math.min(this.playlistIndex, Math.max(0, this.playlists.length - 1)));
+        const restoredPlaylist = this.playlists.findIndex((playlist) => String(playlist.id) === String(preferredPlaylistId));
+        if (restoredPlaylist >= 0) this.playlistIndex = restoredPlaylist;
+        const restoredTrack = this.currentPlaylist()?.tracks?.findIndex((track) => String(track.id) === String(preferredTrackId));
+        if (restoredTrack >= 0) this.trackIndex = restoredTrack;
+
+        this.elements.playlistMenu.replaceChildren();
         const labels = { album: 'Albums', playlist: 'Playlists', track: 'Tracks' };
         ['album', 'playlist', 'track'].forEach((type) => {
             const matches = this.playlists
@@ -171,24 +232,332 @@ class CreativePlayer {
                 .filter(({ playlist }) => (playlist.type || 'playlist') === type);
             if (!matches.length) return;
 
-            const group = document.createElement('optgroup');
-            group.label = labels[type];
+            const group = document.createElement('div');
+            const heading = document.createElement('span');
+            const headingId = `player-library-${type}-heading`;
+            group.className = 'player-library-group';
+            group.setAttribute('role', 'group');
+            group.setAttribute('aria-labelledby', headingId);
+            heading.className = 'player-library-heading';
+            heading.id = headingId;
+            heading.textContent = labels[type];
+            group.append(heading);
+
             matches.forEach(({ playlist, index }) => {
-                const option = document.createElement('option');
-                option.value = index;
-                option.textContent = playlist.title;
+                const option = document.createElement('button');
+                const cover = document.createElement('span');
+                const label = document.createElement('span');
+                option.className = 'player-library-option';
+                option.type = 'button';
+                option.dataset.playlistOption = '';
+                option.dataset.playlistIndex = String(index);
+                cover.className = 'player-library-cover';
+                cover.setAttribute('aria-hidden', 'true');
+                label.textContent = this.libraryLabel(playlist);
+                this.renderLibraryCover(cover, playlist);
+                option.append(cover, label);
                 group.append(option);
             });
-            this.elements.playlistSelect.append(group);
+            this.elements.playlistMenu.append(group);
         });
 
-        this.playlistIndex = Math.min(this.playlistIndex, Math.max(0, this.playlists.length - 1));
-        const restoredPlaylist = this.playlists.findIndex((playlist) => String(playlist.id) === String(preferredPlaylistId));
-        if (restoredPlaylist >= 0) this.playlistIndex = restoredPlaylist;
-        const restoredTrack = this.currentPlaylist()?.tracks?.findIndex((track) => String(track.id) === String(preferredTrackId));
-        if (restoredTrack >= 0) this.trackIndex = restoredTrack;
-        this.elements.playlistSelect.value = this.playlistIndex;
+        this.elements.playlistTrigger.disabled = this.playlists.length === 0;
+        this.syncLibrarySelection();
+        this.renderTracks();
         this.markActivePlaylist();
+    }
+
+    libraryLabel(playlist) {
+        const title = String(playlist?.title || 'Untitled');
+        const artist = typeof playlist?.artist === 'string' ? playlist.artist.trim() : '';
+
+        return playlist?.type === 'album' && artist ? `${artist} - ${title}` : title;
+    }
+
+    renderLibraryCover(container, playlist) {
+        if (!container) return;
+
+        container.replaceChildren();
+        container.dataset.sourceType = playlist?.type || 'track';
+        if (!playlist?.cover) return;
+
+        const image = document.createElement('img');
+        image.src = playlist.cover;
+        image.alt = '';
+        image.loading = 'lazy';
+        image.addEventListener('error', () => image.remove(), { once: true });
+        container.append(image);
+    }
+
+    renderTracks() {
+        if (!this.elements.trackPicker || !this.elements.trackTrigger || !this.elements.trackMenu) return;
+
+        const playlist = this.currentPlaylist();
+        const tracks = playlist?.tracks || [];
+        const isAlbum = playlist?.type === 'album';
+        const restoreFocus = this.elements.trackMenu.contains(document.activeElement);
+        const trackPickerHadFocus = this.elements.trackPicker.contains(document.activeElement);
+        this.setTrackMenuOpen(false);
+        this.elements.trackPicker.hidden = !isAlbum;
+        this.elements.trackTrigger.disabled = tracks.length === 0;
+        this.elements.trackMenu.dataset.sourceId = playlist ? String(playlist.id) : '';
+        this.elements.trackMenu.replaceChildren();
+
+        if (!isAlbum) {
+            if (trackPickerHadFocus) requestAnimationFrame(() => this.elements.playlistTrigger?.focus());
+            return;
+        }
+
+        const group = document.createElement('div');
+        const heading = document.createElement('span');
+        group.className = 'player-library-group';
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-labelledby', 'player-track-heading');
+        heading.className = 'player-library-heading';
+        heading.id = 'player-track-heading';
+        heading.textContent = 'Tracks';
+        group.append(heading);
+
+        tracks.forEach((track, index) => {
+            const option = document.createElement('button');
+            const cover = document.createElement('span');
+            const copy = document.createElement('span');
+            const titleLabel = document.createElement('strong');
+            const artistLabel = document.createElement('span');
+            const title = String(track?.title || `Track ${index + 1}`);
+            const artist = String(track?.artist || playlist.artist || '').trim();
+            const sequence = this.trackSequence(track, index);
+            option.className = 'player-library-option';
+            option.type = 'button';
+            option.dataset.trackOption = '';
+            option.dataset.trackIndex = String(index);
+            option.setAttribute('aria-label', `Track ${sequence}, ${title}${artist ? `, by ${artist}` : ''}`);
+            cover.className = 'player-library-cover';
+            cover.setAttribute('aria-hidden', 'true');
+            copy.className = 'player-track-copy';
+            titleLabel.textContent = `${sequence} · ${title}`;
+            artistLabel.textContent = artist;
+            copy.append(titleLabel);
+            if (artist) copy.append(artistLabel);
+            this.renderLibraryCover(cover, track);
+            option.append(cover, copy);
+            group.append(option);
+        });
+        this.elements.trackMenu.append(group);
+        this.elements.trackMenu.setAttribute('aria-label', `Tracks on ${this.libraryLabel(playlist)}`);
+        this.syncTrackSelection();
+        if (restoreFocus) requestAnimationFrame(() => this.elements.trackTrigger?.focus());
+    }
+
+    trackSequence(track, index) {
+        const discNumber = Number(track?.disc_number);
+        const trackNumber = Number(track?.track_number);
+        if (Number.isInteger(trackNumber) && trackNumber > 0) {
+            return Number.isInteger(discNumber) && discNumber > 1
+                ? `${discNumber}.${trackNumber}`
+                : String(trackNumber);
+        }
+
+        return String(index + 1);
+    }
+
+    syncTrackSelection() {
+        const playlist = this.currentPlaylist();
+        const track = this.currentTrack();
+        if (playlist?.type !== 'album') return;
+
+        const title = String(track?.title || 'No tracks available');
+        const label = track ? `${this.trackSequence(track, this.trackIndex)} · ${title}` : title;
+        if (this.elements.trackTriggerLabel) {
+            this.elements.trackTriggerLabel.textContent = label;
+        }
+        this.elements.trackTrigger?.setAttribute(
+            'aria-label',
+            track ? `Choose a track from ${playlist.title}. Current: ${label}` : label,
+        );
+        this.renderLibraryCover(this.elements.trackTriggerCover, track);
+        this.elements.trackMenu?.querySelectorAll('[data-track-option]').forEach((option) => {
+            const selected = Number(option.dataset.trackIndex) === this.trackIndex;
+            option.classList.toggle('active', selected);
+            if (selected) {
+                option.setAttribute('aria-current', 'true');
+            } else {
+                option.removeAttribute('aria-current');
+            }
+        });
+    }
+
+    syncLibrarySelection() {
+        const playlist = this.currentPlaylist();
+        const label = playlist ? this.libraryLabel(playlist) : 'No music available';
+        if (this.elements.playlistTriggerLabel) {
+            this.elements.playlistTriggerLabel.textContent = label;
+        }
+        this.elements.playlistTrigger?.setAttribute(
+            'aria-label',
+            playlist ? `Choose music source. Current: ${label}` : label,
+        );
+        this.renderLibraryCover(this.elements.playlistTriggerCover, playlist);
+        this.elements.playlistMenu?.querySelectorAll('[data-playlist-option]').forEach((option) => {
+            const selected = Number(option.dataset.playlistIndex) === this.playlistIndex;
+            option.classList.toggle('active', selected);
+            if (selected) {
+                option.setAttribute('aria-current', 'true');
+            } else {
+                option.removeAttribute('aria-current');
+            }
+        });
+    }
+
+    setLibraryOpen(open, focusIndex = null) {
+        if (!this.elements.playlistMenu || !this.elements.playlistTrigger) return;
+
+        const expanded = Boolean(open && this.playlists.length);
+        if (expanded) this.setTrackMenuOpen(false);
+        this.elements.playlistMenu.hidden = !expanded;
+        this.elements.playlistTrigger.setAttribute('aria-expanded', String(expanded));
+        this.elements.player?.classList.toggle('library-open', expanded);
+
+        if (expanded && Number.isInteger(focusIndex)) {
+            requestAnimationFrame(() => this.focusLibraryOption(focusIndex));
+        }
+    }
+
+    focusLibraryOption(index) {
+        const options = Array.from(this.elements.playlistMenu?.querySelectorAll('[data-playlist-option]') || []);
+        const option = options.find((candidate) => Number(candidate.dataset.playlistIndex) === index);
+        option?.focus();
+    }
+
+    chooseLibraryOption(event) {
+        const option = event.target instanceof Element
+            ? event.target.closest('[data-playlist-option]')
+            : null;
+        if (!option || !this.elements.playlistMenu?.contains(option)) return;
+
+        this.selectPlaylist(Number(option.dataset.playlistIndex));
+    }
+
+    handleLibraryKeydown(event) {
+        const option = event.target instanceof Element
+            ? event.target.closest('[data-playlist-option]')
+            : null;
+        if (!option) return;
+        const options = Array.from(this.elements.playlistMenu.querySelectorAll('[data-playlist-option]'));
+        const current = options.indexOf(option);
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.setLibraryOpen(false);
+            this.elements.playlistTrigger?.focus();
+            return;
+        }
+        if (event.key === 'Tab') {
+            const leavingMenu = (!event.shiftKey && current === options.length - 1)
+                || (event.shiftKey && current === 0);
+            if (leavingMenu) requestAnimationFrame(() => this.setLibraryOpen(false));
+            return;
+        }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+        event.preventDefault();
+        const next = event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+                ? options.length - 1
+                : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        options[next]?.focus();
+    }
+
+    setTrackMenuOpen(open, focusIndex = null) {
+        if (!this.elements.trackMenu || !this.elements.trackTrigger) return;
+
+        const playlist = this.currentPlaylist();
+        const expanded = Boolean(open && playlist?.type === 'album' && playlist.tracks?.length);
+        if (expanded) this.setLibraryOpen(false);
+        this.elements.trackMenu.hidden = !expanded;
+        this.elements.trackTrigger.setAttribute('aria-expanded', String(expanded));
+
+        if (expanded && Number.isInteger(focusIndex)) {
+            requestAnimationFrame(() => this.focusTrackOption(focusIndex));
+        }
+    }
+
+    focusTrackOption(index) {
+        const options = Array.from(this.elements.trackMenu?.querySelectorAll('[data-track-option]') || []);
+        options.find((candidate) => Number(candidate.dataset.trackIndex) === index)?.focus();
+    }
+
+    chooseTrackOption(event) {
+        const option = event.target instanceof Element
+            ? event.target.closest('[data-track-option]')
+            : null;
+        if (!option || !this.elements.trackMenu?.contains(option)) return;
+
+        this.selectTrack(Number(option.dataset.trackIndex));
+    }
+
+    handleTrackMenuKeydown(event) {
+        const option = event.target instanceof Element
+            ? event.target.closest('[data-track-option]')
+            : null;
+        if (!option) return;
+        const options = Array.from(this.elements.trackMenu.querySelectorAll('[data-track-option]'));
+        const current = options.indexOf(option);
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this.setTrackMenuOpen(false);
+            this.elements.trackTrigger?.focus();
+            return;
+        }
+        if (event.key === 'Tab') {
+            const leavingMenu = (!event.shiftKey && current === options.length - 1)
+                || (event.shiftKey && current === 0);
+            if (leavingMenu) requestAnimationFrame(() => this.setTrackMenuOpen(false));
+            return;
+        }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+        event.preventDefault();
+        const next = event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+                ? options.length - 1
+                : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+        options[next]?.focus();
+    }
+
+    selectTrack(index) {
+        const tracks = this.currentPlaylist()?.tracks || [];
+        if (!Number.isInteger(index) || !tracks[index]) return;
+        if (index === this.trackIndex) {
+            this.setTrackMenuOpen(false);
+            this.elements.trackTrigger?.focus();
+            return;
+        }
+
+        this.trackIndex = index;
+        this.loadTrack(false);
+        this.setTrackMenuOpen(false);
+        this.elements.trackTrigger?.focus();
+        const track = this.currentTrack();
+        if (track) this.announce(`Selected ${track.title}. Press play to start.`);
+    }
+
+    selectPlaylist(index) {
+        if (!Number.isInteger(index) || !this.playlists[index]) return;
+        if (index === this.playlistIndex) {
+            this.setLibraryOpen(false);
+            this.elements.playlistTrigger?.focus();
+            return;
+        }
+
+        this.playlistIndex = index;
+        this.trackIndex = 0;
+        this.loadTrack(false);
+        this.setLibraryOpen(false);
+        this.elements.playlistTrigger?.focus();
+        const track = this.currentTrack();
+        if (track) this.announce(`Selected ${track.title}. Press play to start.`);
     }
 
     updateLibrary(payload) {
@@ -205,9 +574,13 @@ class CreativePlayer {
         this.playlists = playlists;
         this.playlistIndex = Math.max(0, playlists.findIndex((playlist) => String(playlist.id) === String(activePlaylist?.id)));
         this.trackIndex = Math.max(0, this.currentPlaylist()?.tracks?.findIndex((track) => String(track.id) === String(activeTrack?.id)) ?? 0);
+        this.setLibraryOpen(false);
+        this.setTrackMenuOpen(false);
         this.renderPlaylists(activePlaylist?.id, activeTrack?.id);
 
-        if (!hadTrack && this.currentTrack()) this.loadTrack(false);
+        const selectedTrack = this.currentTrack();
+        const activeTrackWasRemoved = hadTrack && String(selectedTrack?.id) !== String(activeTrack.id);
+        if (selectedTrack && (!hadTrack || activeTrackWasRemoved)) this.loadTrack(false);
     }
 
     currentPlaylist() {
@@ -220,9 +593,13 @@ class CreativePlayer {
 
     loadTrack(autoplay) {
         const playlist = this.currentPlaylist();
+        const renderedSourceId = this.elements.trackMenu?.dataset.sourceId ?? '';
+        if (renderedSourceId !== String(playlist?.id ?? '')) this.renderTracks();
         if (!playlist || playlist.tracks.length === 0) {
             this.elements.title.textContent = 'No tracks published';
             this.elements.artist.textContent = 'Add music in the admin panel';
+            this.syncLibrarySelection();
+            this.syncTrackSelection();
             return;
         }
 
@@ -232,7 +609,8 @@ class CreativePlayer {
         this.elements.title.textContent = track.title;
         this.elements.artist.textContent = track.artist || playlist.title;
         this.elements.art.style.backgroundImage = track.cover ? `url("${track.cover}")` : '';
-        this.elements.playlistSelect.value = this.playlistIndex;
+        this.syncLibrarySelection();
+        this.syncTrackSelection();
         this.updatePlayIcon(false);
         this.markActivePlaylist();
         this.saveState();
@@ -273,7 +651,8 @@ class CreativePlayer {
     }
 
     drawWaveform(points) {
-        const canvas = this.elements.canvas; if (!canvas || !points.length || this.audioContext) return;
+        const canvas = this.elements.canvas; if (!canvas || this.audioContext) return;
+        if (!points.length) { this.drawIdleVisualizer(); return; }
         const context = canvas.getContext('2d'); const middle = canvas.height / 2;
         context.clearRect(0, 0, canvas.width, canvas.height); context.fillStyle = 'rgba(111, 231, 200, .7)';
         const width = canvas.width / points.length;
@@ -394,6 +773,10 @@ class CreativePlayer {
 
     setCollapsed(collapsed) {
         this.elements.player?.classList.toggle('collapsed', collapsed);
+        if (collapsed) {
+            this.setLibraryOpen(false);
+            this.setTrackMenuOpen(false);
+        }
         this.elements.collapses.forEach((button) => {
             button.setAttribute('aria-expanded', String(!collapsed));
             button.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} music player`);

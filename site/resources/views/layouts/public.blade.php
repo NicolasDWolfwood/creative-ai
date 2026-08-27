@@ -152,7 +152,7 @@
 
         <div class="lightbox" id="artwork-lightbox" data-lightbox-panel aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="lightbox-title" aria-describedby="lightbox-description">
             <button type="button" class="icon-button lightbox-close" data-lightbox-close aria-label="Close artwork"><i data-lucide="x"></i></button>
-            <button type="button" class="icon-button lightbox-prev" data-lightbox-prev aria-label="Previous artwork"><i data-lucide="chevron-left"></i></button>
+            <button type="button" class="icon-button lightbox-prev" data-lightbox-prev aria-label="Previous artwork" hidden disabled><i data-lucide="chevron-left"></i></button>
             <figure>
                 <img src="" alt="" data-lightbox-image data-artwork-preview-image draggable="false">
                 <figcaption>
@@ -161,7 +161,7 @@
                     <a class="button button-secondary lightbox-detail-link" data-lightbox-detail hidden wire:navigate>View artwork details</a>
                 </figcaption>
             </figure>
-            <button type="button" class="icon-button lightbox-next" data-lightbox-next aria-label="Next artwork"><i data-lucide="chevron-right"></i></button>
+            <button type="button" class="icon-button lightbox-next" data-lightbox-next aria-label="Next artwork" hidden disabled><i data-lucide="chevron-right"></i></button>
         </div>
 
         @persist('creative-ai-player')
@@ -178,7 +178,24 @@
             </div>
             <div class="player-body">
                 <div class="player-select-row">
-                    <select data-playlist-select aria-label="Album or playlist"></select>
+                    <div class="player-picker-stack">
+                        <div class="player-library-picker" data-playlist-picker>
+                            <button class="player-library-trigger" type="button" data-playlist-trigger aria-label="Choose an album, playlist, or track" aria-expanded="false" aria-controls="player-library-options">
+                                <span class="player-library-cover" data-playlist-trigger-cover aria-hidden="true"></span>
+                                <span data-playlist-trigger-label>Choose an album, playlist, or track</span>
+                                <i data-lucide="chevron-up" aria-hidden="true"></i>
+                            </button>
+                            <div class="player-library-menu" id="player-library-options" data-playlist-menu role="region" aria-label="Albums, playlists, and tracks" hidden></div>
+                        </div>
+                        <div class="player-library-picker" data-track-picker hidden>
+                            <button class="player-library-trigger" type="button" data-track-trigger aria-label="Choose a track" aria-expanded="false" aria-controls="player-track-options">
+                                <span class="player-library-cover" data-track-trigger-cover aria-hidden="true"></span>
+                                <span data-track-trigger-label>Choose a track</span>
+                                <i data-lucide="chevron-up" aria-hidden="true"></i>
+                            </button>
+                            <div class="player-library-menu" id="player-track-options" data-track-menu role="region" aria-label="Tracks in the selected music source" hidden></div>
+                        </div>
+                    </div>
                     <input type="range" class="volume" data-volume min="0" max="1" value="0.85" step="0.01" aria-label="Volume">
                 </div>
                 <canvas class="visualizer" data-visualizer width="680" height="64" aria-hidden="true"></canvas>
