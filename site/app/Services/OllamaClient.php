@@ -72,23 +72,23 @@ class OllamaClient
         $profile->assertRequestCapacity($instructions, $input, $schema, $maxTokens);
 
         try {
+            $payload = [
+                'model' => $profile->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $instructions],
+                    ['role' => 'user', 'content' => $input],
+                ],
+                'format' => AiSchema::portable($schema),
+                'stream' => false,
+                'think' => false,
+                'options' => [
+                    'num_predict' => $maxTokens,
+                    'temperature' => 0.2,
+                ],
+            ];
+
             $providerResponse = $this->profileClient($profile)
-                ->post('api/chat', [
-                    'model' => $profile->model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $instructions],
-                        ['role' => 'user', 'content' => $input],
-                    ],
-                    'format' => AiSchema::portable($schema),
-                    'stream' => false,
-                    'think' => false,
-                    'keep_alive' => (string) ($profile->outputSettings['keep_alive'] ?? '5m'),
-                    'options' => [
-                        'num_ctx' => (int) ($profile->outputSettings['context_length'] ?? 4096),
-                        'num_predict' => $maxTokens,
-                        'temperature' => 0.2,
-                    ],
-                ]);
+                ->post('api/chat', $payload);
 
             $response = JournalAiHttpResponse::decode($providerResponse);
         } catch (AiProviderException $exception) {
@@ -132,9 +132,7 @@ class OllamaClient
                 'format' => AiSchema::portable($schema),
                 'stream' => false,
                 'think' => false,
-                'keep_alive' => $this->settings->ollamaKeepAlive(),
                 'options' => [
-                    'num_ctx' => $this->settings->ollamaContextLength(),
                     'num_predict' => 1000,
                     'temperature' => 0.2,
                 ],

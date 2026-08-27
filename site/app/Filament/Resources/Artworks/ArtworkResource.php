@@ -321,8 +321,8 @@ class ArtworkResource extends Resource
                             ->label('Apply AI suggestions')
                             ->icon('heroicon-o-check-circle')
                             ->color('success')
-                            ->visible(fn (?Artwork $record): bool => filled($record?->ai_suggestion)
-                                && $record->ai_status === Artwork::AI_STATUS_READY)
+                            ->visible(fn (?Artwork $record): bool => app(ArtworkAiMetadataService::class)
+                                ->hasApplicableReadySuggestion($record))
                             ->requiresConfirmation()
                             ->modalDescription('This replaces the public title, description, alt text, and tags. The existing slug remains unchanged.')
                             ->action(function (?Artwork $record, Set $set): void {
@@ -524,8 +524,8 @@ class ArtworkResource extends Resource
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->visible(fn (Artwork $record): bool => filled($record->ai_suggestion)
-                            && $record->ai_status === Artwork::AI_STATUS_READY)
+                        ->visible(fn (Artwork $record): bool => app(ArtworkAiMetadataService::class)
+                            ->hasApplicableReadySuggestion($record))
                         ->action(function (Artwork $record): void {
                             app(ArtworkAiMetadataService::class)->applySuggestion($record);
 
@@ -851,7 +851,7 @@ class ArtworkResource extends Resource
             return 'Suggested tags: none yet';
         }
 
-        $suggestion = $record->ai_suggestion;
+        $suggestion = app(ArtworkAiMetadataService::class)->normalizeSuggestion($record->ai_suggestion);
         $groups = [
             'Subject' => $suggestion['tags'] ?? [],
             'Style' => $suggestion['style_tags'] ?? [],

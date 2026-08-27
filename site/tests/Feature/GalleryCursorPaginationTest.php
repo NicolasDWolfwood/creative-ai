@@ -39,8 +39,28 @@ class GalleryCursorPaginationTest extends TestCase
             ->assertSee('data-gallery-pagination', false)
             ->assertSee('data-gallery-load-status aria-live="polite" aria-atomic="true"', false)
             ->assertSee('data-gallery-load-more', false)
-            ->assertSee('href="'.route('artworks.show', $artworks->last()).'"', false)
-            ->assertSee('aria-label="Quick view Archive Frame 55"', false);
+            ->assertSee('data-lightbox-detail hidden wire:navigate', false)
+            ->assertDontSee('art-quick-view', false)
+            ->assertDontSee('Quick view Archive Frame 55');
+
+        $firstArtwork = $artworks->last();
+        $firstArtworkLink = $this->artworkLink($firstResponse->getContent(), $firstArtwork);
+        $heroTrigger = $this->heroTrigger($firstResponse->getContent());
+        $this->assertSame(
+            2,
+            substr_count($firstResponse->getContent(), 'data-full="'.$firstArtwork->display_url.'"'),
+            'The gallery hero and its matching tile should exercise duplicate lightbox-item handling.',
+        );
+        $this->assertStringContainsString('data-full="'.$firstArtwork->display_url.'"', $heroTrigger);
+        $this->assertStringContainsString('data-detail="'.route('artworks.show', $firstArtwork).'"', $heroTrigger);
+        $this->assertStringContainsString('href="'.route('artworks.show', $firstArtwork).'"', $firstArtworkLink);
+        $this->assertStringContainsString('data-lightbox', $firstArtworkLink);
+        $this->assertStringContainsString('data-full="'.$firstArtwork->display_url.'"', $firstArtworkLink);
+        $this->assertStringContainsString('data-detail="'.route('artworks.show', $firstArtwork).'"', $firstArtworkLink);
+        $this->assertStringContainsString('aria-label="Preview Archive Frame 55"', $firstArtworkLink);
+        $this->assertStringContainsString('aria-haspopup="dialog"', $firstArtworkLink);
+        $this->assertStringContainsString('aria-controls="artwork-lightbox"', $firstArtworkLink);
+        $this->assertStringNotContainsString('wire:navigate', $firstArtworkLink);
 
         $firstIds = $this->artworkIds($firstResponse->getContent());
         $nextPageUrl = $this->nextPageUrl($firstResponse->getContent());
@@ -77,12 +97,19 @@ class GalleryCursorPaginationTest extends TestCase
 
         $response = $this->get(route('collections.show', $collection).'?tag='.$tag->slug);
         $nextPageUrl = $this->nextPageUrl($response->getContent());
+        $contextUrl = route('artworks.show', [
+            'artwork' => $artwork,
+            'collection' => $collection->slug,
+        ]);
+        $firstArtworkLink = $this->artworkLink($response->getContent(), $artwork);
 
         $response
             ->assertOk()
             ->assertSee('48 of 49 frames loaded')
             ->assertSee('data-artwork-preview-image', false)
             ->assertSee('draggable="false"', false);
+        $this->assertStringContainsString('href="'.$contextUrl.'"', $firstArtworkLink);
+        $this->assertStringContainsString('data-detail="'.$contextUrl.'"', $firstArtworkLink);
         $this->assertStringStartsWith(route('collections.show', $collection), $nextPageUrl);
         $this->assertStringContainsString('tag=quiet', $nextPageUrl);
         $this->assertStringEndsWith('#gallery', $nextPageUrl);
@@ -98,6 +125,7 @@ class GalleryCursorPaginationTest extends TestCase
         $this->assertStringContainsString('results.append(...nextItems)', $source);
         $this->assertStringContainsString("document.addEventListener('click', (event) => {", $source);
         $this->assertStringContainsString("event.target.closest('[data-lightbox]')", $source);
+        $this->assertStringContainsString("trigger.dataset.detail || availableItems[activeIndex]?.dataset.detail || ''", $source);
         $this->assertStringContainsString("closest('[data-artwork-preview-image]')", $source);
         $this->assertStringContainsString("firstNewItem.querySelector('.art-tile-link')?.focus", $source);
     }
@@ -117,5 +145,27 @@ class GalleryCursorPaginationTest extends TestCase
         $this->assertArrayHasKey(1, $matches, 'Expected the gallery to render a load-more URL.');
 
         return html_entity_decode($matches[1], ENT_QUOTES);
+    }
+
+    private function artworkLink(string $html, Artwork $artwork): string
+    {
+        preg_match(
+            '/<article class="art-tile" data-gallery-artwork-id="'.preg_quote((string) $artwork->getKey(), '/').'">\s*(<a\b[^>]*class="art-tile-link"[^>]*>)/',
+            $html,
+            $matches,
+        );
+
+        $this->assertArrayHasKey(1, $matches, 'Expected the artwork tile to render one primary link.');
+
+        return $matches[1];
+    }
+
+    private function heroTrigger(string $html): string
+    {
+        preg_match('/<button class="hero-credit"[^>]*>/', $html, $matches);
+
+        $this->assertArrayHasKey(0, $matches, 'Expected the gallery to render a hero lightbox trigger.');
+
+        return $matches[0];
     }
 }

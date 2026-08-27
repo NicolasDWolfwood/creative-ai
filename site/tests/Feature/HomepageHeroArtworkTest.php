@@ -46,6 +46,7 @@ class HomepageHeroArtworkTest extends TestCase
             ->assertViewHas('seo', fn (array $seo): bool => ($seo['image'] ?? null) === url($artwork->homepage_display_url))
             ->assertSee($artwork->homepage_display_url, escape: false)
             ->assertSee('Homepage only')
+            ->assertDontSee('data-detail="'.route('artworks.show', $artwork).'"', escape: false)
             ->assertSee('No published artwork yet.');
 
         $this->get($artwork->homepage_display_url)

@@ -12,6 +12,8 @@ class AiSettings
 {
     public const SETTING_KEY = 'ai_configuration';
 
+    public const OLLAMA_REQUEST_TIMEOUT_SECONDS = 150;
+
     public const PROVIDERS = [
         'ollama' => 'Ollama',
         'openai' => 'OpenAI',
@@ -133,6 +135,10 @@ class AiSettings
     {
         $provider ??= $this->provider();
 
+        if ($provider === 'ollama') {
+            return self::OLLAMA_REQUEST_TIMEOUT_SECONDS;
+        }
+
         return (int) ($this->all()[$provider.'_request_timeout'] ?? 90);
     }
 
@@ -173,17 +179,7 @@ class AiSettings
 
     public function ollamaRequestTimeout(): int
     {
-        return $this->requestTimeout('ollama');
-    }
-
-    public function ollamaContextLength(): int
-    {
-        return (int) $this->all()['ollama_context_length'];
-    }
-
-    public function ollamaKeepAlive(): string
-    {
-        return (string) $this->all()['ollama_keep_alive'];
+        return self::OLLAMA_REQUEST_TIMEOUT_SECONDS;
     }
 
     public function openAiModel(): string
@@ -219,10 +215,7 @@ class AiSettings
             'ollama_base_url' => 'http://ollama:11434',
             'ollama_model' => 'qwen3.5:latest',
             'ollama_journal_model' => 'qwen3.5:latest',
-            'ollama_request_timeout' => 150,
             'ollama_external_processing' => true,
-            'ollama_context_length' => 4096,
-            'ollama_keep_alive' => '5m',
             'openai_api_key' => '',
             'openai_base_url' => 'https://api.openai.com/v1',
             'openai_model' => 'gpt-5.4-mini',
@@ -262,10 +255,7 @@ class AiSettings
             'ollama_base_url' => $this->normalizeUrl((string) ($settings['ollama_base_url'] ?? ''), 'Ollama server'),
             'ollama_model' => $this->cleanName($settings['ollama_model'] ?? 'qwen3.5:latest', 'qwen3.5:latest'),
             'ollama_journal_model' => $this->cleanName($settings['ollama_journal_model'] ?? 'qwen3.5:latest', 'qwen3.5:latest'),
-            'ollama_request_timeout' => $this->clampInteger($settings['ollama_request_timeout'] ?? 150, 30, 600),
             'ollama_external_processing' => filter_var($settings['ollama_external_processing'] ?? true, FILTER_VALIDATE_BOOL),
-            'ollama_context_length' => $this->clampInteger($settings['ollama_context_length'] ?? 4096, 2048, 131072),
-            'ollama_keep_alive' => $this->normalizeKeepAlive((string) ($settings['ollama_keep_alive'] ?? '5m')),
             'openai_base_url' => $this->normalizeUrl((string) ($settings['openai_base_url'] ?? ''), 'OpenAI API'),
             'openai_model' => $this->cleanName($settings['openai_model'] ?? 'gpt-5.4-mini', 'gpt-5.4-mini'),
             'openai_journal_model' => $this->cleanName($settings['openai_journal_model'] ?? 'gpt-5.4-mini', 'gpt-5.4-mini'),
@@ -335,13 +325,6 @@ class AiSettings
         }
 
         return $url;
-    }
-
-    protected function normalizeKeepAlive(string $value): string
-    {
-        $value = trim($value);
-
-        return preg_match('/^-?\d+(?:ms|s|m|h)?$/', $value) ? $value : '5m';
     }
 
     protected function cleanName(mixed $value, string $fallback): string

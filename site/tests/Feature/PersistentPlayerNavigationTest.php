@@ -124,6 +124,16 @@ class PersistentPlayerNavigationTest extends TestCase
         $this->assertStringContainsString('availableItems.length > 1', $lightboxSource);
         $this->assertStringContainsString('control.hidden = !hasMultipleItems', $lightboxSource);
         $this->assertStringContainsString('control.disabled = !hasMultipleItems', $lightboxSource);
+        $this->assertStringContainsString('candidate.dataset.full === trigger.dataset.full && candidate.dataset.detail', $lightboxSource);
+        $this->assertStringContainsString('return trigger === preferred', $lightboxSource);
+        $this->assertStringContainsString('const show = (index, source = null)', $lightboxSource);
+        $this->assertStringContainsString('show(Math.max(0, index), trigger)', $lightboxSource);
+        $this->assertStringContainsString("const detailUrl = trigger.dataset.detail || availableItems[activeIndex]?.dataset.detail || ''", $lightboxSource);
+        $this->assertStringContainsString('document.activeElement === detail', $lightboxSource);
+        $this->assertStringContainsString('closeControl?.focus()', $lightboxSource);
+        $this->assertStringContainsString('detail.hidden = !detailUrl', $lightboxSource);
+        $this->assertStringContainsString('detail.href = detailUrl', $lightboxSource);
+        $this->assertStringContainsString("detail.removeAttribute('href')", $lightboxSource);
 
         $deterrenceSource = substr($source, $deterrenceStart, $navigationStart - $deterrenceStart);
         $this->assertStringContainsString("closest('[data-artwork-preview-image]')", $deterrenceSource);

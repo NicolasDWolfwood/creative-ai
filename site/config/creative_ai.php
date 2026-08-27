@@ -31,7 +31,7 @@ return [
         'max_source_pixels' => 20_000_000,
     ],
     'ai' => [
-        'prompt_version' => 'artwork-metadata-v2',
+        'prompt_version' => 'artwork-metadata-v3',
         'artwork_tag_vocabulary' => [
             'minimum_artwork' => 2,
             'limit' => 48,
