@@ -109,11 +109,11 @@ class JournalAiRunLifecycleTest extends TestCase
         );
     }
 
-    public function test_preview_rejects_an_ollama_request_that_cannot_fit_the_pinned_context(): void
+    public function test_preview_rejects_an_ollama_request_that_cannot_fit_the_internal_budget(): void
     {
         $post = $this->makePost();
+        $post->forceFill(['body' => str_repeat('large context ', 1200)])->saveOrFail();
         $admin = User::factory()->admin()->create();
-        $this->configureOllama(['ollama_context_length' => 2048]);
 
         try {
             app(JournalAiRunService::class)->preview(
@@ -122,7 +122,7 @@ class JournalAiRunLifecycleTest extends TestCase
                 $this->selection(),
                 $admin,
             );
-            $this->fail('An undersized pinned context must fail before acknowledgement or queueing.');
+            $this->fail('An oversized Ollama request must fail before acknowledgement or queueing.');
         } catch (AiProviderException $exception) {
             $this->assertSame(AiProviderException::CATEGORY_INVALID_CONFIGURATION, $exception->category);
         }
@@ -710,10 +710,7 @@ class JournalAiRunLifecycleTest extends TestCase
             'ollama_base_url' => 'http://ollama.test:11434',
             'ollama_model' => 'qwen3.5:latest',
             'ollama_journal_model' => 'qwen3.5:latest',
-            'ollama_request_timeout' => 60,
             'ollama_external_processing' => false,
-            'ollama_context_length' => 8192,
-            'ollama_keep_alive' => '5m',
         ], $overrides));
     }
 

@@ -467,31 +467,51 @@ function setupLightbox(signal) {
     const image = panel.querySelector('[data-lightbox-image]');
     const title = panel.querySelector('[data-lightbox-title]');
     const description = panel.querySelector('[data-lightbox-description]');
+    const detail = panel.querySelector('[data-lightbox-detail]');
+    const closeControl = panel.querySelector('[data-lightbox-close]');
     const previous = panel.querySelector('[data-lightbox-prev]');
     const next = panel.querySelector('[data-lightbox-next]');
 
-    const items = () => [...document.querySelectorAll('[data-lightbox]')]
-        .filter((trigger, index, triggers) => triggers.findIndex((candidate) => candidate.dataset.full === trigger.dataset.full) === index);
+    const items = () => {
+        const triggers = [...document.querySelectorAll('[data-lightbox]')];
+
+        return triggers.filter((trigger) => {
+            const preferred = triggers.find((candidate) => candidate.dataset.full === trigger.dataset.full && candidate.dataset.detail)
+                || triggers.find((candidate) => candidate.dataset.full === trigger.dataset.full);
+
+            return trigger === preferred;
+        });
+    };
     let activeIndex = 0;
     let opener = null;
     const background = [...document.body.children].filter((element) => element !== panel && element.tagName !== 'SCRIPT');
     const previouslyInert = new Map();
 
-    const show = (index) => {
+    const show = (index, source = null) => {
         const availableItems = items();
         if (!availableItems.length) return;
         const hasMultipleItems = availableItems.length > 1;
         activeIndex = (index + availableItems.length) % availableItems.length;
-        const button = availableItems[activeIndex];
+        const trigger = source || availableItems[activeIndex];
         [previous, next].forEach((control) => {
             if (!control) return;
             control.hidden = !hasMultipleItems;
             control.disabled = !hasMultipleItems;
         });
-        image.src = button.dataset.full;
-        image.alt = button.dataset.alt || button.dataset.title || '';
-        title.textContent = button.dataset.title || '';
-        description.textContent = button.dataset.description || '';
+        image.src = trigger.dataset.full;
+        image.alt = trigger.dataset.alt || trigger.dataset.title || '';
+        title.textContent = trigger.dataset.title || '';
+        description.textContent = trigger.dataset.description || '';
+        if (detail) {
+            const detailUrl = trigger.dataset.detail || availableItems[activeIndex]?.dataset.detail || '';
+            if (!detailUrl && document.activeElement === detail) closeControl?.focus();
+            detail.hidden = !detailUrl;
+            if (detailUrl) {
+                detail.href = detailUrl;
+            } else {
+                detail.removeAttribute('href');
+            }
+        }
     };
 
     document.addEventListener('click', (event) => {
@@ -505,7 +525,7 @@ function setupLightbox(signal) {
         opener = trigger;
         const availableItems = items();
         const index = availableItems.findIndex((item) => item === trigger || item.dataset.full === trigger.dataset.full);
-        show(Math.max(0, index));
+        show(Math.max(0, index), trigger);
         panel.classList.add('open');
         panel.setAttribute('aria-hidden', 'false');
         document.body.classList.add('lightbox-open');
@@ -513,7 +533,7 @@ function setupLightbox(signal) {
             previouslyInert.set(element, element.inert);
             element.inert = true;
         });
-        panel.querySelector('[data-lightbox-close]')?.focus();
+        closeControl?.focus();
     }, { signal });
 
     const close = (restoreFocus = true) => {
@@ -528,7 +548,7 @@ function setupLightbox(signal) {
         opener = null;
     };
 
-    panel.querySelector('[data-lightbox-close]')?.addEventListener('click', close, { signal });
+    closeControl?.addEventListener('click', close, { signal });
     previous?.addEventListener('click', () => show(activeIndex - 1), { signal });
     next?.addEventListener('click', () => show(activeIndex + 1), { signal });
     panel.addEventListener('click', (event) => {

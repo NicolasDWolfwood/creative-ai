@@ -87,6 +87,7 @@ class CollectionMemberPublicationTest extends TestCase
             ->assertSee('data-gallery-artwork-id="'.$inherited->id.'"', false)
             ->assertSee('data-gallery-artwork-id="'.$collectionNeighbor->id.'"', false)
             ->assertSee('href="'.$contextUrl.'"', false)
+            ->assertSee('data-detail="'.$contextUrl.'"', false)
             ->assertDontSee('data-gallery-artwork-id="'.$standalone->id.'"', false);
 
         $directDetail = $this->get(route('artworks.show', $inherited));
@@ -155,6 +156,30 @@ class CollectionMemberPublicationTest extends TestCase
         $this->get($inherited->public_image_url)->assertNotFound();
         $this->get($inherited->thumb_url)->assertNotFound();
         $this->assertFalse($inherited->refresh()->published);
+    }
+
+    public function test_empty_collection_global_fallback_hero_uses_the_canonical_detail_url(): void
+    {
+        $collection = $this->collection('Empty room');
+        $standalone = $this->artwork('Global fallback', published: true);
+        $canonicalUrl = route('artworks.show', $standalone);
+        $invalidContextUrl = route('artworks.show', [
+            'artwork' => $standalone,
+            'collection' => $collection->slug,
+        ]);
+
+        $response = $this->get(route('collections.show', $collection));
+
+        $response
+            ->assertOk()
+            ->assertViewHas('heroArtwork', fn (?Artwork $hero): bool => $hero?->is($standalone) === true)
+            ->assertViewHas('heroDetailUrl', $canonicalUrl)
+            ->assertSee('data-detail="'.$canonicalUrl.'"', escape: false)
+            ->assertDontSee('data-detail="'.$invalidContextUrl.'"', escape: false)
+            ->assertDontSee('data-gallery-artwork-id="'.$standalone->getKey().'"', escape: false);
+
+        $this->get($canonicalUrl)->assertOk();
+        $this->get($invalidContextUrl)->assertNotFound();
     }
 
     public function test_a_collection_grant_honors_an_artwork_future_date_without_needing_a_due_time_resync(): void

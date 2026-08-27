@@ -1415,6 +1415,7 @@ h3 {
 .art-tile-link {
     display: block;
     color: inherit;
+    cursor: zoom-in;
 }
 
 .art-tile img {
@@ -1469,43 +1470,6 @@ h3 {
 .art-tile-link:focus-visible {
     outline: 2px solid var(--mint);
     outline-offset: -3px;
-}
-
-.art-quick-view {
-    position: absolute;
-    z-index: 2;
-    top: 8px;
-    right: 8px;
-    display: grid;
-    width: 36px;
-    height: 36px;
-    place-items: center;
-    padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 999px;
-    background: rgba(7, 8, 10, 0.84);
-    color: var(--ink);
-    cursor: zoom-in;
-    opacity: 0;
-    transform: translateY(-4px);
-    transition: opacity 160ms ease, transform 160ms ease, border-color 160ms ease;
-}
-
-.art-tile:hover .art-quick-view,
-.art-quick-view:focus-visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.art-quick-view:hover,
-.art-quick-view:focus-visible {
-    border-color: var(--mint);
-    color: var(--mint);
-}
-
-.art-quick-view svg {
-    width: 17px;
-    height: 17px;
 }
 
 .gallery-pagination {
@@ -1971,6 +1935,18 @@ h3 {
 
 .lightbox figcaption strong {
     color: var(--ink);
+}
+
+.lightbox-detail-link {
+    flex: 0 0 auto;
+    min-height: 38px;
+    margin-left: 4px;
+    padding: 0 14px;
+    white-space: nowrap;
+}
+
+.lightbox-detail-link[hidden] {
+    display: none;
 }
 
 .lightbox-close {

@@ -22,6 +22,8 @@ final class ProviderExecutionProfile implements JsonSerializable
 
     public const OLLAMA_FRAMING_TOKEN_RESERVE = 256;
 
+    public const OLLAMA_CONTEXT_BUDGET = 16_384;
+
     private const PROVIDERS = ['ollama', 'openai', 'anthropic', 'zai'];
 
     /**
@@ -64,10 +66,9 @@ final class ProviderExecutionProfile implements JsonSerializable
                 self::MIN_TIMEOUT_SECONDS,
                 $settings->requestTimeout($provider),
             )),
-            outputSettings: $provider === 'ollama' ? [
-                'context_length' => $settings->ollamaContextLength(),
-                'keep_alive' => $settings->ollamaKeepAlive(),
-            ] : [],
+            outputSettings: $provider === 'ollama'
+                ? ['context_budget' => self::OLLAMA_CONTEXT_BUDGET]
+                : [],
             externalProcessing: $settings->externalProcessing($provider),
             credentialFingerprint: $credentialFingerprint,
         );
@@ -181,11 +182,15 @@ final class ProviderExecutionProfile implements JsonSerializable
             return;
         }
 
-        $contextLength = $this->outputSettings['context_length'] ?? null;
+        $contextLength = $this->outputSettings['context_budget']
+            ?? $this->outputSettings['context_length']
+            ?? null;
 
         if (! is_int($contextLength)) {
             throw AiProviderException::invalidConfiguration();
         }
+
+        $contextLength = min($contextLength, self::OLLAMA_CONTEXT_BUDGET);
 
         try {
             $portableSchema = CanonicalJson::encode(AiSchema::portable($schema));

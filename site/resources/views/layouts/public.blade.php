@@ -155,7 +155,11 @@
             <button type="button" class="icon-button lightbox-prev" data-lightbox-prev aria-label="Previous artwork"><i data-lucide="chevron-left"></i></button>
             <figure>
                 <img src="" alt="" data-lightbox-image data-artwork-preview-image draggable="false">
-                <figcaption><strong id="lightbox-title" data-lightbox-title></strong><span id="lightbox-description" data-lightbox-description></span></figcaption>
+                <figcaption>
+                    <strong id="lightbox-title" data-lightbox-title></strong>
+                    <span id="lightbox-description" data-lightbox-description></span>
+                    <a class="button button-secondary lightbox-detail-link" data-lightbox-detail hidden wire:navigate>View artwork details</a>
+                </figcaption>
             </figure>
             <button type="button" class="icon-button lightbox-next" data-lightbox-next aria-label="Next artwork"><i data-lucide="chevron-right"></i></button>
         </div>

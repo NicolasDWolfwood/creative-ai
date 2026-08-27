@@ -95,13 +95,21 @@ class ShowcaseController extends Controller
         $artworks = $paginateArtwork
             ? $artworksQuery->cursorPaginate($limit)->withQueryString()
             : $artworksQuery->limit($limit)->get();
+        $contextHeroArtwork = $artworks->first();
         $heroArtwork = $useHomepageHero
             ? $this->homepageHeroArtwork->select()
-            : ($artworks->first()
+            : ($contextHeroArtwork
                 ?: Artwork::query()->published()->withPublicRenditions()->orderByDesc('featured')->orderByDesc('sort_order')->first());
         $heroImageUrl = $heroArtwork
             ? ($useHomepageHero ? $heroArtwork->homepage_display_url : $heroArtwork->display_url)
             : null;
+        $heroDetailUrl = null;
+
+        if ($heroArtwork?->isPubliclyAvailable()) {
+            $heroDetailUrl = route('artworks.show', $selectedCollection && $contextHeroArtwork?->is($heroArtwork)
+                ? ['artwork' => $heroArtwork, 'collection' => $selectedCollection->slug]
+                : $heroArtwork);
+        }
         $collections = Collection::query()
             ->published()
             ->withCount(['artworks' => fn ($query) => $query->publiclyAvailable()])
@@ -173,6 +181,7 @@ class ShowcaseController extends Controller
             'intro' => $intro,
             'heroArtwork' => $heroArtwork,
             'heroImageUrl' => $heroImageUrl,
+            'heroDetailUrl' => $heroDetailUrl,
             'collections' => $collections,
             'collectionCovers' => $collectionCovers,
             'collectionCoverPlaceholder' => asset(CollectionCoverService::PLACEHOLDER_PATH),

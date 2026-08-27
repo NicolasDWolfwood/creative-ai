@@ -915,10 +915,7 @@ MARKDOWN;
             'ollama_base_url' => 'http://ollama.test:11434',
             'ollama_model' => 'qwen3.5:latest',
             'ollama_journal_model' => 'qwen3.5:latest',
-            'ollama_request_timeout' => 60,
             'ollama_external_processing' => false,
-            'ollama_context_length' => 8192,
-            'ollama_keep_alive' => '5m',
         ]);
     }
 }

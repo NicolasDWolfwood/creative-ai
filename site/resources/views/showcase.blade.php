@@ -18,7 +18,7 @@
             </div>
         </div>
         @if ($heroArtwork)
-            <button class="hero-credit" type="button" data-lightbox data-title="{{ $heroArtwork->title }}" data-description="{{ $heroArtwork->description }}" data-alt="{{ $heroArtwork->image_alt }}" data-full="{{ $heroImageUrl }}">
+            <button class="hero-credit" type="button" data-lightbox data-title="{{ $heroArtwork->title }}" data-description="{{ $heroArtwork->description }}" data-alt="{{ $heroArtwork->image_alt }}" data-full="{{ $heroImageUrl }}" @if ($heroDetailUrl) data-detail="{{ $heroDetailUrl }}" @endif>
                 <span>Featured frame</span><strong>{{ $heroArtwork->title }}</strong>
             </button>
         @endif
@@ -114,14 +114,24 @@
 
             <div class="art-grid" data-gallery-results>
                 @forelse ($artworks as $artwork)
+                    @php($artworkDetailUrl = route('artworks.show', $selectedCollection ? ['artwork' => $artwork, 'collection' => $selectedCollection->slug] : $artwork))
                     <article class="art-tile" data-gallery-artwork-id="{{ $artwork->getKey() }}">
-                        <a class="art-tile-link" href="{{ route('artworks.show', $selectedCollection ? ['artwork' => $artwork, 'collection' => $selectedCollection->slug] : $artwork) }}" wire:navigate>
+                        <a
+                            class="art-tile-link"
+                            href="{{ $artworkDetailUrl }}"
+                            data-lightbox
+                            data-title="{{ $artwork->title }}"
+                            data-description="{{ $artwork->description }}"
+                            data-alt="{{ $artwork->image_alt }}"
+                            data-full="{{ $artwork->display_url }}"
+                            data-detail="{{ $artworkDetailUrl }}"
+                            aria-label="Preview {{ $artwork->title }}"
+                            aria-haspopup="dialog"
+                            aria-controls="artwork-lightbox"
+                        >
                             <img src="{{ $artwork->thumb_url }}" alt="{{ $artwork->image_alt }}" loading="lazy" width="{{ $artwork->width ?: 720 }}" height="{{ $artwork->height ?: 900 }}" data-artwork-preview-image draggable="false">
                             <span><strong>{{ $artwork->title }}</strong><small>{{ $artwork->tags->take(2)->pluck('name')->implode(' · ') }}</small></span>
                         </a>
-                        <button class="art-quick-view" type="button" data-lightbox data-title="{{ $artwork->title }}" data-description="{{ $artwork->description }}" data-alt="{{ $artwork->image_alt }}" data-full="{{ $artwork->display_url }}" aria-label="Quick view {{ $artwork->title }}">
-                            <i data-lucide="expand"></i>
-                        </button>
                     </article>
                 @empty
                     <p class="empty-state">No published artwork yet.</p>

@@ -71,7 +71,7 @@ class AiConfiguration extends Page
                             ->icon('heroicon-o-cpu-chip')
                             ->schema([
                                 Section::make('Active AI provider')
-                                    ->description('Artwork uses the image model. New Journal runs pin the Journal model, endpoint, timeout, and a credential fingerprint when queued.')
+                                    ->description('Artwork uses the image model. New Journal runs pin the Journal model, endpoint, internal execution deadline, and a credential fingerprint when queued.')
                                     ->schema([
                                         Select::make('provider')
                                             ->options(AiSettings::PROVIDERS)
@@ -226,6 +226,7 @@ class AiConfiguration extends Page
     protected function ollamaSection(): Section
     {
         return Section::make('Ollama connection')
+            ->description('Choose which models Creative-Ai uses. Ollama manages model context and how long models remain loaded.')
             ->visible(fn (Get $get): bool => $get('provider') === 'ollama')
             ->columns(2)
             ->schema([
@@ -236,10 +237,6 @@ class AiConfiguration extends Page
                     ->columnSpanFull(),
                 Select::make('ollama_model')->label('Image analysis model')->options(fn (): array => $this->getModelOptions('ollama'))->searchable()->native(false)->required(),
                 Select::make('ollama_journal_model')->label('Journal writing model')->options(fn (): array => $this->getModelOptions('ollama', 'journal'))->searchable()->native(false)->required(),
-                TextInput::make('ollama_request_timeout')->label('Request timeout')->suffix('seconds')->numeric()->minValue(30)->maxValue(600)->required()
-                    ->helperText('Journal requests are capped at 120 seconds so they finish inside the queue-worker deadline.'),
-                TextInput::make('ollama_context_length')->label('Context length')->numeric()->minValue(2048)->maxValue(131072)->step(1024)->required(),
-                TextInput::make('ollama_keep_alive')->label('Keep alive')->placeholder('5m')->regex('/^-?\d+(?:ms|s|m|h)?$/')->required()->maxLength(20),
             ]);
     }
 
